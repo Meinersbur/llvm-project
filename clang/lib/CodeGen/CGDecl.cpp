@@ -109,6 +109,7 @@ void CodeGenFunction::EmitDecl(const Decl &D) {
   case Decl::OMPRequires:
   case Decl::Empty:
   case Decl::Concept:
+  case Decl::LifetimeExtendedTemporary:
     // None of these decls require codegen support.
     return;
 
@@ -176,7 +177,7 @@ void CodeGenFunction::EmitVarDecl(const VarDecl &D) {
       return;
 
     llvm::GlobalValue::LinkageTypes Linkage =
-        CGM.getLLVMLinkageVarDefinition(&D, /*isConstant=*/false);
+        CGM.getLLVMLinkageVarDefinition(&D, /*IsConstant=*/false);
 
     // FIXME: We need to force the emission/use of a guard variable for
     // some variables even if we can constant-evaluate them because
@@ -250,7 +251,7 @@ llvm::Constant *CodeGenModule::getOrCreateStaticVarDecl(
   llvm::GlobalVariable *GV = new llvm::GlobalVariable(
       getModule(), LTy, Ty.isConstant(getContext()), Linkage, Init, Name,
       nullptr, llvm::GlobalVariable::NotThreadLocal, TargetAS);
-  GV->setAlignment(getContext().getDeclAlign(&D).getQuantity());
+  GV->setAlignment(getContext().getDeclAlign(&D).getAsAlign());
 
   if (supportsCOMDAT() && GV->isWeakForLinker())
     GV->setComdat(TheModule.getOrInsertComdat(GV->getName()));
@@ -303,14 +304,6 @@ llvm::Constant *CodeGenModule::getOrCreateStaticVarDecl(
   }
 
   return Addr;
-}
-
-/// hasNontrivialDestruction - Determine whether a type's destruction is
-/// non-trivial. If so, and the variable uses static initialization, we must
-/// register its destructor to run on exit.
-static bool hasNontrivialDestruction(QualType T) {
-  CXXRecordDecl *RD = T->getBaseElementTypeUnsafe()->getAsCXXRecordDecl();
-  return RD && !RD->hasTrivialDestructor();
 }
 
 /// AddInitializerToStaticVarDecl - Add the initializer for 'D' to the
@@ -372,7 +365,7 @@ CodeGenFunction::AddInitializerToStaticVarDecl(const VarDecl &D,
 
   emitter.finalize(GV);
 
-  if (hasNontrivialDestruction(D.getType()) && HaveInsertPoint()) {
+  if (D.needsDestruction(getContext()) && HaveInsertPoint()) {
     // We have a constant initializer, but a nontrivial destructor. We still
     // need to perform a guarded "initialization" in order to register the
     // destructor.
@@ -416,7 +409,7 @@ void CodeGenFunction::EmitStaticVarDecl(const VarDecl &D,
   if (D.getInit() && !isCudaSharedVar)
     var = AddInitializerToStaticVarDecl(D, var);
 
-  var->setAlignment(alignment.getQuantity());
+  var->setAlignment(alignment.getAsAlign());
 
   if (D.hasAttr<AnnotateAttr>())
     CGM.AddGlobalAnnotations(&D, var);
@@ -427,6 +420,8 @@ void CodeGenFunction::EmitStaticVarDecl(const VarDecl &D,
     var->addAttribute("data-section", SA->getName());
   if (auto *SA = D.getAttr<PragmaClangRodataSectionAttr>())
     var->addAttribute("rodata-section", SA->getName());
+  if (auto *SA = D.getAttr<PragmaClangRelroSectionAttr>())
+    var->addAttribute("relro-section", SA->getName());
 
   if (const SectionAttr *SA = D.getAttr<SectionAttr>())
     var->setSection(SA->getName());
@@ -480,11 +475,12 @@ namespace {
 
   template <class Derived>
   struct DestroyNRVOVariable : EHScopeStack::Cleanup {
-    DestroyNRVOVariable(Address addr, llvm::Value *NRVOFlag)
-        : NRVOFlag(NRVOFlag), Loc(addr) {}
+    DestroyNRVOVariable(Address addr, QualType type, llvm::Value *NRVOFlag)
+        : NRVOFlag(NRVOFlag), Loc(addr), Ty(type) {}
 
     llvm::Value *NRVOFlag;
     Address Loc;
+    QualType Ty;
 
     void Emit(CodeGenFunction &CGF, Flags flags) override {
       // Along the exceptions path we always execute the dtor.
@@ -511,26 +507,24 @@ namespace {
 
   struct DestroyNRVOVariableCXX final
       : DestroyNRVOVariable<DestroyNRVOVariableCXX> {
-    DestroyNRVOVariableCXX(Address addr, const CXXDestructorDecl *Dtor,
-                           llvm::Value *NRVOFlag)
-      : DestroyNRVOVariable<DestroyNRVOVariableCXX>(addr, NRVOFlag),
-        Dtor(Dtor) {}
+    DestroyNRVOVariableCXX(Address addr, QualType type,
+                           const CXXDestructorDecl *Dtor, llvm::Value *NRVOFlag)
+        : DestroyNRVOVariable<DestroyNRVOVariableCXX>(addr, type, NRVOFlag),
+          Dtor(Dtor) {}
 
     const CXXDestructorDecl *Dtor;
 
     void emitDestructorCall(CodeGenFunction &CGF) {
       CGF.EmitCXXDestructorCall(Dtor, Dtor_Complete,
                                 /*ForVirtualBase=*/false,
-                                /*Delegating=*/false, Loc);
+                                /*Delegating=*/false, Loc, Ty);
     }
   };
 
   struct DestroyNRVOVariableC final
       : DestroyNRVOVariable<DestroyNRVOVariableC> {
     DestroyNRVOVariableC(Address addr, llvm::Value *NRVOFlag, QualType Ty)
-        : DestroyNRVOVariable<DestroyNRVOVariableC>(addr, NRVOFlag), Ty(Ty) {}
-
-    QualType Ty;
+        : DestroyNRVOVariable<DestroyNRVOVariableC>(addr, Ty, NRVOFlag) {}
 
     void emitDestructorCall(CodeGenFunction &CGF) {
       CGF.destroyNonTrivialCStruct(CGF, Loc, Ty);
@@ -1121,11 +1115,11 @@ Address CodeGenModule::createUnnamedGlobalFrom(const VarDecl &D,
     llvm::GlobalVariable *GV = new llvm::GlobalVariable(
         getModule(), Ty, isConstant, llvm::GlobalValue::PrivateLinkage,
         Constant, Name, InsertBefore, llvm::GlobalValue::NotThreadLocal, AS);
-    GV->setAlignment(Align.getQuantity());
+    GV->setAlignment(Align.getAsAlign());
     GV->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
     CacheEntry = GV;
   } else if (CacheEntry->getAlignment() < Align.getQuantity()) {
-    CacheEntry->setAlignment(Align.getQuantity());
+    CacheEntry->setAlignment(Align.getAsAlign());
   }
 
   return Address(CacheEntry, Align);
@@ -1940,7 +1934,7 @@ void CodeGenFunction::emitAutoVarTypeCleanup(
     if (emission.NRVOFlag) {
       assert(!type->isArrayType());
       CXXDestructorDecl *dtor = type->getAsCXXRecordDecl()->getDestructor();
-      EHStack.pushCleanup<DestroyNRVOVariableCXX>(cleanupKind, addr, dtor,
+      EHStack.pushCleanup<DestroyNRVOVariableCXX>(cleanupKind, addr, type, dtor,
                                                   emission.NRVOFlag);
       return;
     }
@@ -1995,7 +1989,7 @@ void CodeGenFunction::EmitAutoVarCleanups(const AutoVarEmission &emission) {
   const VarDecl &D = *emission.Variable;
 
   // Check the type for a cleanup.
-  if (QualType::DestructionKind dtorKind = D.getType().isDestructedType())
+  if (QualType::DestructionKind dtorKind = D.needsDestruction(getContext()))
     emitAutoVarTypeCleanup(emission, dtorKind);
 
   // In GC mode, honor objc_precise_lifetime.
@@ -2404,8 +2398,9 @@ void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
     // Don't push a cleanup in a thunk for a method that will also emit a
     // cleanup.
     if (hasAggregateEvaluationKind(Ty) && !CurFuncIsThunk &&
-        Ty->getAs<RecordType>()->getDecl()->isParamDestroyedInCallee()) {
-      if (QualType::DestructionKind DtorKind = Ty.isDestructedType()) {
+        Ty->castAs<RecordType>()->getDecl()->isParamDestroyedInCallee()) {
+      if (QualType::DestructionKind DtorKind =
+              D.needsDestruction(getContext())) {
         assert((DtorKind == QualType::DK_cxx_destructor ||
                 DtorKind == QualType::DK_nontrivial_c_struct) &&
                "unexpected destructor type");
@@ -2497,10 +2492,11 @@ void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
 
   setAddrOfLocalVar(&D, DeclPtr);
 
-  // Emit debug info for param declaration.
+  // Emit debug info for param declarations in non-thunk functions.
   if (CGDebugInfo *DI = getDebugInfo()) {
     if (CGM.getCodeGenOpts().getDebugInfo() >=
-        codegenoptions::LimitedDebugInfo) {
+            codegenoptions::LimitedDebugInfo &&
+        !CurFuncIsThunk) {
       DI->EmitDeclareOfArgVariable(&D, DeclPtr.getPointer(), ArgNo, Builder);
     }
   }
@@ -2530,10 +2526,11 @@ void CodeGenModule::EmitOMPDeclareReduction(const OMPDeclareReductionDecl *D,
 }
 
 void CodeGenModule::EmitOMPDeclareMapper(const OMPDeclareMapperDecl *D,
-                                            CodeGenFunction *CGF) {
-  if (!LangOpts.OpenMP || (!LangOpts.EmitAllDecls && !D->isUsed()))
+                                         CodeGenFunction *CGF) {
+  if (!LangOpts.OpenMP || LangOpts.OpenMPSimd ||
+      (!LangOpts.EmitAllDecls && !D->isUsed()))
     return;
-  // FIXME: need to implement mapper code generation
+  getOpenMPRuntime().emitUserDefinedMapper(D, CGF);
 }
 
 void CodeGenModule::EmitOMPRequiresDecl(const OMPRequiresDecl *D) {

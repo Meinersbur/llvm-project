@@ -384,7 +384,7 @@ def : InstRW<[GenericWriteJump], (instrs BC16_MMR6, BC1EQZC_MMR6, BC1NEZC_MMR6,
                                   BGTZC_MMR6, BLEZC_MMR6, BLTC_MMR6,
                                   BLTUC_MMR6, BLTZC_MMR6, BNEC_MMR6,
                                   BNEZC16_MMR6, BNEZC_MMR6, BNVC_MMR6,
-                                  BOVC_MMR6, DERET_MMR6, ERETNC_MMR6,
+                                  BOVC_MMR6, DERET_MMR6, ERETNC_MMR6, JAL_MMR6,
                                   ERET_MMR6, JIC_MMR6, JRADDIUSP, JRC16_MM,
                                   JRC16_MMR6, JRCADDIUSP_MMR6, SIGRIE_MMR6,
                                   B_MMR6_Pseudo, PseudoIndirectBranch_MMR6)>;
@@ -720,10 +720,15 @@ def : InstRW<[GenericWriteALU], (instrs BADDu, BBIT0, BBIT032, BBIT1, BBIT132,
                                  CINS, CINS32, CINS64_32, CINS_i32,
                                  DMFC2_OCTEON, DMTC2_OCTEON, DPOP, EXTS,
                                  EXTS32, MTM0, MTM1, MTM2, MTP0, MTP1, MTP2,
-                                 POP, SEQ, SEQi, SNE, SNEi, V3MULU, VMM0,
-                                 VMULU)>;
+                                 POP, SEQ, SEQi, SNE, SNEi,
+                                 V3MULU, VMM0, VMULU)>;
 
 def : InstRW<[GenericWriteMDUtoGPR], (instrs DMUL)>;
+
+// Cavium Networks MIPS (cnMIPSP) - Octeon+, HasCnMipsP
+// =================================================
+
+def : InstRW<[GenericWriteALU], (instrs SAA, SAAD)>;
 
 // FPU Pipelines
 // =============

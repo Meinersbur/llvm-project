@@ -265,7 +265,7 @@ private:
 // 2) Loading the target functions address from the procedure linkage table into
 //    r12 for use by the target functions global entry point, and into the count
 //    register.
-// 3) Transfering control to the target function through an indirect branch.
+// 3) Transferring control to the target function through an indirect branch.
 class PPC64PltCallStub final : public Thunk {
 public:
   PPC64PltCallStub(Symbol &dest) : Thunk(dest) {}
@@ -319,7 +319,7 @@ public:
 
 Defined *Thunk::addSymbol(StringRef name, uint8_t type, uint64_t value,
                           InputSectionBase &section) {
-  Defined *d = addSyntheticLocal(name, type, value, /*Size=*/0, section);
+  Defined *d = addSyntheticLocal(name, type, value, /*size=*/0, section);
   syms.push_back(d);
   return d;
 }
@@ -388,7 +388,7 @@ static uint64_t getARMThunkDestVA(const Symbol &s) {
 }
 
 // This function returns true if the target is not Thumb and is within 2^26, and
-// it has not previously returned false (see comment for MayUseShortThunk).
+// it has not previously returned false (see comment for mayUseShortThunk).
 bool ARMThunk::getMayUseShortThunk() {
   if (!mayUseShortThunk)
     return false;
@@ -426,7 +426,7 @@ bool ARMThunk::isCompatibleWith(const InputSection &isec,
 }
 
 // This function returns true if the target is Thumb and is within 2^25, and
-// it has not previously returned false (see comment for MayUseShortThunk).
+// it has not previously returned false (see comment for mayUseShortThunk).
 bool ThumbThunk::getMayUseShortThunk() {
   if (!mayUseShortThunk)
     return false;

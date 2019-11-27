@@ -2,6 +2,13 @@
 Moving LLVM Projects to GitHub
 ==============================
 
+Current Status
+==============
+
+We are planning to complete the transition to GitHub by Oct 21, 2019.  See
+the GitHub migration `status page <https://llvm.org/GitHubMigrationStatus.html>`_
+for the latest updates and instructions for how to migrate your workflows.
+
 .. contents:: Table of Contents
   :depth: 4
   :local:
@@ -1074,6 +1081,6 @@ References
 
 .. [LattnerRevNum] Chris Lattner, http://lists.llvm.org/pipermail/llvm-dev/2011-July/041739.html
 .. [TrickRevNum] Andrew Trick, http://lists.llvm.org/pipermail/llvm-dev/2011-July/041721.html
-.. [JSonnRevNum] Joerg Sonnenberg, http://lists.llvm.org/pipermail/llvm-dev/2011-July/041688.html
+.. [JSonnRevNum] Joerg Sonnenberger, http://lists.llvm.org/pipermail/llvm-dev/2011-July/041688.html
 .. [MatthewsRevNum] Chris Matthews, http://lists.llvm.org/pipermail/cfe-dev/2016-July/049886.html
 .. [statuschecks] GitHub status-checks, https://help.github.com/articles/about-required-status-checks/

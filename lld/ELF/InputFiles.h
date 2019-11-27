@@ -16,7 +16,6 @@
 #include "llvm/ADT/CachedHashString.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/DebugInfo/DWARF/DWARFDebugLine.h"
 #include "llvm/IR/Comdat.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/ELF.h"
@@ -25,23 +24,22 @@
 #include <map>
 
 namespace llvm {
-class TarWriter;
 struct DILineInfo;
+class TarWriter;
 namespace lto {
 class InputFile;
 }
 } // namespace llvm
 
 namespace lld {
-namespace elf {
-class InputFile;
-class InputSectionBase;
-}
+class DWARFCache;
 
 // Returns "<internal>", "foo.a(bar.o)" or "baz.o".
 std::string toString(const elf::InputFile *f);
 
 namespace elf {
+class InputFile;
+class InputSectionBase;
 
 using llvm::object::Archive;
 
@@ -117,7 +115,7 @@ public:
   // True if this is an argument for --just-symbols. Usually false.
   bool justSymbols = false;
 
-  // OutSecOff of .got2 in the current file. This is used by PPC32 -fPIC/-fPIE
+  // outSecOff of .got2 in the current file. This is used by PPC32 -fPIC/-fPIE
   // to compute offsets in PLT call stubs.
   uint32_t ppc32Got2OutSecOff = 0;
 
@@ -132,7 +130,7 @@ public:
   // [.got, .got + 0xFFFC].
   bool ppc64SmallCodeModelTocRelocs = false;
 
-  // GroupId is used for --warn-backrefs which is an optional error
+  // groupId is used for --warn-backrefs which is an optional error
   // checking feature. All files within the same --{start,end}-group or
   // --{start,end}-lib get the same group ID. Otherwise, each file gets a new
   // group ID. For more info, see checkDependency() in SymbolTable.cpp.
@@ -261,7 +259,7 @@ private:
   InputSectionBase *createInputSection(const Elf_Shdr &sec);
   StringRef getSectionName(const Elf_Shdr &sec);
 
-  bool shouldMerge(const Elf_Shdr &sec);
+  bool shouldMerge(const Elf_Shdr &sec, StringRef name);
 
   // Each ELF symbol contains a section index which the symbol belongs to.
   // However, because the number of bits dedicated for that is limited, a
@@ -284,14 +282,7 @@ private:
   // reporting. Linker may find reasonable number of errors in a
   // single object file, so we cache debugging information in order to
   // parse it only once for each object file we link.
-  std::unique_ptr<llvm::DWARFContext> dwarf;
-  std::vector<const llvm::DWARFDebugLine::LineTable *> lineTables;
-  struct VarLoc {
-    const llvm::DWARFDebugLine::LineTable *lt;
-    unsigned file;
-    unsigned line;
-  };
-  llvm::DenseMap<StringRef, VarLoc> variableLoc;
+  DWARFCache *dwarf;
   llvm::once_flag initDwarfLine;
 };
 

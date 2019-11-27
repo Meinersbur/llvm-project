@@ -124,6 +124,9 @@ class InstSI <dag outs, dag ins, string asm = "",
   // This bit indicates that this is one of MFMA instructions.
   field bit IsMAI = 0;
 
+  // This bit indicates that this is one of DOT instructions.
+  field bit IsDOT = 0;
+
   // These need to be kept in sync with the enum in SIInstrFlags.
   let TSFlags{0} = SALU;
   let TSFlags{1} = VALU;
@@ -188,6 +191,8 @@ class InstSI <dag outs, dag ins, string asm = "",
   let TSFlags{53} = FPAtomic;
 
   let TSFlags{54} = IsMAI;
+
+  let TSFlags{55} = IsDOT;
 
   let SchedRW = [Write32Bit];
 
@@ -283,12 +288,13 @@ class MIMGe : Enc64 {
   let Inst{63} = d16;
 }
 
-class MIMGe_gfx6789 <bits<7> op> : MIMGe {
+class MIMGe_gfx6789 <bits<8> op> : MIMGe {
   bits<8> vaddr;
   bits<1> da;
 
+  let Inst{0} = op{7};
   let Inst{14} = da;
-  let Inst{24-18} = op;
+  let Inst{24-18} = op{6-0};
   let Inst{39-32} = vaddr;
 }
 

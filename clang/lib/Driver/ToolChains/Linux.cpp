@@ -300,9 +300,6 @@ Linux::Linux(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
       ExtraOpts.push_back("--hash-style=both");
   }
 
-  if (Distro.IsRedhat() && Distro != Distro::RHEL5 && Distro != Distro::RHEL6)
-    ExtraOpts.push_back("--no-add-needed");
-
 #ifdef ENABLE_LINKER_BUILD_ID
   ExtraOpts.push_back("--build-id");
 #endif
@@ -661,11 +658,11 @@ void Linux::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   if (!DriverArgs.hasArg(options::OPT_nostdlibinc))
     addSystemInclude(DriverArgs, CC1Args, SysRoot + "/usr/local/include");
 
-  if (!DriverArgs.hasArg(options::OPT_nobuiltininc)) {
-    SmallString<128> P(D.ResourceDir);
-    llvm::sys::path::append(P, "include");
-    addSystemInclude(DriverArgs, CC1Args, P);
-  }
+  SmallString<128> ResourceDirInclude(D.ResourceDir);
+  llvm::sys::path::append(ResourceDirInclude, "include");
+  if (!DriverArgs.hasArg(options::OPT_nobuiltininc) &&
+      (!getTriple().isMusl() || DriverArgs.hasArg(options::OPT_nostdlibinc)))
+    addSystemInclude(DriverArgs, CC1Args, ResourceDirInclude);
 
   if (DriverArgs.hasArg(options::OPT_nostdlibinc))
     return;
@@ -863,6 +860,9 @@ void Linux::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   addExternCSystemInclude(DriverArgs, CC1Args, SysRoot + "/include");
 
   addExternCSystemInclude(DriverArgs, CC1Args, SysRoot + "/usr/include");
+
+  if (!DriverArgs.hasArg(options::OPT_nobuiltininc) && getTriple().isMusl())
+    addSystemInclude(DriverArgs, CC1Args, ResourceDirInclude);
 }
 
 static std::string DetectLibcxxIncludePath(llvm::vfs::FileSystem &vfs,

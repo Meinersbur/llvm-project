@@ -11,21 +11,22 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/IR/DIBuilder.h"
-#include "llvm/IR/IRBuilder.h"
 #include "LLVMContextImpl.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugInfo.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
 using namespace llvm::dwarf;
 
-cl::opt<bool>
+static cl::opt<bool>
     UseDbgAddr("use-dbg-addr",
                llvm::cl::desc("Use llvm.dbg.addr for all local variables"),
                cl::init(false), cl::Hidden);

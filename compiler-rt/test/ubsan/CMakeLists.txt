@@ -8,7 +8,9 @@ macro(add_ubsan_testsuite test_mode sanitizer arch lld thinlto)
   set(CONFIG_NAME ${UBSAN_LIT_TEST_MODE})
   if (${lld})
     set(CONFIG_NAME ${CONFIG_NAME}-lld)
-    list(APPEND UBSAN_TEST_DEPS lld)
+    if (TARGET lld)
+      list(APPEND UBSAN_TEST_DEPS lld)
+    endif()
   endif()
   if (${thinlto})
     set(CONFIG_NAME ${CONFIG_NAME}-thinlto)
@@ -46,10 +48,11 @@ foreach(arch ${UBSAN_TEST_ARCH})
 
   if(COMPILER_RT_HAS_ASAN AND ";${ASAN_SUPPORTED_ARCH};" MATCHES ";${arch};")
     # TODO(wwchrome): Re-enable ubsan for asan win 64-bit when ready.
-    # Disable ubsan with AddressSanitizer tests for Windows 64-bit and
-    # 64-bit Solaris/x86.
+    # Disable ubsan with AddressSanitizer tests for Windows 64-bit,
+    # 64-bit Solaris/x86, and SPARC.
     if((NOT (OS_NAME MATCHES "Windows" AND CMAKE_SIZEOF_VOID_P EQUAL 8)) AND
-       (NOT (OS_NAME MATCHES "SunOS" AND ${arch} MATCHES x86_64)))
+       (NOT (OS_NAME MATCHES "SunOS" AND ${arch} MATCHES x86_64)) AND
+       (NOT ${arch} MATCHES sparc))
       add_ubsan_testsuites("AddressSanitizer" asan ${arch})
     endif()
   endif()
@@ -100,22 +103,20 @@ if(APPLE)
   # variable to select which iOS device or simulator to use, e.g.:
   # SANITIZER_IOSSIM_TEST_DEVICE_IDENTIFIER="iPhone 6"
   set(EXCLUDE_FROM_ALL ON)
-  set(UBSAN_APPLE_PLATFORMS "")
-  if (COMPILER_RT_ENABLE_IOS)
-    list(APPEND UBSAN_APPLE_PLATFORMS ios iossim)
-  endif()
-  if (COMPILER_RT_ENABLE_WATCHOS)
-    list(APPEND UBSAN_APPLE_PLATFORMS watchos watchossim)
-  endif()
-  if (COMPILER_RT_ENABLE_TVOS)
-    list(APPEND UBSAN_APPLE_PLATFORMS tvos tvossim)
-  endif()
+  set(UBSAN_APPLE_PLATFORMS ${SANITIZER_COMMON_SUPPORTED_OS})
   foreach(platform ${UBSAN_APPLE_PLATFORMS})
-    foreach(arch ${DARWIN_${platform}_ARCHS})
-      set(UBSAN_TEST_TARGET_CFLAGS "-arch ${arch} -isysroot ${DARWIN_${platform}_SYSROOT}")
-      if (";${UBSAN_SUPPORTED_ARCH};" MATCHES ";${arch};")
-        add_ubsan_device_testsuite("Standalone" ubsan ${platform} ${arch})
-      endif()
+    list_intersect(
+      UBSAN_TEST_${platform}_ARCHS
+      UBSAN_SUPPORTED_ARCH
+      DARWIN_${platform}_ARCHS
+      )
+    foreach(arch ${UBSAN_TEST_${platform}_ARCHS})
+      get_test_cflags_for_apple_platform(
+        "${platform}"
+        "${arch}"
+        UBSAN_TEST_TARGET_CFLAGS
+      )
+      add_ubsan_device_testsuite("Standalone" ubsan ${platform} ${arch})
 
       if(COMPILER_RT_HAS_ASAN AND ";${ASAN_SUPPORTED_ARCH};" MATCHES ";${arch};")
         add_ubsan_device_testsuite("AddressSanitizer" asan ${platform} ${arch})

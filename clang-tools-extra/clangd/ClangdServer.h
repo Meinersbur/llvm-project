@@ -11,12 +11,12 @@
 
 #include "../clang-tidy/ClangTidyOptions.h"
 #include "Cancellation.h"
-#include "ClangdUnit.h"
 #include "CodeComplete.h"
 #include "FSProvider.h"
 #include "FormattedString.h"
 #include "Function.h"
 #include "GlobalCompilationDatabase.h"
+#include "Hover.h"
 #include "Protocol.h"
 #include "SemanticHighlighting.h"
 #include "TUScheduler.h"
@@ -126,10 +126,6 @@ public:
 
     bool SuggestMissingIncludes = false;
 
-    /// Enable hidden features mostly useful to clangd developers.
-    /// e.g. tweaks to dump the AST.
-    bool HiddenFeatures = false;
-
     /// Clangd will execute compiler drivers matching one of these globs to
     /// fetch system include path.
     std::vector<std::string> QueryDriverGlobs;
@@ -137,8 +133,10 @@ public:
     /// Enable semantic highlighting features.
     bool SemanticHighlighting = false;
 
-    /// Returns true if the StringRef is a tweak that should be enabled
-    std::function<bool(llvm::StringRef)> TweakFilter = [](llvm::StringRef TweakToSearch) {return true;};
+    /// Returns true if the tweak should be enabled.
+    std::function<bool(const Tweak &)> TweakFilter = [](const Tweak &T) {
+      return !T.hidden(); // only enable non-hidden tweaks.
+    };
   };
   // Sensible default options for use in tests.
   // Features like indexing must be enabled if desired.
@@ -195,9 +193,10 @@ public:
   void locateSymbolAt(PathRef File, Position Pos,
                       Callback<std::vector<LocatedSymbol>> CB);
 
-  /// Helper function that returns a path to the corresponding source file when
-  /// given a header file and vice versa.
-  llvm::Optional<Path> switchSourceHeader(PathRef Path);
+  /// Switch to a corresponding source file when given a header file, and vice
+  /// versa.
+  void switchSourceHeader(PathRef Path,
+                          Callback<llvm::Optional<clangd::Path>> CB);
 
   /// Get document highlights for a given position.
   void findDocumentHighlights(PathRef File, Position Pos,
@@ -212,6 +211,11 @@ public:
                      TypeHierarchyDirection Direction,
                      Callback<llvm::Optional<TypeHierarchyItem>> CB);
 
+  /// Resolve type hierarchy item in the given direction.
+  void resolveTypeHierarchy(TypeHierarchyItem Item, int Resolve,
+                            TypeHierarchyDirection Direction,
+                            Callback<llvm::Optional<TypeHierarchyItem>> CB);
+
   /// Retrieve the top symbols from the workspace matching a query.
   void workspaceSymbols(StringRef Query, int Limit,
                         Callback<std::vector<SymbolInformation>> CB);
@@ -222,7 +226,7 @@ public:
 
   /// Retrieve locations for symbol references.
   void findReferences(PathRef File, Position Pos, uint32_t Limit,
-                      Callback<std::vector<Location>> CB);
+                      Callback<ReferencesResult> CB);
 
   /// Run formatting for \p Rng inside \p File with content \p Code.
   llvm::Expected<tooling::Replacements> formatRange(StringRef Code,
@@ -237,6 +241,10 @@ public:
   llvm::Expected<std::vector<TextEdit>> formatOnType(StringRef Code,
                                                      PathRef File, Position Pos,
                                                      StringRef TriggerText);
+
+  /// Test the validity of a rename operation.
+  void prepareRename(PathRef File, Position Pos,
+                     Callback<llvm::Optional<Range>> CB);
 
   /// Rename all occurrences of the symbol at the \p Pos in \p File to
   /// \p NewName.
@@ -270,6 +278,10 @@ public:
   /// Clangd extension - not part of official LSP.
   void symbolInfo(PathRef File, Position Pos,
                   Callback<std::vector<SymbolDetails>> CB);
+
+  /// Get semantic ranges around a specified position in a file.
+  void semanticRanges(PathRef File, Position Pos,
+                      Callback<std::vector<Range>> CB);
 
   /// Returns estimated memory usage for each of the currently open files.
   /// The order of results is unspecified.
@@ -314,9 +326,8 @@ private:
   // If this is true, suggest include insertion fixes for diagnostic errors that
   // can be caused by missing includes (e.g. member access in incomplete type).
   bool SuggestMissingIncludes = false;
-  bool EnableHiddenFeatures = false;
-   
-  std::function<bool(llvm::StringRef)> TweakFilter;
+
+  std::function<bool(const Tweak &)> TweakFilter;
 
   // GUARDED_BY(CachedCompletionFuzzyFindRequestMutex)
   llvm::StringMap<llvm::Optional<FuzzyFindRequest>>

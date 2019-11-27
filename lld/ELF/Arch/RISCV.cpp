@@ -14,8 +14,9 @@ using namespace llvm;
 using namespace llvm::object;
 using namespace llvm::support::endian;
 using namespace llvm::ELF;
-using namespace lld;
-using namespace lld::elf;
+
+namespace lld {
+namespace elf {
 
 namespace {
 
@@ -144,7 +145,7 @@ void RISCV::writePltHeader(uint8_t *buf) const {
   // 1: auipc t2, %pcrel_hi(.got.plt)
   // sub t1, t1, t3
   // l[wd] t3, %pcrel_lo(1b)(t2); t3 = _dl_runtime_resolve
-  // addi t1, t1, -PltHeaderSize-12; t1 = &.plt[i] - &.plt[0]
+  // addi t1, t1, -pltHeaderSize-12; t1 = &.plt[i] - &.plt[0]
   // addi t0, t2, %pcrel_lo(1b)
   // srli t1, t1, (rv64?1:2); t1 = &.got.plt[i] - &.got.plt[0]
   // l[wd] t0, Wordsize(t0); t0 = link_map
@@ -436,7 +437,10 @@ void RISCV::relocateOne(uint8_t *loc, const RelType type,
   }
 }
 
-TargetInfo *elf::getRISCVTargetInfo() {
+TargetInfo *getRISCVTargetInfo() {
   static RISCV target;
   return &target;
 }
+
+} // namespace elf
+} // namespace lld

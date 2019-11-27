@@ -22,16 +22,27 @@
 
 #define DEBUG_TYPE "lld"
 
-using namespace lld;
-using namespace lld::wasm;
-
 using namespace llvm;
 using namespace llvm::object;
 using namespace llvm::wasm;
 
-std::unique_ptr<llvm::TarWriter> lld::wasm::tar;
+namespace lld {
 
-Optional<MemoryBufferRef> lld::wasm::readFile(StringRef path) {
+// Returns a string in the format of "foo.o" or "foo.a(bar.o)".
+std::string toString(const wasm::InputFile *file) {
+  if (!file)
+    return "<internal>";
+
+  if (file->archiveName.empty())
+    return file->getName();
+
+  return (file->archiveName + "(" + file->getName() + ")").str();
+}
+
+namespace wasm {
+std::unique_ptr<llvm::TarWriter> tar;
+
+Optional<MemoryBufferRef> readFile(StringRef path) {
   log("Loading: " + path);
 
   auto mbOrErr = MemoryBuffer::getFile(path);
@@ -48,7 +59,7 @@ Optional<MemoryBufferRef> lld::wasm::readFile(StringRef path) {
   return mbref;
 }
 
-InputFile *lld::wasm::createObjectFile(MemoryBufferRef mb,
+InputFile *createObjectFile(MemoryBufferRef mb,
                                        StringRef archiveName) {
   file_magic magic = identify_magic(mb.getBuffer());
   if (magic == file_magic::wasm_object) {
@@ -165,15 +176,20 @@ uint32_t ObjFile::calcNewValue(const WasmRelocation &reloc) const {
   switch (reloc.Type) {
   case R_WASM_TABLE_INDEX_I32:
   case R_WASM_TABLE_INDEX_SLEB:
-  case R_WASM_TABLE_INDEX_REL_SLEB:
-    if (config->isPic && !getFunctionSymbol(reloc.Index)->hasTableIndex())
+  case R_WASM_TABLE_INDEX_REL_SLEB: {
+    if (!getFunctionSymbol(reloc.Index)->hasTableIndex())
       return 0;
-    return getFunctionSymbol(reloc.Index)->getTableIndex();
+    uint32_t index = getFunctionSymbol(reloc.Index)->getTableIndex();
+    if (reloc.Type == R_WASM_TABLE_INDEX_REL_SLEB)
+      index -= config->tableBase;
+    return index;
+
+  }
   case R_WASM_MEMORY_ADDR_SLEB:
   case R_WASM_MEMORY_ADDR_I32:
   case R_WASM_MEMORY_ADDR_LEB:
   case R_WASM_MEMORY_ADDR_REL_SLEB:
-    if (isa<UndefinedData>(sym))
+    if (isa<UndefinedData>(sym) || sym->isUndefWeak())
       return 0;
     return cast<DefinedData>(sym)->getVirtualAddress() + reloc.Addend;
   case R_WASM_TYPE_INDEX_LEB:
@@ -328,7 +344,7 @@ void ObjFile::parse(bool ignoreComdats) {
   for (const WasmEvent &e : wasmObj->events())
     events.emplace_back(make<InputEvent>(types[e.Type.SigIndex], e, this));
 
-  // Populate `Symbols` based on the WasmSymbols in the object.
+  // Populate `Symbols` based on the symbols in the object.
   symbols.reserve(wasmObj->getNumberOfSymbols());
   for (const SymbolRef &sym : wasmObj->symbols()) {
     const WasmSymbol &wasmSym = wasmObj->getWasmSymbol(sym.getRawDataRefImpl());
@@ -380,22 +396,20 @@ Symbol *ObjFile::createDefined(const WasmSymbol &sym) {
   case WASM_SYMBOL_TYPE_FUNCTION: {
     InputFunction *func =
         functions[sym.Info.ElementIndex - wasmObj->getNumImportedFunctions()];
-    if (func->discarded)
-      return nullptr;
     if (sym.isBindingLocal())
       return make<DefinedFunction>(name, flags, this, func);
+    if (func->discarded)
+      return nullptr;
     return symtab->addDefinedFunction(name, flags, this, func);
   }
   case WASM_SYMBOL_TYPE_DATA: {
     InputSegment *seg = segments[sym.Info.DataRef.Segment];
-    if (seg->discarded)
-      return nullptr;
-
     uint32_t offset = sym.Info.DataRef.Offset;
     uint32_t size = sym.Info.DataRef.Size;
-
     if (sym.isBindingLocal())
       return make<DefinedData>(name, flags, this, seg, offset, size);
+    if (seg->discarded)
+      return nullptr;
     return symtab->addDefinedData(name, flags, this, seg, offset, size);
   }
   case WASM_SYMBOL_TYPE_GLOBAL: {
@@ -423,7 +437,7 @@ Symbol *ObjFile::createDefined(const WasmSymbol &sym) {
 
 Symbol *ObjFile::createUndefined(const WasmSymbol &sym, bool isCalledDirectly) {
   StringRef name = sym.Info.Name;
-  uint32_t flags = sym.Info.Flags;
+  uint32_t flags = sym.Info.Flags | WASM_SYMBOL_UNDEFINED;
 
   switch (sym.Info.Kind) {
   case WASM_SYMBOL_TYPE_FUNCTION:
@@ -511,9 +525,10 @@ static Symbol *createBitcodeSymbol(const std::vector<bool> &keptComdats,
   bool excludedByComdat = c != -1 && !keptComdats[c];
 
   if (objSym.isUndefined() || excludedByComdat) {
+    flags |= WASM_SYMBOL_UNDEFINED;
     if (objSym.isExecutable())
-      return symtab->addUndefinedFunction(name, name, defaultModule, flags, &f,
-                                          nullptr, true);
+      return symtab->addUndefinedFunction(name, "", "", flags, &f, nullptr,
+                                          true);
     return symtab->addUndefinedData(name, flags, &f);
   }
 
@@ -538,13 +553,5 @@ void BitcodeFile::parse() {
     symbols.push_back(createBitcodeSymbol(keptComdats, objSym, *this));
 }
 
-// Returns a string in the format of "foo.o" or "foo.a(bar.o)".
-std::string lld::toString(const wasm::InputFile *file) {
-  if (!file)
-    return "<internal>";
-
-  if (file->archiveName.empty())
-    return file->getName();
-
-  return (file->archiveName + "(" + file->getName() + ")").str();
-}
+} // namespace wasm
+} // namespace lld

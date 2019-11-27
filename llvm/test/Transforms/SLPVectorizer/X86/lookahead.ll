@@ -446,3 +446,51 @@ define void @lookahead_crash(double* %A, double *%S, %Class *%Arg0) {
   store double %add1, double *%IdxS1, align 8
   ret void
 }
+
+; This checks that we choose to group consecutive extracts from the same vectors.
+define void @ChecksExtractScores(double* %storeArray, double* %array, <2 x double> *%vecPtr1, <2 x double>* %vecPtr2) {
+; CHECK-LABEL: @ChecksExtractScores(
+; CHECK-NEXT:    [[IDX0:%.*]] = getelementptr inbounds double, double* [[ARRAY:%.*]], i64 0
+; CHECK-NEXT:    [[IDX1:%.*]] = getelementptr inbounds double, double* [[ARRAY]], i64 1
+; CHECK-NEXT:    [[LOADA0:%.*]] = load double, double* [[IDX0]], align 4
+; CHECK-NEXT:    [[LOADA1:%.*]] = load double, double* [[IDX1]], align 4
+; CHECK-NEXT:    [[LOADVEC:%.*]] = load <2 x double>, <2 x double>* [[VECPTR1:%.*]], align 4
+; CHECK-NEXT:    [[LOADVEC2:%.*]] = load <2 x double>, <2 x double>* [[VECPTR2:%.*]], align 4
+; CHECK-NEXT:    [[TMP1:%.*]] = insertelement <2 x double> undef, double [[LOADA0]], i32 0
+; CHECK-NEXT:    [[TMP2:%.*]] = insertelement <2 x double> [[TMP1]], double [[LOADA0]], i32 1
+; CHECK-NEXT:    [[TMP3:%.*]] = fmul <2 x double> [[LOADVEC]], [[TMP2]]
+; CHECK-NEXT:    [[TMP4:%.*]] = insertelement <2 x double> undef, double [[LOADA1]], i32 0
+; CHECK-NEXT:    [[TMP5:%.*]] = insertelement <2 x double> [[TMP4]], double [[LOADA1]], i32 1
+; CHECK-NEXT:    [[TMP6:%.*]] = fmul <2 x double> [[LOADVEC2]], [[TMP5]]
+; CHECK-NEXT:    [[TMP7:%.*]] = fadd <2 x double> [[TMP3]], [[TMP6]]
+; CHECK-NEXT:    [[SIDX0:%.*]] = getelementptr inbounds double, double* [[STOREARRAY:%.*]], i64 0
+; CHECK-NEXT:    [[SIDX1:%.*]] = getelementptr inbounds double, double* [[STOREARRAY]], i64 1
+; CHECK-NEXT:    [[TMP8:%.*]] = bitcast double* [[SIDX0]] to <2 x double>*
+; CHECK-NEXT:    store <2 x double> [[TMP7]], <2 x double>* [[TMP8]], align 8
+; CHECK-NEXT:    ret void
+;
+  %idx0 = getelementptr inbounds double, double* %array, i64 0
+  %idx1 = getelementptr inbounds double, double* %array, i64 1
+  %loadA0 = load double, double* %idx0, align 4
+  %loadA1 = load double, double* %idx1, align 4
+
+  %loadVec = load <2 x double>, <2 x double>* %vecPtr1, align 4
+  %extrA0 = extractelement <2 x double> %loadVec, i32 0
+  %extrA1 = extractelement <2 x double> %loadVec, i32 1
+  %loadVec2 = load <2 x double>, <2 x double>* %vecPtr2, align 4
+  %extrB0 = extractelement <2 x double> %loadVec2, i32 0
+  %extrB1 = extractelement <2 x double> %loadVec2, i32 1
+
+  %mul0 = fmul double %extrA0, %loadA0
+  %mul1 = fmul double %extrA1, %loadA0
+  %mul3 = fmul double %extrB0, %loadA1
+  %mul4 = fmul double %extrB1, %loadA1
+  %add0 = fadd double %mul0, %mul3
+  %add1 = fadd double %mul1, %mul4
+
+  %sidx0 = getelementptr inbounds double, double* %storeArray, i64 0
+  %sidx1 = getelementptr inbounds double, double* %storeArray, i64 1
+  store double %add0, double *%sidx0, align 8
+  store double %add1, double *%sidx1, align 8
+  ret void
+}

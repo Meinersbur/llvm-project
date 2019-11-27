@@ -130,7 +130,8 @@ Available checks are:
      ``__builtin_object_size``, and consequently may be able to detect more
      problems at higher optimization levels.
   -  ``-fsanitize=pointer-overflow``: Performing pointer arithmetic which
-     overflows.
+     overflows, or where either the old or new pointer value is a null pointer
+     (or in C, when they both are).
   -  ``-fsanitize=return``: In C++, reaching the end of a
      value-returning function without returning a value.
   -  ``-fsanitize=returns-nonnull-attribute``: Returning null pointer
@@ -205,8 +206,8 @@ Minimal Runtime
 
 There is a minimal UBSan runtime available suitable for use in production
 environments. This runtime has a small attack surface. It only provides very
-basic issue logging and deduplication, and does not support ``-fsanitize=vptr``
-checking.
+basic issue logging and deduplication, and does not support
+``-fsanitize=function`` and ``-fsanitize=vptr`` checking.
 
 To use the minimal runtime, add ``-fsanitize-minimal-runtime`` to the clang
 command line options. For example, if you're used to compiling with
@@ -223,6 +224,12 @@ will need to:
 #. Run your program with environment variable
    ``UBSAN_OPTIONS=print_stacktrace=1``.
 #. Make sure ``llvm-symbolizer`` binary is in ``PATH``.
+
+Logging
+=======
+
+The default log file for diagnostics is "stderr". To log diagnostics to another
+file, you can set ``UBSAN_OPTIONS=log_path=...``.
 
 Silencing Unsigned Integer Overflow
 ===================================

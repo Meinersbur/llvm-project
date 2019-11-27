@@ -20,9 +20,9 @@ class GCNSubtarget;
 
 class SIFrameLowering final : public AMDGPUFrameLowering {
 public:
-  SIFrameLowering(StackDirection D, unsigned StackAl, int LAO,
-                  unsigned TransAl = 1) :
-    AMDGPUFrameLowering(D, StackAl, LAO, TransAl) {}
+  SIFrameLowering(StackDirection D, Align StackAl, int LAO,
+                  Align TransAl = Align::None())
+      : AMDGPUFrameLowering(D, StackAl, LAO, TransAl) {}
   ~SIFrameLowering() override = default;
 
   void emitEntryFunctionPrologue(MachineFunction &MF,
@@ -66,7 +66,7 @@ private:
     SIMachineFunctionInfo *MFI,
     MachineFunction &MF) const;
 
-  unsigned getReservedPrivateSegmentWaveByteOffsetReg(
+  std::pair<unsigned, bool> getReservedPrivateSegmentWaveByteOffsetReg(
       const GCNSubtarget &ST, const SIInstrInfo *TII, const SIRegisterInfo *TRI,
       SIMachineFunctionInfo *MFI, MachineFunction &MF) const;
 

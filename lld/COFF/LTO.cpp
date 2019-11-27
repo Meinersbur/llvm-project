@@ -18,6 +18,7 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/DiagnosticPrinter.h"
 #include "llvm/LTO/Caching.h"
 #include "llvm/LTO/Config.h"
@@ -38,10 +39,28 @@
 using namespace llvm;
 using namespace llvm::object;
 
-using namespace lld;
-using namespace lld::coff;
+namespace lld {
+namespace coff {
 
-static std::unique_ptr<lto::LTO> createLTO() {
+// Creates an empty file to and returns a raw_fd_ostream to write to it.
+static std::unique_ptr<raw_fd_ostream> openFile(StringRef file) {
+  std::error_code ec;
+  auto ret =
+      std::make_unique<raw_fd_ostream>(file, ec, sys::fs::OpenFlags::OF_None);
+  if (ec) {
+    error("cannot open " + file + ": " + ec.message());
+    return nullptr;
+  }
+  return ret;
+}
+
+static std::string getThinLTOOutputFile(StringRef path) {
+  return lto::getThinLTOOutputFile(path,
+                                   config->thinLTOPrefixReplace.first,
+                                   config->thinLTOPrefixReplace.second);
+}
+
+static lto::Config createConfig() {
   lto::Config c;
   c.Options = initTargetOptionsFromCodeGenFlags();
 
@@ -67,14 +86,28 @@ static std::unique_ptr<lto::LTO> createLTO() {
   if (config->saveTemps)
     checkError(c.addSaveTemps(std::string(config->outputFile) + ".",
                               /*UseInputModulePath*/ true));
-  lto::ThinBackend backend;
-  if (config->thinLTOJobs != 0)
-    backend = lto::createInProcessThinBackend(config->thinLTOJobs);
-  return llvm::make_unique<lto::LTO>(std::move(c), backend,
-                                     config->ltoPartitions);
+  return c;
 }
 
-BitcodeCompiler::BitcodeCompiler() : ltoObj(createLTO()) {}
+BitcodeCompiler::BitcodeCompiler() {
+  // Initialize indexFile.
+  if (!config->thinLTOIndexOnlyArg.empty())
+    indexFile = openFile(config->thinLTOIndexOnlyArg);
+
+  // Initialize ltoObj.
+  lto::ThinBackend backend;
+  if (config->thinLTOIndexOnly) {
+    auto OnIndexWrite = [&](StringRef S) { thinIndices.erase(S); };
+    backend = lto::createWriteIndexesThinBackend(
+        config->thinLTOPrefixReplace.first, config->thinLTOPrefixReplace.second,
+        config->thinLTOEmitImportsFiles, indexFile.get(), OnIndexWrite);
+  } else if (config->thinLTOJobs != 0) {
+    backend = lto::createInProcessThinBackend(config->thinLTOJobs);
+  }
+
+  ltoObj = std::make_unique<lto::LTO>(createConfig(), backend,
+                                       config->ltoPartitions);
+}
 
 BitcodeCompiler::~BitcodeCompiler() = default;
 
@@ -85,6 +118,9 @@ void BitcodeCompiler::add(BitcodeFile &f) {
   unsigned symNum = 0;
   std::vector<Symbol *> symBodies = f.getSymbols();
   std::vector<lto::SymbolResolution> resols(symBodies.size());
+
+  if (config->thinLTOIndexOnly)
+    thinIndices.insert(obj.getName());
 
   // Provide a resolution to the LTO API for each symbol.
   for (const lto::InputFile::Symbol &objSym : obj.symbols()) {
@@ -124,10 +160,29 @@ std::vector<StringRef> BitcodeCompiler::compile() {
 
   checkError(ltoObj->run(
       [&](size_t task) {
-        return llvm::make_unique<lto::NativeObjectStream>(
-            llvm::make_unique<raw_svector_ostream>(buf[task]));
+        return std::make_unique<lto::NativeObjectStream>(
+            std::make_unique<raw_svector_ostream>(buf[task]));
       },
       cache));
+
+  // Emit empty index files for non-indexed files
+  for (StringRef s : thinIndices) {
+    std::string path = getThinLTOOutputFile(s);
+    openFile(path + ".thinlto.bc");
+    if (config->thinLTOEmitImportsFiles)
+      openFile(path + ".imports");
+  }
+
+  // ThinLTO with index only option is required to generate only the index
+  // files. After that, we exit from linker and ThinLTO backend runs in a
+  // distributed environment.
+  if (config->thinLTOIndexOnly) {
+    if (!config->ltoObjPath.empty())
+      saveBuffer(buf[0], config->ltoObjPath);
+    if (indexFile)
+      indexFile->close();
+    return {};
+  }
 
   if (!config->ltoCache.empty())
     pruneCache(config->ltoCache, config->ltoCachePolicy);
@@ -151,3 +206,6 @@ std::vector<StringRef> BitcodeCompiler::compile() {
 
   return ret;
 }
+
+} // namespace coff
+} // namespace lld

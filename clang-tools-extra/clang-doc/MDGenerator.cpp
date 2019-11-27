@@ -28,6 +28,18 @@ static std::string genEmphasis(const Twine &Text) {
   return "**" + Text.str() + "**";
 }
 
+static std::string
+genReferenceList(const llvm::SmallVectorImpl<Reference> &Refs) {
+  std::string Buffer;
+  llvm::raw_string_ostream Stream(Buffer);
+  for (const auto &R : Refs) {
+    if (&R != Refs.begin())
+      Stream << ", ";
+    Stream << R.Name;
+  }
+  return Stream.str();
+}
+
 static void writeLine(const Twine &Text, raw_ostream &OS) {
   OS << Text << "\n\n";
 }
@@ -238,12 +250,14 @@ class MDGenerator : public Generator {
 public:
   static const char *Format;
 
-  llvm::Error generateDocForInfo(Info *I, llvm::raw_ostream &OS) override;
+  llvm::Error generateDocForInfo(Info *I, llvm::raw_ostream &OS,
+                                 const ClangDocContext &CDCtx) override;
 };
 
 const char *MDGenerator::Format = "md";
 
-llvm::Error MDGenerator::generateDocForInfo(Info *I, llvm::raw_ostream &OS) {
+llvm::Error MDGenerator::generateDocForInfo(Info *I, llvm::raw_ostream &OS,
+                                            const ClangDocContext &CDCtx) {
   switch (I->IT) {
   case InfoType::IT_namespace:
     genMarkdown(*static_cast<clang::doc::NamespaceInfo *>(I), OS);
@@ -258,8 +272,8 @@ llvm::Error MDGenerator::generateDocForInfo(Info *I, llvm::raw_ostream &OS) {
     genMarkdown(*static_cast<clang::doc::FunctionInfo *>(I), OS);
     break;
   case InfoType::IT_default:
-    return llvm::make_error<llvm::StringError>("Unexpected info type.\n",
-                                               llvm::inconvertibleErrorCode());
+    return createStringError(llvm::inconvertibleErrorCode(),
+                             "unexpected InfoType");
   }
   return llvm::Error::success();
 }

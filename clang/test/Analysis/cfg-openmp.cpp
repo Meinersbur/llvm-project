@@ -1,340 +1,678 @@
-// RUN: %clang_analyze_cc1 -analyzer-checker=debug.DumpCFG %s 2>&1 -fopenmp | FileCheck %s
+// RUN: %clang_analyze_cc1 -analyzer-checker=debug.DumpCFG %s 2>&1 -fopenmp -fopenmp-version=45 | FileCheck %s
 
 // CHECK-LABEL:  void xxx(int argc)
 void xxx(int argc) {
 // CHECK:        [B1]
 // CHECK-NEXT:   1: int x;
-  int x;
-// CHECK-NEXT:   2: x
-// CHECK-NEXT:   3: [B1.2] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:   4: argc
-// CHECK-NEXT:   5: [B1.4] = [B1.3]
-// CHECK-NEXT:   6: #pragma omp atomic read
-// CHECK-NEXT:    [B1.5];
+// CHECK-NEXT:   2: int cond;
+// CHECK-NEXT:   3: int fp;
+// CHECK-NEXT:   4: int rd;
+// CHECK-NEXT:   5: int lin;
+// CHECK-NEXT:   6: int step;
+// CHECK-NEXT:   7: int map;
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-NEXT:   [[#ATOM:]]: x
+// CHECK-NEXT:   [[#ATOM+1]]: [B1.[[#ATOM]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:   [[#ATOM+2]]: argc
+// CHECK-NEXT:   [[#ATOM+3]]: [B1.[[#ATOM+2]]] = [B1.[[#ATOM+1]]]
+// CHECK-NEXT:   [[#ATOM+4]]: #pragma omp atomic read
+// CHECK-NEXT:   [B1.[[#ATOM+3]]];
 #pragma omp atomic read
   argc = x;
-// CHECK-NEXT:   7: x
-// CHECK-NEXT:   8: [B1.7] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:   9: argc
-// CHECK-NEXT:  10: [B1.9] = [B1.8]
-// CHECK-NEXT:  11: #pragma omp critical
-// CHECK-NEXT:    [B1.10];
+// CHECK-NEXT:   [[#CRIT:]]: x
+// CHECK-NEXT:   [[#CRIT+1]]: [B1.[[#CRIT]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:   [[#CRIT+2]]: argc
+// CHECK-NEXT:   [[#CRIT+3]]: [B1.[[#CRIT+2]]] = [B1.[[#CRIT+1]]]
+// CHECK-NEXT:   [[#CRIT+4]]: #pragma omp critical
+// CHECK-NEXT:   [B1.[[#CRIT+3]]];
 #pragma omp critical
   argc = x;
-// CHECK-NEXT:  12: x
-// CHECK-NEXT:  13: [B1.12] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  14: argc
-// CHECK-NEXT:  15: [B1.14] = [B1.13]
-// CHECK-NEXT:  16: #pragma omp distribute parallel for
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.15];
-#pragma omp distribute parallel for
+// CHECK-NEXT:  [[#MASTER:]]: x
+// CHECK-NEXT:  [[#MASTER+1]]: [B1.[[#MASTER]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#MASTER+2]]: argc
+// CHECK-NEXT:  [[#MASTER+3]]: [B1.[[#MASTER+2]]] = [B1.[[#MASTER+1]]]
+// CHECK-NEXT:  [[#MASTER+4]]: #pragma omp master
+// CHECK-NEXT:    [B1.[[#MASTER+3]]];
+#pragma omp master
+  argc = x;
+// CHECK-NEXT:  [[#PAR:]]: x
+// CHECK-NEXT:  [[#PAR+1]]: [B1.[[#PAR]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#PAR+2]]: argc
+// CHECK-NEXT:  [[#PAR+3]]: [B1.[[#PAR+2]]] = [B1.[[#PAR+1]]]
+// CHECK-NEXT:  [[#PAR+4]]: cond
+// CHECK-NEXT:  [[#PAR+5]]: [B1.[[#PAR+4]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#PAR+6]]: [B1.[[#PAR+5]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-NEXT:  [[#PAR+7]]: fp
+// CHECK-NEXT:  [[#PAR+8]]: rd
+// CHECK-NEXT:  [[#PAR+9]]: #pragma omp parallel if(cond) firstprivate(fp) reduction(min: rd)
+// CHECK-NEXT:    [B1.[[#PAR+3]]];
+#pragma omp parallel if(cond) firstprivate(fp) reduction(min:rd)
+  argc = x;
+// CHECK-NEXT:  [[#PSECT:]]: x
+// CHECK-NEXT:  [[#PSECT+1]]: [B1.[[#PSECT]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#PSECT+2]]: argc
+// CHECK-NEXT:  [[#PSECT+3]]: [B1.[[#PSECT+2]]] = [B1.[[#PSECT+1]]]
+// CHECK-NEXT:  [[#PSECT+4]]: cond
+// CHECK-NEXT:  [[#PSECT+5]]: [B1.[[#PSECT+4]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#PSECT+6]]: [B1.[[#PSECT+5]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-NEXT:  [[#PSECT+7]]: fp
+// CHECK-NEXT:  [[#PSECT+8]]: rd
+// CHECK-NEXT:  [[#PSECT+9]]: #pragma omp parallel sections if(cond) firstprivate(fp) reduction(&&: rd)
+// CHECK-NEXT:    {
+// CHECK-NEXT:        [B1.[[#PSECT+3]]];
+// CHECK-NEXT:    }
+#pragma omp parallel sections if(cond) firstprivate(fp) reduction(&&:rd)
+  {
+    argc = x;
+  }
+// CHECK-NEXT:  [[#SINGLE:]]: x
+// CHECK-NEXT:  [[#SINGLE+1]]: [B1.[[#SINGLE]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#SINGLE+2]]: argc
+// CHECK-NEXT:  [[#SINGLE+3]]: [B1.[[#SINGLE+2]]] = [B1.[[#SINGLE+1]]]
+// CHECK-NEXT:  [[#SINGLE+4]]: #pragma omp single
+// CHECK-NEXT:    [B1.[[#SINGLE+3]]];
+#pragma omp single
+  argc = x;
+// CHECK-NEXT:  [[#TARGET:]]:
+// CHECK-SAME:  [B1.[[#TARGET+10]]]
+// CHECK-NEXT:  [[#TARGET+1]]: [B1.[[#TARGET+10]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#TARGET+2]]: [B1.[[#TARGET+9]]]
+// CHECK-NEXT:  [[#TARGET+3]]: [B1.[[#TARGET+9]]] = [B1.[[#TARGET+1]]]
+// CHECK-NEXT:  [[#TARGET+4]]: cond
+// CHECK-NEXT:  [[#TARGET+5]]: [B1.[[#TARGET+4]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#TARGET+6]]: [B1.[[#TARGET+5]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-NEXT:  [[#TARGET+7]]: fp
+// CHECK-NEXT:  [[#TARGET+8]]: rd
+// CHECK-NEXT:  [[#TARGET+9]]: argc
+// CHECK-NEXT:  [[#TARGET+10]]: x
+// CHECK-NEXT:  [[#TARGET+11]]: #pragma omp target depend(in : argc) if(cond) firstprivate(fp) reduction(-: rd)
+// CHECK-NEXT:    [B1.[[#TARGET+3]]];
+#pragma omp target depend(in \
+                          : argc) if(cond) firstprivate(fp) reduction(-:rd)
+  argc = x;
+// CHECK-NEXT:  [[#TP:]]:
+// CHECK-SAME:  [B1.[[#TP+11]]]
+// CHECK-NEXT:  [[#TP+1]]: [B1.[[#TP+11]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#TP+2]]: [B1.[[#TP+10]]]
+// CHECK-NEXT:  [[#TP+3]]: [B1.[[#TP+10]]] = [B1.[[#TP+1]]]
+// CHECK-NEXT:  [[#TP+4]]: cond
+// CHECK-NEXT:  [[#TP+5]]: [B1.[[#TP+4]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#TP+6]]: [B1.[[#TP+5]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-NEXT:  [[#TP+7]]: fp
+// CHECK-NEXT:  [[#TP+8]]: rd
+// CHECK-NEXT:  [[#TP+9]]: map
+// CHECK-NEXT:  [[#TP+10]]: argc
+// CHECK-NEXT:  [[#TP+11]]: x
+// CHECK-NEXT:  [[#TP+12]]: #pragma omp target parallel if(cond) firstprivate(fp) reduction(+: rd) map(to: map)
+// CHECK-NEXT:    [B1.[[#TP+3]]];
+#pragma omp target parallel if(cond) firstprivate(fp) reduction(+:rd) map(to:map)
+  argc = x;
+// CHECK-NEXT:  [[#TT:]]:
+// CHECK-SAME:  [B1.[[#TT+11]]]
+// CHECK-NEXT:  [[#TT+1]]: [B1.[[#TT+11]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#TT+2]]: [B1.[[#TT+10]]]
+// CHECK-NEXT:  [[#TT+3]]: [B1.[[#TT+10]]] = [B1.[[#TT+1]]]
+// CHECK-NEXT:  [[#TT+4]]: cond
+// CHECK-NEXT:  [[#TT+5]]: [B1.[[#TT+4]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#TT+6]]: [B1.[[#TT+5]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-NEXT:  [[#TT+7]]: fp
+// CHECK-NEXT:  [[#TT+8]]: rd
+// CHECK-NEXT:  [[#TT+9]]: map
+// CHECK-NEXT:  [[#TT+10]]: argc
+// CHECK-NEXT:  [[#TT+11]]: x
+// CHECK-NEXT:  [[#TT+12]]: #pragma omp target teams if(cond) firstprivate(fp) reduction(+: rd) map(tofrom: map)
+// CHECK-NEXT:    [B1.[[#TT+3]]];
+#pragma omp target teams if(cond) firstprivate(fp) reduction(+:rd) map(tofrom:map)
+  argc = x;
+// CHECK-NEXT: [[#TU:]]: cond
+// CHECK-NEXT: [[#TU+1]]: [B1.[[#TU]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT: [[#TU+2]]: [B1.[[#TU+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-NEXT: [[#TU+3]]: #pragma omp target update to(x) if(target update: cond)
+#pragma omp target update to(x) if(target update:cond)
+// CHECK-NEXT:  [[#TASK:]]:
+// CHECK-SAME:  [B1.[[#TASK+9]]]
+// CHECK-NEXT:  [[#TASK+1]]: [B1.[[#TASK+9]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#TASK+2]]: [B1.[[#TASK+8]]]
+// CHECK-NEXT:  [[#TASK+3]]: [B1.[[#TASK+8]]] = [B1.[[#TASK+1]]]
+// CHECK-NEXT:  [[#TASK+4]]: cond
+// CHECK-NEXT:  [[#TASK+5]]: [B1.[[#TASK+4]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#TASK+6]]: [B1.[[#TASK+5]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-NEXT:  [[#TASK+7]]: fp
+// CHECK-NEXT:  [[#TASK+8]]: argc
+// CHECK-NEXT:  [[#TASK+9]]: x
+// CHECK-NEXT:  [[#TASK+10]]: #pragma omp task if(cond) firstprivate(fp)
+// CHECK-NEXT:    [B1.[[#TASK+3]]];
+#pragma omp task if(cond) firstprivate(fp)
+  argc = x;
+// CHECK-NEXT:  [[#TG:]]: x
+// CHECK-NEXT:  [[#TG+1]]: [B1.[[#TG]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#TG+2]]: argc
+// CHECK-NEXT:  [[#TG+3]]: [B1.[[#TG+2]]] = [B1.[[#TG+1]]]
+// CHECK-NEXT:  [[#TG+4]]: #pragma omp taskgroup
+// CHECK-NEXT:    [B1.[[#TG+3]]];
+#pragma omp taskgroup
+  argc = x;
+// CHECK-NEXT:  [[#TEAMS:]]: x
+// CHECK-NEXT:  [[#TEAMS+1]]: [B1.[[#TEAMS]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-NEXT:  [[#TEAMS+2]]: argc
+// CHECK-NEXT:  [[#TEAMS+3]]: [B1.[[#TEAMS+2]]] = [B1.[[#TEAMS+1]]]
+// CHECK-NEXT:  [[#TEAMS+4]]: [B1.[[#TEAMS+7]]]
+// CHECK-NEXT:  [[#TEAMS+5]]: [B1.[[#TEAMS+8]]]
+// CHECK-NEXT:  [[#TEAMS+6]]: #pragma omp teams firstprivate(fp) reduction(+: rd)
+// CHECK-NEXT:    [B1.[[#TEAMS+3]]];
+// CHECK-NEXT:  [[#TEAMS+7]]: fp
+// CHECK-NEXT:  [[#TEAMS+8]]: rd
+// CHECK-NEXT:  [[#TEAMS+9]]: argc
+// CHECK-NEXT:  [[#TEAMS+10]]: x
+// CHECK-NEXT:  [[#TEAMS+11]]: #pragma omp target
+#pragma omp target
+#pragma omp teams firstprivate(fp) reduction(+:rd)
+  argc = x;
+// CHECK-NEXT:  [B1.[[#TEAMS+6]]]   Preds
+}
+
+// CHECK-LABEL:  void dpf(int argc)
+void dpf(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#DPFB:]]: x
+// CHECK-DAG:  [[#DPFB+1]]: [B3.[[#DPFB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#DPFB+2]]: argc
+// CHECK-DAG:  [[#DPFB+3]]: [B3.[[#DPFB+2]]] = [B3.[[#DPFB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#DPF:]]: cond
+// CHECK-DAG:  [[#DPF+1]]: [B1.[[#DPF]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#DPF+2]]: [B1.[[#DPF+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#DPF+3]]: fp
+// CHECK-DAG:  [[#DPF+4]]: rd
+// CHECK-DAG:  [[#DPF+5]]: #pragma omp distribute parallel for if(parallel: cond) firstprivate(fp) reduction(+: rd)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#DPFB+3]]];
+#pragma omp distribute parallel for if(parallel:cond) firstprivate(fp) reduction(+:rd)
   for (int i = 0; i < 10; ++i)
     argc = x;
-// CHECK-NEXT:  17: x
-// CHECK-NEXT:  18: [B1.17] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  19: argc
-// CHECK-NEXT:  20: [B1.19] = [B1.18]
-// CHECK-NEXT:  21: #pragma omp distribute parallel for simd
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.20];
-#pragma omp distribute parallel for simd
+}
+
+// CHECK-LABEL:  void dpfs(int argc)
+void dpfs(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#DPFSB:]]: x
+// CHECK-DAG:  [[#DPFSB+1]]: [B3.[[#DPFSB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#DPFSB+2]]: argc
+// CHECK-DAG:  [[#DPFSB+3]]: [B3.[[#DPFSB+2]]] = [B3.[[#DPFSB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#DPFS:]]: cond
+// CHECK-DAG:  [[#DPFS+1]]: [B1.[[#DPFS]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#DPFS+2]]: [B1.[[#DPFS+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#DPFS+3]]: fp
+// CHECK-DAG:  [[#DPFS+4]]: rd
+// CHECK-DAG:  [[#DPFS+5]]: #pragma omp distribute parallel for simd if(cond) firstprivate(fp) reduction(-: rd)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#DPFSB+3]]];
+#pragma omp distribute parallel for simd if(cond)  firstprivate(fp) reduction(-:rd)
   for (int i = 0; i < 10; ++i)
     argc = x;
-// CHECK-NEXT:  22: x
-// CHECK-NEXT:  23: [B1.22] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  24: argc
-// CHECK-NEXT:  25: [B1.24] = [B1.23]
-// CHECK-NEXT:  26: #pragma omp distribute simd
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.25];
+}
+
+// CHECK-LABEL:  void ds(int argc)
+void ds(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#DSB:]]: x
+// CHECK-DAG:  [[#DSB+1]]: [B3.[[#DSB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#DSB+2]]: argc
+// CHECK-DAG:  [[#DSB+3]]: [B3.[[#DSB+2]]] = [B3.[[#DSB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#DS:]]: #pragma omp distribute simd
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#DSB+3]]];
 #pragma omp distribute simd
   for (int i = 0; i < 10; ++i)
     argc = x;
-// CHECK-NEXT:  27: x
-// CHECK-NEXT:  28: [B1.27] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  29: argc
-// CHECK-NEXT:  30: [B1.29] = [B1.28]
-// CHECK-NEXT:  31: #pragma omp for
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.30];
-#pragma omp for
+}
+
+// CHECK-LABEL:  void for_fn(int argc)
+void for_fn(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#FORB:]]: x
+// CHECK-DAG:  [[#FORB+1]]: [B3.[[#FORB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#FORB+2]]: argc
+// CHECK-DAG:  [[#FORB+3]]: [B3.[[#FORB+2]]] = [B3.[[#FORB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#FOR:]]: lin
+// CHECK-DAG:  [[#FOR+1]]: step
+// CHECK-DAG:  [[#FOR+2]]: [B1.[[#FOR+1]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#FOR+3]]: #pragma omp for linear(lin: step)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#FORB+3]]];
+#pragma omp for linear(lin : step)
   for (int i = 0; i < 10; ++i)
     argc = x;
-// CHECK-NEXT:  32: x
-// CHECK-NEXT:  33: [B1.32] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  34: argc
-// CHECK-NEXT:  35: [B1.34] = [B1.33]
-// CHECK-NEXT:  36: #pragma omp for simd
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.35];
-#pragma omp for simd
+}
+
+// CHECK-LABEL:  void fs(int argc)
+void fs(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#FSB:]]: x
+// CHECK-DAG:  [[#FSB+1]]: [B3.[[#FSB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#FSB+2]]: argc
+// CHECK-DAG:  [[#FSB+3]]: [B3.[[#FSB+2]]] = [B3.[[#FSB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#FS:]]: lin
+// CHECK-DAG:  [[#FS+1]]: step
+// CHECK-DAG:  [[#FS+2]]: [B1.[[#FS+1]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#FS+3]]: #pragma omp for simd linear(lin: step)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#FSB+3]]];
+#pragma omp for simd linear(lin: step)
   for (int i = 0; i < 10; ++i)
     argc = x;
-// CHECK-NEXT:  37: x
-// CHECK-NEXT:  38: [B1.37] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  39: argc
-// CHECK-NEXT:  40: [B1.39] = [B1.38]
-// CHECK-NEXT:  41: #pragma omp master
-// CHECK-NEXT:    [B1.40];
-#pragma omp master
-  argc = x;
-// CHECK-NEXT:  42: x
-// CHECK-NEXT:  43: [B1.42] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  44: argc
-// CHECK-NEXT:  45: [B1.44] = [B1.43]
-// CHECK-NEXT:  46: #pragma omp ordered
-// CHECK-NEXT:    [B1.45];
-// CHECK-NEXT:  47: #pragma omp for ordered
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i) {
-// CHECK-NEXT:[B1.46]    }
+}
+
+// CHECK-LABEL:  void ord(int argc)
+void ord(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#ORDB:]]: x
+// CHECK-DAG:  [[#ORDB+1]]: [B3.[[#ORDB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#ORDB+2]]: argc
+// CHECK-DAG:  [[#ORDB+3]]: [B3.[[#ORDB+2]]] = [B3.[[#ORDB+1]]]
+// CHECK-DAG:  [[#ORDB+4]]: #pragma omp ordered
+// CHECK-DAG:    [B3.[[#ORDB+3]]];
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#ORD:]]: #pragma omp for ordered
+// CHECK-DAG:    for (int i = 0
+// CHECK-DAG:[B3.[[#ORDB+4]]]    }
 #pragma omp for ordered
   for (int i = 0; i < 10; ++i) {
 #pragma omp ordered
     argc = x;
   }
-// CHECK-NEXT:  48: x
-// CHECK-NEXT:  49: [B1.48] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  50: argc
-// CHECK-NEXT:  51: [B1.50] = [B1.49]
-// CHECK-NEXT:  52: #pragma omp parallel for
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.51];
-#pragma omp parallel for
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT:  53: x
-// CHECK-NEXT:  54: [B1.53] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  55: argc
-// CHECK-NEXT:  56: [B1.55] = [B1.54]
-// CHECK-NEXT:  57: #pragma omp parallel for simd
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.56];
-#pragma omp parallel for simd
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT:  58: x
-// CHECK-NEXT:  59: [B1.58] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  60: argc
-// CHECK-NEXT:  61: [B1.60] = [B1.59]
-// CHECK-NEXT:  62: #pragma omp parallel
-// CHECK-NEXT:    [B1.61];
-#pragma omp parallel
-  argc = x;
-// CHECK-NEXT:  63: x
-// CHECK-NEXT:  64: [B1.63] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  65: argc
-// CHECK-NEXT:  66: [B1.65] = [B1.64]
-// CHECK-NEXT:  67: #pragma omp parallel sections
-// CHECK-NEXT:    {
-// CHECK-NEXT:        [B1.66];
-// CHECK-NEXT:    }
-#pragma omp parallel sections
-  {
-    argc = x;
-  }
-// CHECK-NEXT:  68: x
-// CHECK-NEXT:  69: [B1.68] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  70: argc
-// CHECK-NEXT:  71: [B1.70] = [B1.69]
-// CHECK-NEXT:  72: #pragma omp simd
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.71];
-#pragma omp simd
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT:  73: x
-// CHECK-NEXT:  74: [B1.73] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  75: argc
-// CHECK-NEXT:  76: [B1.75] = [B1.74]
-// CHECK-NEXT:  77: #pragma omp single
-// CHECK-NEXT:    [B1.76];
-#pragma omp single
-  argc = x;
-// CHECK-NEXT:  78: x
-// CHECK-NEXT:  79: [B1.78] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  80: argc
-// CHECK-NEXT:  81: [B1.80] = [B1.79]
-// CHECK-NEXT:  82: #pragma omp target depend(in : argc)
-// CHECK-NEXT:    [B1.81];
-#pragma omp target depend(in \
-                          : argc)
-  argc = x;
-// CHECK-NEXT:  83: x
-// CHECK-NEXT:  84: [B1.83] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  85: argc
-// CHECK-NEXT:  86: [B1.85] = [B1.84]
-// CHECK-NEXT:  87: #pragma omp target parallel for
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.86];
-#pragma omp target parallel for
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT:  88: x
-// CHECK-NEXT:  89: [B1.88] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  90: argc
-// CHECK-NEXT:  91: [B1.90] = [B1.89]
-// CHECK-NEXT:  92: #pragma omp target parallel for simd
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.91];
-#pragma omp target parallel for simd
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT:  93: x
-// CHECK-NEXT:  94: [B1.93] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT:  95: argc
-// CHECK-NEXT:  96: [B1.95] = [B1.94]
-// CHECK-NEXT:  97: #pragma omp target parallel
-// CHECK-NEXT:    [B1.96];
-#pragma omp target parallel
-  argc = x;
-// CHECK-NEXT:  98: x
-// CHECK-NEXT:  99: [B1.98] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 100: argc
-// CHECK-NEXT: 101: [B1.100] = [B1.99]
-// CHECK-NEXT: 102: #pragma omp target simd
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.101];
-#pragma omp target simd
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT: 103: x
-// CHECK-NEXT: 104: [B1.103] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 105: argc
-// CHECK-NEXT: 106: [B1.105] = [B1.104]
-// CHECK-NEXT: 107: #pragma omp target teams distribute
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.106];
-#pragma omp target teams distribute
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT: 108: x
-// CHECK-NEXT: 109: [B1.108] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 110: argc
-// CHECK-NEXT: 111: [B1.110] = [B1.109]
-// CHECK-NEXT: 112: #pragma omp target teams distribute parallel for
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.111];
-#pragma omp target teams distribute parallel for
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT: 113: x
-// CHECK-NEXT: 114: [B1.113] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 115: argc
-// CHECK-NEXT: 116: [B1.115] = [B1.114]
-// CHECK-NEXT: 117: #pragma omp target teams distribute parallel for simd
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.116];
-#pragma omp target teams distribute parallel for simd
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT: 118: x
-// CHECK-NEXT: 119: [B1.118] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 120: argc
-// CHECK-NEXT: 121: [B1.120] = [B1.119]
-// CHECK-NEXT: 122: #pragma omp target teams distribute simd
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.121];
-#pragma omp target teams distribute simd
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT: 123: x
-// CHECK-NEXT: 124: [B1.123] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 125: argc
-// CHECK-NEXT: 126: [B1.125] = [B1.124]
-// CHECK-NEXT: 127: #pragma omp target teams
-// CHECK-NEXT:    [B1.126];
-#pragma omp target teams
-  argc = x;
-// CHECK-NEXT: 128: #pragma omp target update to(x)
-#pragma omp target update to(x)
-// CHECK-NEXT: 129: x
-// CHECK-NEXT: 130: [B1.129] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 131: argc
-// CHECK-NEXT: 132: [B1.131] = [B1.130]
-  argc = x;
-// CHECK-NEXT: 133: x
-// CHECK-NEXT: 134: [B1.133] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 135: argc
-// CHECK-NEXT: 136: [B1.135] = [B1.134]
-// CHECK-NEXT: 137: #pragma omp task
-// CHECK-NEXT:    [B1.136];
-#pragma omp task
-  argc = x;
-// CHECK-NEXT: 138: x
-// CHECK-NEXT: 139: [B1.138] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 140: argc
-// CHECK-NEXT: 141: [B1.140] = [B1.139]
-// CHECK-NEXT: 142: #pragma omp taskgroup
-// CHECK-NEXT:    [B1.141];
-#pragma omp taskgroup
-  argc = x;
-// CHECK-NEXT: 143: x
-// CHECK-NEXT: 144: [B1.143] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 145: argc
-// CHECK-NEXT: 146: [B1.145] = [B1.144]
-// CHECK-NEXT: 147: #pragma omp taskloop
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.146];
-#pragma omp taskloop
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT: 148: x
-// CHECK-NEXT: 149: [B1.148] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 150: argc
-// CHECK-NEXT: 151: [B1.150] = [B1.149]
-// CHECK-NEXT: 152: #pragma omp taskloop simd
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.151];
-#pragma omp taskloop simd
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT: 153: x
-// CHECK-NEXT: 154: [B1.153] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 155: argc
-// CHECK-NEXT: 156: [B1.155] = [B1.154]
-// CHECK-NEXT: 157: #pragma omp teams distribute parallel for
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.156];
-// CHECK-NEXT: 158: #pragma omp target
-#pragma omp target
-#pragma omp teams distribute parallel for
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT:[B1.157] 159: x
-// CHECK-NEXT: 160: [B1.159] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 161: argc
-// CHECK-NEXT: 162: [B1.161] = [B1.160]
-// CHECK-NEXT: 163: #pragma omp teams distribute parallel for simd
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.162];
-// CHECK-NEXT: 164: #pragma omp target
-#pragma omp target
-#pragma omp teams distribute parallel for simd
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT:[B1.163] 165: x
-// CHECK-NEXT: 166: [B1.165] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 167: argc
-// CHECK-NEXT: 168: [B1.167] = [B1.166]
-// CHECK-NEXT: 169: #pragma omp teams distribute simd
-// CHECK-NEXT:    for (int i = 0; i < 10; ++i)
-// CHECK-NEXT:        [B1.168];
-// CHECK-NEXT: 170: #pragma omp target
-#pragma omp target
-#pragma omp teams distribute simd
-  for (int i = 0; i < 10; ++i)
-    argc = x;
-// CHECK-NEXT:[B1.169] 171: x
-// CHECK-NEXT: 172: [B1.171] (ImplicitCastExpr, LValueToRValue, int)
-// CHECK-NEXT: 173: argc
-// CHECK-NEXT: 174: [B1.173] = [B1.172]
-// CHECK-NEXT: 175: #pragma omp teams
-// CHECK-NEXT:    [B1.174];
-// CHECK-NEXT: 176: #pragma omp target
-#pragma omp target
-#pragma omp teams
-  argc = x;
-// CHECK-NEXT:[B1.175]   Preds
 }
 
+// CHECK-LABEL:  void pf(int argc)
+void pf(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#PFB:]]: x
+// CHECK-DAG:  [[#PFB+1]]: [B3.[[#PFB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#PFB+2]]: argc
+// CHECK-DAG:  [[#PFB+3]]: [B3.[[#PFB+2]]] = [B3.[[#PFB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#PF:]]: cond
+// CHECK-DAG:  [[#PF+1]]: [B1.[[#PF]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#PF+2]]: [B1.[[#PF+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#PF+3]]: fp
+// CHECK-DAG:  [[#PF+4]]: rd
+// CHECK-DAG:  [[#PF+5]]: lin
+// CHECK-DAG:  [[#PF+6]]: step
+// CHECK-DAG:  [[#PF+7]]: [B1.[[#PF+6]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#PF+8]]: #pragma omp parallel for if(cond) firstprivate(fp) reduction(&: rd) linear(lin: step)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#PFB+3]]];
+#pragma omp parallel for if(cond) firstprivate(fp) reduction(&:rd) linear(lin: step)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void pfs(int argc)
+void pfs(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#PFSB:]]: x
+// CHECK-DAG:  [[#PFSB+1]]: [B3.[[#PFSB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#PFSB+2]]: argc
+// CHECK-DAG:  [[#PFSB+3]]: [B3.[[#PFSB+2]]] = [B3.[[#PFSB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#PFS:]]: cond
+// CHECK-DAG:  [[#PFS+1]]: [B1.[[#PFS]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#PFS+2]]: [B1.[[#PFS+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#PFS+3]]: fp
+// CHECK-DAG:  [[#PFS+4]]: rd
+// CHECK-DAG:  [[#PFS+5]]: lin
+// CHECK-DAG:  [[#PFS+6]]: step
+// CHECK-DAG:  [[#PFS+7]]: [B1.[[#PFS+6]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#PFS+8]]: #pragma omp parallel for simd if(cond) firstprivate(fp) reduction(|: rd) linear(lin: step)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#PFSB+3]]];
+#pragma omp parallel for simd if(cond) firstprivate(fp) reduction(|:rd) linear(lin: step)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void simd(int argc)
+void simd(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#SIMDB:]]: x
+// CHECK-DAG:  [[#SIMDB+1]]: [B3.[[#SIMDB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#SIMDB+2]]: argc
+// CHECK-DAG:  [[#SIMDB+3]]: [B3.[[#SIMDB+2]]] = [B3.[[#SIMDB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#SIMD:]]: lin
+// CHECK-DAG:  [[#SIMD+1]]: step
+// CHECK-DAG:  [[#SIMD+2]]: [B1.[[#SIMD+1]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#SIMD+3]]: #pragma omp simd linear(lin: step)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#SIMDB+3]]];
+#pragma omp simd linear(lin: step)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void tpf(int argc)
+void tpf(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#TPFB:]]: x
+// CHECK-DAG:  [[#TPFB+1]]: [B3.[[#TPFB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TPFB+2]]: argc
+// CHECK-DAG:  [[#TPFB+3]]: [B3.[[#TPFB+2]]] = [B3.[[#TPFB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#TPF:]]: cond
+// CHECK-DAG:  [[#TPF+1]]: [B1.[[#TPF]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TPF+2]]: [B1.[[#TPF+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#TPF+3]]: fp
+// CHECK-DAG:  [[#TPF+4]]: rd
+// CHECK-DAG:  [[#TPF+5]]: lin
+// CHECK-DAG:  [[#TPF+6]]: step
+// CHECK-DAG:  [[#TPF+7]]: [B1.[[#TPF+6]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TPF+8]]: map
+// CHECK-DAG:  [[#TPF+9]]: [B3.[[#TPFB+2]]]
+// CHECK-DAG:  [[#TPF+10]]: [B3.[[#TPFB]]]
+// CHECK-DAG:  [[#TPF+11]]: #pragma omp target parallel for if(parallel: cond) firstprivate(fp) reduction(max: rd) linear(lin: step) map(tofrom: map)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#TPFB+3]]];
+#pragma omp target parallel for if(parallel:cond) firstprivate(fp) reduction(max:rd) linear(lin: step) map(map)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void tpfs(int argc)
+void tpfs(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#TPFSB:]]: x
+// CHECK-DAG:  [[#TPFSB+1]]: [B3.[[#TPFSB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TPFSB+2]]: argc
+// CHECK-DAG:  [[#TPFSB+3]]: [B3.[[#TPFSB+2]]] = [B3.[[#TPFSB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#TPFS:]]: cond
+// CHECK-DAG:  [[#TPFS+1]]: [B1.[[#TPFS]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TPFS+2]]: [B1.[[#TPFS+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#TPFS+3]]: fp
+// CHECK-DAG:  [[#TPFS+4]]: rd
+// CHECK-DAG:  [[#TPFS+5]]: lin
+// CHECK-DAG:  [[#TPFS+6]]: step
+// CHECK-DAG:  [[#TPFS+7]]: [B1.[[#TPFS+6]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TPFS+8]]: map
+// CHECK-DAG:  [[#TPFS+9]]: [B3.[[#TPFSB+2]]]
+// CHECK-DAG:  [[#TPFS+10]]: [B3.[[#TPFSB]]]
+// CHECK-DAG:  [[#TPFS+11]]: #pragma omp target parallel for simd if(target: cond) firstprivate(fp) reduction(*: rd) linear(lin: step) map(tofrom: map)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#TPFSB+3]]];
+#pragma omp target parallel for simd if(target:cond) firstprivate(fp) reduction(*:rd) linear(lin: step) map(tofrom:map)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void ts(int argc)
+void ts(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#TSB:]]: x
+// CHECK-DAG:  [[#TSB+1]]: [B3.[[#TSB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TSB+2]]: argc
+// CHECK-DAG:  [[#TSB+3]]: [B3.[[#TSB+2]]] = [B3.[[#TSB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#TS:]]: cond
+// CHECK-DAG:  [[#TS+1]]: [B1.[[#TS]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TS+2]]: [B1.[[#TS+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#TS+3]]: fp
+// CHECK-DAG:  [[#TS+4]]: rd
+// CHECK-DAG:  [[#TS+5]]: lin
+// CHECK-DAG:  [[#TS+6]]: step
+// CHECK-DAG:  [[#TS+7]]: [B1.[[#TS+6]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TS+8]]: [B3.[[#TSB+2]]]
+// CHECK-DAG:  [[#TS+9]]: [B3.[[#TSB]]]
+// CHECK-DAG:  [[#TS+10]]: #pragma omp target simd if(cond) firstprivate(fp) reduction(+: rd) linear(lin: step) map(alloc: map)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#TSB+3]]];
+#pragma omp target simd if(cond) firstprivate(fp) reduction(+:rd) linear(lin: step) map(alloc:map)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void ttd(int argc)
+void ttd(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#TTDB:]]: x
+// CHECK-DAG:  [[#TTDB+1]]: [B3.[[#TTDB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TTDB+2]]: argc
+// CHECK-DAG:  [[#TTDB+3]]: [B3.[[#TTDB+2]]] = [B3.[[#TTDB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#TTD:]]: cond
+// CHECK-DAG:  [[#TTD+1]]: [B1.[[#TTD]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TTD+2]]: [B1.[[#TTD+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#TTD+3]]: fp
+// CHECK-DAG:  [[#TTD+4]]: rd
+// CHECK-DAG:  [[#TTD+5]]: [B3.[[#TTDB+2]]]
+// CHECK-DAG:  [[#TTD+6]]: [B3.[[#TTDB]]]
+// CHECK-DAG:  [[#TTD+7]]: #pragma omp target teams distribute if(cond) firstprivate(fp) reduction(+: rd) map(release: map)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#TTDB+3]]];
+#pragma omp target teams distribute if(cond) firstprivate(fp) reduction(+:rd) map(release:map)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void ttdpf(int argc)
+void ttdpf(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#TTDPFB:]]: x
+// CHECK-DAG:  [[#TTDPFB+1]]: [B3.[[#TTDPFB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TTDPFB+2]]: argc
+// CHECK-DAG:  [[#TTDPFB+3]]: [B3.[[#TTDPFB+2]]] = [B3.[[#TTDPFB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#TTDPF:]]: cond
+// CHECK-DAG:  [[#TTDPF+1]]: [B1.[[#TTDPF]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TTDPF+2]]: [B1.[[#TTDPF+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#TTDPF+3]]: fp
+// CHECK-DAG:  [[#TTDPF+4]]: rd
+// CHECK-DAG:  [[#TTDPF+5]]: [B3.[[#TTDPFB+2]]]
+// CHECK-DAG:  [[#TTDPF+6]]: [B3.[[#TTDPFB]]]
+// CHECK-DAG:  [[#TTDPF+7]]: #pragma omp target teams distribute parallel for if(cond) firstprivate(fp) reduction(+: rd) map(delete: map)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#TTDPFB+3]]];
+#pragma omp target teams distribute parallel for if(cond) firstprivate(fp) reduction(+:rd) map(delete:map)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void ttdpfs(int argc)
+void ttdpfs(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#TTDPFSB:]]: x
+// CHECK-DAG:  [[#TTDPFSB+1]]: [B3.[[#TTDPFSB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TTDPFSB+2]]: argc
+// CHECK-DAG:  [[#TTDPFSB+3]]: [B3.[[#TTDPFSB+2]]] = [B3.[[#TTDPFSB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#TTDPFS:]]: cond
+// CHECK-DAG:  [[#TTDPFS+1]]: [B1.[[#TTDPFS]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TTDPFS+2]]: [B1.[[#TTDPFS+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#TTDPFS+3]]: fp
+// CHECK-DAG:  [[#TTDPFS+4]]: rd
+// CHECK-DAG:  [[#TTDPFS+5]]: [B3.[[#TTDPFSB+2]]]
+// CHECK-DAG:  [[#TTDPFS+6]]: [B3.[[#TTDPFSB]]]
+// CHECK-DAG:  [[#TTDPFS+7]]: #pragma omp target teams distribute parallel for simd if(parallel: cond) firstprivate(fp) reduction(+: rd) map(from: map)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#TTDPFSB+3]]];
+#pragma omp target teams distribute parallel for simd if(parallel:cond) firstprivate(fp) reduction(+:rd) map(from:map)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void ttds(int argc)
+void ttds(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#TTDSB:]]: x
+// CHECK-DAG:  [[#TTDSB+1]]: [B3.[[#TTDSB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TTDSB+2]]: argc
+// CHECK-DAG:  [[#TTDSB+3]]: [B3.[[#TTDSB+2]]] = [B3.[[#TTDSB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#TTDS:]]: cond
+// CHECK-DAG:  [[#TTDS+1]]: [B1.[[#TTDS]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TTDS+2]]: [B1.[[#TTDS+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#TTDS+3]]: fp
+// CHECK-DAG:  [[#TTDS+4]]: rd
+// CHECK-DAG:  [[#TTDS+5]]: map
+// CHECK-DAG:  [[#TTDS+6]]: [B3.[[#TTDSB+2]]]
+// CHECK-DAG:  [[#TTDS+7]]: [B3.[[#TTDSB]]]
+// CHECK-DAG:  [[#TTDS+8]]: #pragma omp target teams distribute simd if(cond) firstprivate(fp) reduction(+: rd) map(tofrom: map)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#TTDPFSB+3]]];
+#pragma omp target teams distribute simd if(cond) firstprivate(fp) reduction(+:rd) map(map)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void tl(int argc)
+void tl(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#TLB:]]: x
+// CHECK-DAG:  [[#TLB+1]]: [B3.[[#TLB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TLB+2]]: argc
+// CHECK-DAG:  [[#TLB+3]]: [B3.[[#TLB+2]]] = [B3.[[#TLB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#TL:]]: cond
+// CHECK-DAG:  [[#TL+1]]: [B1.[[#TL]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TL+2]]: [B1.[[#TL+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#TL+3]]: fp
+// CHECK-DAG:  [[#TL+4]]: rd
+// CHECK-DAG:  [[#TL+5]]: [B3.[[#TLB+2]]]
+// CHECK-DAG:  [[#TL+6]]: [B3.[[#TLB]]]
+// CHECK-DAG:  [[#TL+7]]: #pragma omp taskloop if(cond) firstprivate(fp) reduction(+: rd)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#TLB+3]]];
+#pragma omp taskloop if(cond) firstprivate(fp) reduction(+:rd)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void tls(int argc)
+void tls(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#TLSB:]]: x
+// CHECK-DAG:  [[#TLSB+1]]: [B3.[[#TLSB]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TLSB+2]]: argc
+// CHECK-DAG:  [[#TLSB+3]]: [B3.[[#TLSB+2]]] = [B3.[[#TLSB+1]]]
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#TLS:]]: cond
+// CHECK-DAG:  [[#TLS+1]]: [B1.[[#TLS]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TLS+2]]: [B1.[[#TLS+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#TLS+3]]: fp
+// CHECK-DAG:  [[#TLS+4]]: rd
+// CHECK-DAG:  [[#TLS+5]]: lin
+// CHECK-DAG:  [[#TLS+6]]: step
+// CHECK-DAG:  [[#TLS+7]]: [B1.[[#TLS+6]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TLS+8]]: [B3.[[#TLSB+2]]]
+// CHECK-DAG:  [[#TLS+9]]: [B3.[[#TLSB]]]
+// CHECK-DAG:  [[#TLS+10]]: #pragma omp taskloop simd if(cond) firstprivate(fp) reduction(+: rd) linear(lin: step)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#TLSB+3]]];
+#pragma omp taskloop simd if(cond) firstprivate(fp) reduction(+:rd) linear(lin: step)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void tdpf(int argc)
+void tdpf(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#TDPF:]]: cond
+// CHECK-DAG:  [[#TDPF+1]]: [B1.[[#TDPF]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TDPF+2]]: [B1.[[#TDPF+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#TDPF+3]]: [B1.[[#TDPF+6]]]
+// CHECK-DAG:  [[#TDPF+4]]: [B1.[[#TDPF+7]]]
+// CHECK-DAG:  [[#TDPF+5]]: #pragma omp teams distribute parallel for if(cond) firstprivate(fp) reduction(+: rd)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#TDPFB:]]];
+// CHECK-DAG:  [[#TDPF+6]]: fp
+// CHECK-DAG:  [[#TDPF+7]]: rd
+// CHECK-DAG:  [[#TDPF+8]]: argc
+// CHECK-DAG:  [[#TDPF+9]]: x
+// CHECK-DAG:  [[#TDPF+10]]: cond
+// CHECK-DAG:  [[#TDPF+11]]: #pragma omp target
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#TDPFB-3]]: x
+// CHECK-DAG:  [[#TDPFB-2]]: [B3.[[#TDPFB-3]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TDPFB-1]]: argc
+// CHECK-DAG:  [[#TDPFB]]: [B3.[[#TDPFB-1]]] = [B3.[[#TDPFB-2]]]
+#pragma omp target
+#pragma omp teams distribute parallel for if(cond) firstprivate(fp) reduction(+:rd)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void tdpfs(int argc)
+void tdpfs(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#TDPFS:]]: cond
+// CHECK-DAG:  [[#TDPFS+1]]: [B1.[[#TDPFS]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TDPFS+2]]: [B1.[[#TDPFS+1]]] (ImplicitCastExpr, IntegralToBoolean, _Bool)
+// CHECK-DAG:  [[#TDPFS+3]]: [B1.[[#TDPFS+6]]]
+// CHECK-DAG:  [[#TDPFS+4]]: [B1.[[#TDPFS+7]]]
+// CHECK-DAG:  [[#TDPFS+5]]: #pragma omp teams distribute parallel for simd if(cond) firstprivate(fp) reduction(+: rd)
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#TDPFSB:]]];
+// CHECK-DAG:  [[#TDPFS+6]]: fp
+// CHECK-DAG:  [[#TDPFS+7]]: rd
+// CHECK-DAG:  [[#TDPFS+8]]: argc
+// CHECK-DAG:  [[#TDPFS+9]]: x
+// CHECK-DAG:  [[#TDPFS+10]]: cond
+// CHECK-DAG:  [[#TDPFS+11]]: #pragma omp target
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#TDPFSB-3]]: x
+// CHECK-DAG:  [[#TDPFSB-2]]: [B3.[[#TDPFSB-3]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TDPFSB-1]]: argc
+// CHECK-DAG:  [[#TDPFSB]]: [B3.[[#TDPFSB-1]]] = [B3.[[#TDPFSB-2]]]
+#pragma omp target
+#pragma omp teams distribute parallel for simd if(cond) firstprivate(fp) reduction(+:rd)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}
+
+// CHECK-LABEL:  void tds(int argc)
+void tds(int argc) {
+  int x, cond, fp, rd, lin, step, map;
+// CHECK-DAG:   [B1]
+// CHECK-DAG:  [[#TDS:]]: #pragma omp teams distribute simd firstprivate(fp) reduction(+: rd)
+// CHECK-DAG:  [[#TDS-2]]: [B1.[[#TDS+1]]]
+// CHECK-DAG:  [[#TDS-1]]: [B1.[[#TDS+2]]]
+// CHECK-DAG:    for (int i = 0;
+// CHECK-DAG:        [B3.[[#TDSB:]]];
+// CHECK-DAG:  [[#TDS+1]]: fp
+// CHECK-DAG:  [[#TDS+2]]: rd
+// CHECK-DAG:  [[#TDS+3]]: argc
+// CHECK-DAG:  [[#TDS+4]]: x
+// CHECK-DAG:  [[#TDS+5]]: #pragma omp target
+// CHECK-DAG:   [B3]
+// CHECK-DAG:  [[#TDSB-3]]: x
+// CHECK-DAG:  [[#TDSB-2]]: [B3.[[#TDSB-3]]] (ImplicitCastExpr, LValueToRValue, int)
+// CHECK-DAG:  [[#TDSB-1]]: argc
+// CHECK-DAG:  [[#TDSB]]: [B3.[[#TDSB-1]]] = [B3.[[#TDSB-2]]]
+#pragma omp target
+#pragma omp teams distribute simd firstprivate(fp) reduction(+:rd)
+  for (int i = 0; i < 10; ++i)
+    argc = x;
+}

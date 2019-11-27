@@ -817,13 +817,14 @@ template <class G, size_t N>
 static void callSpecialFunction(G &&Gen, StringRef FuncName, QualType QT,
                                 bool IsVolatile, CodeGenFunction &CGF,
                                 std::array<Address, N> Addrs) {
+  auto SetArtificialLoc = ApplyDebugLocation::CreateArtificial(CGF);
   for (unsigned I = 0; I < N; ++I)
     Addrs[I] = CGF.Builder.CreateBitCast(Addrs[I], CGF.CGM.Int8PtrPtrTy);
   QT = IsVolatile ? QT.withVolatile() : QT;
   Gen.callFunc(FuncName, QT, Addrs, CGF);
 }
 
-template <size_t N> std::array<Address, N> createNullAddressArray();
+template <size_t N> static std::array<Address, N> createNullAddressArray();
 
 template <> std::array<Address, 1> createNullAddressArray() {
   return std::array<Address, 1>({{Address(nullptr, CharUnits::Zero())}});

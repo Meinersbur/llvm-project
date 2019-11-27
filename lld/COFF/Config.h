@@ -49,7 +49,7 @@ struct Export {
 
   // If an export is a form of /export:foo=dllname.bar, that means
   // that foo should be exported as an alias to bar in the DLL.
-  // ForwardTo is set to "dllname.bar" part. Usually empty.
+  // forwardTo is set to "dllname.bar" part. Usually empty.
   StringRef forwardTo;
   StringChunk *forwardChunk = nullptr;
 
@@ -103,6 +103,9 @@ struct Configuration {
   bool debugDwarf = false;
   bool debugGHashes = false;
   bool debugSymtab = false;
+  bool driver = false;
+  bool driverUponly = false;
+  bool driverWdm = false;
   bool showTiming = false;
   bool showSummary = false;
   unsigned debugTypes = static_cast<unsigned>(DebugType::None);
@@ -113,7 +116,7 @@ struct Configuration {
   std::vector<llvm::StringRef> argv;
 
   // Symbols in this set are considered as live by the garbage collector.
-  std::vector<Symbol *> gCRoot;
+  std::vector<Symbol *> gcroot;
 
   std::set<std::string> noDefaultLibs;
   bool noDefaultLibAll = false;
@@ -122,6 +125,7 @@ struct Configuration {
   bool dll = false;
   StringRef implib;
   std::vector<Export> exports;
+  bool hadExplicitExports;
   std::set<std::string> delayLoads;
   std::map<std::string, int> dllOrder;
   Symbol *delayLoadHelper = nullptr;
@@ -132,6 +136,7 @@ struct Configuration {
   GuardCFLevel guardCF = GuardCFLevel::Off;
 
   // Used for SafeSEH.
+  bool safeSEH = false;
   Symbol *sehTable = nullptr;
   Symbol *sehCount = nullptr;
 
@@ -179,6 +184,19 @@ struct Configuration {
   // Used for /lldmap.
   std::string mapFile;
 
+  // Used for /thinlto-index-only:
+  llvm::StringRef thinLTOIndexOnlyArg;
+
+  // Used for /thinlto-object-prefix-replace:
+  std::pair<llvm::StringRef, llvm::StringRef> thinLTOPrefixReplace;
+
+  // Used for /thinlto-object-suffix-replace:
+  std::pair<llvm::StringRef, llvm::StringRef> thinLTOObjectSuffixReplace;
+
+  // Used for /lto-obj-path:
+  llvm::StringRef ltoObjPath;
+
+  uint64_t align = 4096;
   uint64_t imageBase = -1;
   uint64_t fileAlign = 512;
   uint64_t stackReserve = 1024 * 1024;
@@ -203,12 +221,15 @@ struct Configuration {
   bool warnMissingOrderSymbol = true;
   bool warnLocallyDefinedImported = true;
   bool warnDebugInfoUnusable = true;
+  bool warnLongSectionNames = true;
   bool incremental = true;
   bool integrityCheck = false;
   bool killAt = false;
   bool repro = false;
   bool swaprunCD = false;
   bool swaprunNet = false;
+  bool thinLTOEmitImportsFiles;
+  bool thinLTOIndexOnly;
 };
 
 extern Configuration *config;

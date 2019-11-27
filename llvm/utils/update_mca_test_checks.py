@@ -56,9 +56,6 @@ def _showwarning(message, category, filename, lineno, file=None, line=None):
 
 def _parse_args():
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument('-v', '--verbose',
-                      action='store_true',
-                      help='show verbose output')
   parser.add_argument('-w',
                       action='store_true',
                       help='suppress warnings')
@@ -73,7 +70,7 @@ def _parse_args():
   parser.add_argument('tests',
                       metavar='<test-path>',
                       nargs='+')
-  args = parser.parse_args()
+  args = common.parse_commandline_args(parser)
 
   _configure_warnings(args)
 
@@ -116,6 +113,7 @@ def _get_run_infos(run_lines, args):
       _warn('could not split tool and filecheck commands: {}'.format(run_line))
       continue
 
+    common.verify_filecheck_prefixes(filecheck_cmd)
     tool_basename = os.path.splitext(os.path.basename(args.llvm_mca_binary))[0]
 
     if not tool_cmd.startswith(tool_basename + ' '):

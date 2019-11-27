@@ -99,10 +99,12 @@ def X86insertps : SDNode<"X86ISD::INSERTPS",
 def X86vzmovl  : SDNode<"X86ISD::VZEXT_MOVL",
                  SDTypeProfile<1, 1, [SDTCisSameAs<0,1>]>>;
 
-def X86vzload  : SDNode<"X86ISD::VZEXT_LOAD", SDTLoad,
-                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
-def X86vextractstore  : SDNode<"X86ISD::VEXTRACT_STORE", SDTStore,
-                        [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def X86vzld  : SDNode<"X86ISD::VZEXT_LOAD", SDTLoad,
+                      [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def X86vextractst  : SDNode<"X86ISD::VEXTRACT_STORE", SDTStore,
+                     [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def X86VBroadcastld  : SDNode<"X86ISD::VBROADCAST_LOAD", SDTLoad,
+                      [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
 
 def SDTVtrunc    : SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisVec<1>,
                                         SDTCisInt<0>, SDTCisInt<1>,
@@ -939,10 +941,40 @@ def bc_v8i64 : PatFrag<(ops node:$in), (v8i64 (bitconvert node:$in))>;
 def bc_v8f64 : PatFrag<(ops node:$in), (v8f64 (bitconvert node:$in))>;
 def bc_v16f32 : PatFrag<(ops node:$in), (v16f32 (bitconvert node:$in))>;
 
-def vzload_v4i32 : PatFrag<(ops node:$src),
-                           (bitconvert (v4i32 (X86vzload node:$src)))>;
-def vzload_v2i64 : PatFrag<(ops node:$src),
-                           (bitconvert (v2i64 (X86vzload node:$src)))>;
+def X86vzload32 : PatFrag<(ops node:$src),
+                          (X86vzld node:$src), [{
+  return cast<MemIntrinsicSDNode>(N)->getMemoryVT().getStoreSize() == 4;
+}]>;
+
+def X86vzload64 : PatFrag<(ops node:$src),
+                          (X86vzld node:$src), [{
+  return cast<MemIntrinsicSDNode>(N)->getMemoryVT().getStoreSize() == 8;
+}]>;
+
+def X86vextractstore64 : PatFrag<(ops node:$val, node:$ptr),
+                                 (X86vextractst node:$val, node:$ptr), [{
+  return cast<MemIntrinsicSDNode>(N)->getMemoryVT().getStoreSize() == 8;
+}]>;
+
+def X86VBroadcastld8 : PatFrag<(ops node:$src),
+                               (X86VBroadcastld node:$src), [{
+  return cast<MemIntrinsicSDNode>(N)->getMemoryVT().getStoreSize() == 1;
+}]>;
+
+def X86VBroadcastld16 : PatFrag<(ops node:$src),
+                                (X86VBroadcastld node:$src), [{
+  return cast<MemIntrinsicSDNode>(N)->getMemoryVT().getStoreSize() == 2;
+}]>;
+
+def X86VBroadcastld32 : PatFrag<(ops node:$src),
+                                (X86VBroadcastld node:$src), [{
+  return cast<MemIntrinsicSDNode>(N)->getMemoryVT().getStoreSize() == 4;
+}]>;
+
+def X86VBroadcastld64 : PatFrag<(ops node:$src),
+                                (X86VBroadcastld node:$src), [{
+  return cast<MemIntrinsicSDNode>(N)->getMemoryVT().getStoreSize() == 8;
+}]>;
 
 
 def fp32imm0 : PatLeaf<(f32 fpimm), [{
@@ -950,6 +982,10 @@ def fp32imm0 : PatLeaf<(f32 fpimm), [{
 }]>;
 
 def fp64imm0 : PatLeaf<(f64 fpimm), [{
+  return N->isExactlyValue(+0.0);
+}]>;
+
+def fp128imm0 : PatLeaf<(f128 fpimm), [{
   return N->isExactlyValue(+0.0);
 }]>;
 

@@ -21,19 +21,62 @@
 
 using namespace llvm;
 using namespace llvm::wasm;
-using namespace lld;
-using namespace lld::wasm;
 
+namespace lld {
+std::string toString(const wasm::Symbol &sym) {
+  return maybeDemangleSymbol(sym.getName());
+}
+
+std::string maybeDemangleSymbol(StringRef name) {
+  if (wasm::config->demangle)
+    return demangleItanium(name);
+  return name;
+}
+
+std::string toString(wasm::Symbol::Kind kind) {
+  switch (kind) {
+  case wasm::Symbol::DefinedFunctionKind:
+    return "DefinedFunction";
+  case wasm::Symbol::DefinedDataKind:
+    return "DefinedData";
+  case wasm::Symbol::DefinedGlobalKind:
+    return "DefinedGlobal";
+  case wasm::Symbol::DefinedEventKind:
+    return "DefinedEvent";
+  case wasm::Symbol::UndefinedFunctionKind:
+    return "UndefinedFunction";
+  case wasm::Symbol::UndefinedDataKind:
+    return "UndefinedData";
+  case wasm::Symbol::UndefinedGlobalKind:
+    return "UndefinedGlobal";
+  case wasm::Symbol::LazyKind:
+    return "LazyKind";
+  case wasm::Symbol::SectionKind:
+    return "SectionKind";
+  case wasm::Symbol::OutputSectionKind:
+    return "OutputSectionKind";
+  }
+  llvm_unreachable("invalid symbol kind");
+}
+
+namespace wasm {
 DefinedFunction *WasmSym::callCtors;
 DefinedFunction *WasmSym::initMemory;
 DefinedFunction *WasmSym::applyRelocs;
+DefinedFunction *WasmSym::initTLS;
 DefinedData *WasmSym::dsoHandle;
 DefinedData *WasmSym::dataEnd;
 DefinedData *WasmSym::globalBase;
 DefinedData *WasmSym::heapBase;
+DefinedData *WasmSym::initMemoryFlag;
 GlobalSymbol *WasmSym::stackPointer;
+GlobalSymbol *WasmSym::tlsBase;
+GlobalSymbol *WasmSym::tlsSize;
+GlobalSymbol *WasmSym::tlsAlign;
 UndefinedGlobal *WasmSym::tableBase;
+DefinedData *WasmSym::definedTableBase;
 UndefinedGlobal *WasmSym::memoryBase;
+DefinedData *WasmSym::definedMemoryBase;
 
 WasmSymbolType Symbol::getWasmType() const {
   if (isa<FunctionSymbol>(this))
@@ -107,9 +150,11 @@ void Symbol::setOutputSymbolIndex(uint32_t index) {
 void Symbol::setGOTIndex(uint32_t index) {
   LLVM_DEBUG(dbgs() << "setGOTIndex " << name << " -> " << index << "\n");
   assert(gotIndex == INVALID_INDEX);
-  // Any symbol that is assigned a GOT entry must be exported othewise the
-  // dynamic linker won't be able create the entry that contains it.
-  forceExport = true;
+  if (config->isPic) {
+    // Any symbol that is assigned a GOT entry must be exported othewise the
+    // dynamic linker won't be able create the entry that contains it.
+    forceExport = true;
+  }
   gotIndex = index;
 }
 
@@ -145,6 +190,10 @@ bool Symbol::isExported() const {
     return true;
 
   return flags & WASM_SYMBOL_EXPORTED;
+}
+
+bool Symbol::isNoStrip() const {
+  return flags & WASM_SYMBOL_NO_STRIP;
 }
 
 uint32_t FunctionSymbol::getFunctionIndex() const {
@@ -200,8 +249,14 @@ DefinedFunction::DefinedFunction(StringRef name, uint32_t flags, InputFile *f,
 
 uint32_t DefinedData::getVirtualAddress() const {
   LLVM_DEBUG(dbgs() << "getVirtualAddress: " << getName() << "\n");
-  if (segment)
+  if (segment) {
+    // For thread local data, the symbol location is relative to the start of
+    // the .tdata section, since they are used as offsets from __tls_base.
+    // Hence, we do not add in segment->outputSeg->startVA.
+    if (segment->outputSeg->name == ".tdata")
+      return segment->outputSegmentOffset + offset;
     return segment->outputSeg->startVA + segment->outputSegmentOffset + offset;
+  }
   return offset;
 }
 
@@ -279,50 +334,12 @@ const OutputSectionSymbol *SectionSymbol::getOutputSectionSymbol() const {
 
 void LazySymbol::fetch() { cast<ArchiveFile>(file)->addMember(&archiveSymbol); }
 
-std::string lld::toString(const wasm::Symbol &sym) {
-  return lld::maybeDemangleSymbol(sym.getName());
-}
-
-std::string lld::maybeDemangleSymbol(StringRef name) {
-  if (config->demangle)
-    if (Optional<std::string> s = demangleItanium(name))
-      return *s;
-  return name;
-}
-
-std::string lld::toString(wasm::Symbol::Kind kind) {
-  switch (kind) {
-  case wasm::Symbol::DefinedFunctionKind:
-    return "DefinedFunction";
-  case wasm::Symbol::DefinedDataKind:
-    return "DefinedData";
-  case wasm::Symbol::DefinedGlobalKind:
-    return "DefinedGlobal";
-  case wasm::Symbol::DefinedEventKind:
-    return "DefinedEvent";
-  case wasm::Symbol::UndefinedFunctionKind:
-    return "UndefinedFunction";
-  case wasm::Symbol::UndefinedDataKind:
-    return "UndefinedData";
-  case wasm::Symbol::UndefinedGlobalKind:
-    return "UndefinedGlobal";
-  case wasm::Symbol::LazyKind:
-    return "LazyKind";
-  case wasm::Symbol::SectionKind:
-    return "SectionKind";
-  case wasm::Symbol::OutputSectionKind:
-    return "OutputSectionKind";
-  }
-  llvm_unreachable("invalid symbol kind");
-}
-
-
-void lld::wasm::printTraceSymbolUndefined(StringRef name, const InputFile* file) {
+void printTraceSymbolUndefined(StringRef name, const InputFile* file) {
   message(toString(file) + ": reference to " + name);
 }
 
 // Print out a log message for --trace-symbol.
-void lld::wasm::printTraceSymbol(Symbol *sym) {
+void printTraceSymbol(Symbol *sym) {
   // Undefined symbols are traced via printTraceSymbolUndefined
   if (sym->isUndefined())
     return;
@@ -336,5 +353,8 @@ void lld::wasm::printTraceSymbol(Symbol *sym) {
   message(toString(sym->getFile()) + s + sym->getName());
 }
 
-const char *lld::wasm::defaultModule = "env";
-const char *lld::wasm::functionTableName = "__indirect_function_table";
+const char *defaultModule = "env";
+const char *functionTableName = "__indirect_function_table";
+
+} // namespace wasm
+} // namespace lld

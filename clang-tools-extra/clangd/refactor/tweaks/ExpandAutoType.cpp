@@ -1,4 +1,4 @@
-//===--- ReplaceAutoType.cpp -------------------------------------*- C++-*-===//
+//===--- ExpandAutoType.cpp --------------------------------------*- C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -24,6 +24,7 @@
 
 namespace clang {
 namespace clangd {
+namespace {
 
 /// Expand the "auto" type to the derived type
 /// Before:
@@ -53,14 +54,16 @@ private:
 
 REGISTER_TWEAK(ExpandAutoType)
 
-std::string ExpandAutoType::title() const { return "expand auto type"; }
+std::string ExpandAutoType::title() const { return "Expand auto type"; }
 
 bool ExpandAutoType::prepare(const Selection& Inputs) {
   CachedLocation = llvm::None;
   if (auto *Node = Inputs.ASTSelection.commonAncestor()) {
     if (auto *TypeNode = Node->ASTNode.get<TypeLoc>()) {
       if (const AutoTypeLoc Result = TypeNode->getAs<AutoTypeLoc>()) {
-        CachedLocation = Result;
+        // Code in apply() does handle 'decltype(auto)' yet.
+        if (!Result.getTypePtr()->isDecltypeAuto())
+          CachedLocation = Result;
       }
     }
   }
@@ -71,15 +74,14 @@ Expected<Tweak::Effect> ExpandAutoType::apply(const Selection& Inputs) {
   auto& SrcMgr = Inputs.AST.getASTContext().getSourceManager();
 
   llvm::Optional<clang::QualType> DeducedType =
-      getDeducedType(Inputs.AST, CachedLocation->getBeginLoc());
+      getDeducedType(Inputs.AST.getASTContext(), CachedLocation->getBeginLoc());
 
   // if we can't resolve the type, return an error message
-  if (DeducedType == llvm::None || DeducedType->isNull()) {
+  if (DeducedType == llvm::None)
     return createErrorMessage("Could not deduce type for 'auto' type", Inputs);
-  }
 
   // if it's a lambda expression, return an error message
-  if (isa<RecordType>(*DeducedType) and
+  if (isa<RecordType>(*DeducedType) &&
       dyn_cast<RecordType>(*DeducedType)->getDecl()->isLambda()) {
     return createErrorMessage("Could not expand type of lambda expression",
                               Inputs);
@@ -100,7 +102,7 @@ Expected<Tweak::Effect> ExpandAutoType::apply(const Selection& Inputs) {
       Expansion(SrcMgr, CharSourceRange(CachedLocation->getSourceRange(), true),
                 PrettyTypeName);
 
-  return Tweak::Effect::applyEdit(tooling::Replacements(Expansion));
+  return Effect::mainFileEdit(SrcMgr, tooling::Replacements(Expansion));
 }
 
 llvm::Error ExpandAutoType::createErrorMessage(const std::string& Message,
@@ -115,5 +117,6 @@ llvm::Error ExpandAutoType::createErrorMessage(const std::string& Message,
                                  ErrorMessage.c_str());
 }
 
+} // namespace
 } // namespace clangd
 } // namespace clang
