@@ -180,6 +180,10 @@ SmallVector<Instruction *, 8> findDefsUsedOutsideOfLoop(Loop *L);
 Optional<const MDOperand *> findStringMetadataForLoop(const Loop *TheLoop,
                                                       StringRef Name);
 
+ Optional<bool> getOptionalBoolLoopAttribute(const Loop *TheLoop, StringRef Name) ;
+
+ bool getBooleanLoopAttribute(const Loop *TheLoop, StringRef Name) ;
+
 /// Find named metadata for a loop with an integer value.
 llvm::Optional<int> getOptionalIntLoopAttribute(Loop *TheLoop, StringRef Name);
 

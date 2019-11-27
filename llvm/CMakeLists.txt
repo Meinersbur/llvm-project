@@ -2,6 +2,8 @@
 
 cmake_minimum_required(VERSION 3.4.3)
 
+message("CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
+
 if(POLICY CMP0068)
   cmake_policy(SET CMP0068 NEW)
   set(CMAKE_BUILD_WITH_INSTALL_NAME_DIR ON)
@@ -1094,3 +1096,5 @@ if (LLVM_INCLUDE_BENCHMARKS)
   add_subdirectory(utils/benchmark)
   add_subdirectory(benchmarks)
 endif()
+
+message("CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")

@@ -29,6 +29,7 @@ subdirectories =
  Linker
  IR
  IRReader
+ LOF
  LTO
  MC
  MCA

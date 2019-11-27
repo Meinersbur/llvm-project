@@ -22,18 +22,20 @@ config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
 # suffixes: A list of file extensions to treat as test files. This is overriden
 # by individual lit.local.cfg files in the test subdirectories.
-config.suffixes = ['.ll', '.c', '.cxx', '.test', '.txt', '.s', '.mir']
+config.suffixes = ['.ll', '.c', '.cpp', '.cxx', '.test', '.txt', '.s', '.mir']
 
 # excludes: A list of directories to exclude from the testsuite. The 'Inputs'
 # subdirectories contain auxiliary inputs for various tests in their parent
 # directories.
-config.excludes = ['Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt']
+#'config.excludes = ['Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt']
+config.excludes = ['Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt', 'Analysis', 'Assembler', 'Bindings', 'Bitcode', 'BugPoint', 'CodeGen', 'DebugInfo', 'Demangle', 'Examples', 'ExecutionEngine', 'Feature', 'FileCheck', 'Instrumentation', 'Integer', 'JitListener', 'Linker', 'LTO', 'MachineVerifier', 'MC', 'Object', 'ObjectYAML', 'Other', 'SafepointIRVerifier', 'Support', 'SymbolRewriter', 'TableGen', 'ThinLTO', 'tools', 'Transforms', 'Unit', 'YAMLParser', 'Verifier']
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)
 
 # test_exec_root: The root path where tests should be run.
 config.test_exec_root = os.path.join(config.llvm_obj_root, 'test')
+#config.test_exec_root = os.path.join(config.llvm_obj_root, 'test', 'compiled')
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
@@ -149,7 +151,8 @@ tools.extend([
     'llvm-readobj', 'llvm-rtdyld', 'llvm-size', 'llvm-split', 'llvm-strings',
     'llvm-strip', 'llvm-tblgen', 'llvm-undname', 'llvm-c-test', 'llvm-cxxfilt',
     'llvm-xray', 'yaml2obj', 'obj2yaml', 'yaml-bench', 'verify-uselistorder',
-    'bugpoint', 'llc', 'llvm-symbolizer', 'opt', 'sancov', 'sanstats'])
+    'bugpoint', 'llc', 'llvm-symbolizer', 'opt', 'sancov', 'sanstats',
+    'regression'])
 
 # The following tools are optional
 tools.extend([

@@ -28,7 +28,7 @@ set(LLVM_LINK_COMPONENTS
 # Support plugins.
 set(LLVM_NO_DEAD_STRIP 1)
 
-add_llvm_tool(opt
+add_llvm_library(regression
   AnalysisWrappers.cpp
   BreakpointPrinter.cpp
   Debugify.cpp
@@ -36,13 +36,13 @@ add_llvm_tool(opt
   NewPMDriver.cpp
   PassPrinters.cpp
   PrintSCC.cpp
-  opt.cpp
+  regression.cpp
 
   DEPENDS
   intrinsics_gen
   )
-export_executable_symbols(opt)
+#export_executable_symbols(regression)
 
 if(WITH_POLLY AND LINK_POLLY_INTO_TOOLS)
-  target_link_libraries(opt PRIVATE Polly)
+  target_link_libraries(regression PUBLIC Polly)
 endif(WITH_POLLY AND LINK_POLLY_INTO_TOOLS)

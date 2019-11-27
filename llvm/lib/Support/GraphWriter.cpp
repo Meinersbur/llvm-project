@@ -101,7 +101,12 @@ static bool ExecGraphViewer(StringRef ExecPath, std::vector<StringRef> &args,
     sys::fs::remove(Filename);
     errs() << " done. \n";
   } else {
-    sys::ExecuteNoWait(ExecPath, args, None, {}, 0, &ErrMsg);
+	  bool ExecutionFailed = false;
+	 sys::ExecuteNoWait(ExecPath, args, None, {}, 0, &ErrMsg, &ExecutionFailed);
+	 if (ExecutionFailed) {
+		errs() << "Error: " << ErrMsg << "\n";
+		return true;
+	}
     errs() << "Remember to erase graph file: " << Filename << "\n";
   }
   return false;
@@ -214,7 +219,7 @@ bool llvm::DisplayGraph(StringRef FilenameRef, bool wait,
   if (!Viewer && S.TryFindProgram("xdg-open", ViewerPath))
     Viewer = VK_XDGOpen;
 #ifdef _WIN32
-  if (!Viewer && S.TryFindProgram("cmd", ViewerPath)) {
+  if (!Viewer && S.TryFindProgram("cmd.exe", ViewerPath)) {
     Viewer = VK_CmdStart;
   }
 #endif
