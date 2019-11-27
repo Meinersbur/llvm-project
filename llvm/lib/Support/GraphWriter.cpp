@@ -101,12 +101,12 @@ static bool ExecGraphViewer(StringRef ExecPath, std::vector<StringRef> &args,
     sys::fs::remove(Filename);
     errs() << " done. \n";
   } else {
-	  bool ExecutionFailed = false;
-	 sys::ExecuteNoWait(ExecPath, args, None, {}, 0, &ErrMsg, &ExecutionFailed);
-	 if (ExecutionFailed) {
-		errs() << "Error: " << ErrMsg << "\n";
-		return true;
-	}
+    bool ExecutionFailed = false;
+    sys::ExecuteNoWait(ExecPath, args, None, {}, 0, &ErrMsg, &ExecutionFailed);
+    if (ExecutionFailed) {
+      errs() << "Error: " << ErrMsg << "\n";
+      return true;
+    }
     errs() << "Remember to erase graph file: " << Filename << "\n";
   }
   return false;

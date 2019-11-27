@@ -5,8 +5,7 @@
 
 namespace llvm {
 
-
-	void initializeLoopOptimizationFrameworkPass(PassRegistry &);
+void initializeLoopOptimizationFrameworkPass(PassRegistry &);
 
 }
 

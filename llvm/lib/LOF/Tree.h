@@ -4,8 +4,6 @@
 #include "GreenTree.h"
 #include "RedTree.h"
 
-namespace llvm {
-}
-
+namespace llvm {}
 
 #endif /* LLVM_LOF_TREE_H */
