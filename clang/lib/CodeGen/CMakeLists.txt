@@ -74,6 +74,7 @@ add_clang_library(clangCodeGen
   CGRecordLayoutBuilder.cpp
   CGStmt.cpp
   CGStmtOpenMP.cpp
+  CGTransform.cpp
   CGVTT.cpp
   CGVTables.cpp
   CodeGenABITypes.cpp

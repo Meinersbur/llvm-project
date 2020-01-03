@@ -320,6 +320,32 @@ void TextNodeDumper::Visit(const OMPClause *C) {
     OS << " <implicit>";
 }
 
+void TextNodeDumper::VisitTransformExecutableDirective(
+    const TransformExecutableDirective *S) {
+#if 0
+  if (S)
+    AddChild([=] { 
+      for (TransformClause *C : S->clauses())
+  Visit( C);
+      });
+#endif
+}
+
+void TextNodeDumper::Visit(const TransformClause *C) {
+  if (!C) {
+    ColorScope Color(OS, ShowColors, NullColor);
+    OS << "<<<NULL>>> TransformClause";
+    return;
+  }
+  {
+    ColorScope Color(OS, ShowColors, AttrColor);
+    StringRef ClauseName = TransformClause::getClauseName(C->getKind());
+    OS << ClauseName << "Clause";
+  }
+  dumpPointer(C);
+  dumpSourceRange(C->getRange());
+}
+
 void TextNodeDumper::Visit(const GenericSelectionExpr::ConstAssociation &A) {
   const TypeSourceInfo *TSI = A.getTypeSourceInfo();
   if (TSI) {

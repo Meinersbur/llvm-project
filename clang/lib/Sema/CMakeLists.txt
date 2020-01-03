@@ -63,6 +63,7 @@ add_clang_library(clangSema
   SemaTemplateInstantiate.cpp
   SemaTemplateInstantiateDecl.cpp
   SemaTemplateVariadic.cpp
+  SemaTransform.cpp
   SemaType.cpp
   TypeLocBuilder.cpp
 

@@ -1971,6 +1971,22 @@ void ASTStmtWriter::VisitSEHLeaveStmt(SEHLeaveStmt *S) {
   Record.AddSourceLocation(S->getLeaveLoc());
   Code = serialization::STMT_SEH_LEAVE;
 }
+//===----------------------------------------------------------------------===//
+// Transformation Directives.
+//===----------------------------------------------------------------------===//
+
+void ASTStmtWriter::VisitTransformExecutableDirective(
+    TransformExecutableDirective *D) {
+  Code = serialization::STMT_TRANSFORM_EXECUTABLE_DIRECTIVE;
+  VisitStmt(D);
+  Record.push_back(D->getNumClauses());
+
+  Record.AddSourceRange(D->getRange());
+  for (auto C : D->clauses())
+    Record.writeTransformClause(C);
+
+  Record.AddStmt(D->getAssociated());
+}
 
 //===----------------------------------------------------------------------===//
 // OpenMP Directives.

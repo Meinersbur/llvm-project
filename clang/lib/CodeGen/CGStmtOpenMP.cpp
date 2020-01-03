@@ -486,6 +486,7 @@ static llvm::Function *emitOutlinedFunctionPrologue(
   // Generate the function.
   CGF.StartFunction(CD, Ctx.VoidTy, F, FuncInfo, TargetArgs,
                     FO.S->getBeginLoc(), CD->getBody()->getBeginLoc());
+  CGF.HandleCodeTransformations(CD->getBody());
   unsigned Cnt = CD->getContextParamPosition();
   I = FO.S->captures().begin();
   for (const FieldDecl *FD : RD->fields()) {
@@ -602,7 +603,7 @@ CodeGenFunction::GenerateOpenMPCapturedStmtFunction(const CapturedStmt &S) {
   FunctionOptions WrapperFO(&S, /*UIntPtrCastRequired=*/true,
                             /*RegisterCastedArgsOnly=*/true,
                             CapturedStmtInfo->getHelperName());
-  CodeGenFunction WrapperCGF(CGM, /*suppressNewContext=*/true);
+  CodeGenFunction WrapperCGF(CGM, /*suppressNewContext=*/true, ParentFn);
   WrapperCGF.CapturedStmtInfo = CapturedStmtInfo;
   Args.clear();
   LocalAddrs.clear();
@@ -1296,7 +1297,8 @@ static void emitCommonOMPParallelDirective(
   const CapturedStmt *CS = S.getCapturedStmt(OMPD_parallel);
   llvm::Function *OutlinedFn =
       CGF.CGM.getOpenMPRuntime().emitParallelOutlinedFunction(
-          S, *CS->getCapturedDecl()->param_begin(), InnermostKind, CodeGen);
+          S, *CS->getCapturedDecl()->param_begin(), InnermostKind, CodeGen,
+          CGF.getParentFn());
   if (const auto *NumThreadsClause = S.getSingleClause<OMPNumThreadsClause>()) {
     CodeGenFunction::RunCleanupsScope NumThreadsScope(CGF);
     llvm::Value *NumThreads =
@@ -1533,7 +1535,7 @@ void CodeGenFunction::EmitOMPInnerLoop(
   EmitBlock(CondBlock);
   const SourceRange R = S.getSourceRange();
   LoopStack.push(CondBlock, SourceLocToDebugLoc(R.getBegin()),
-                 SourceLocToDebugLoc(R.getEnd()));
+                 SourceLocToDebugLoc(R.getEnd()), &S);
 
   // If there are any cleanups between here and the loop-exit scope,
   // create a block to stage a loop exit along.
@@ -2055,7 +2057,7 @@ void CodeGenFunction::EmitOMPOuterLoop(
   EmitBlock(CondBlock);
   const SourceRange R = S.getSourceRange();
   LoopStack.push(CondBlock, SourceLocToDebugLoc(R.getBegin()),
-                 SourceLocToDebugLoc(R.getEnd()));
+                 SourceLocToDebugLoc(R.getEnd()), &S);
 
   llvm::Value *BoolCondVal = nullptr;
   if (!DynamicOrOrdered) {
@@ -2457,7 +2459,8 @@ void CodeGenFunction::EmitOMPDistributeSimdDirective(
 }
 
 void CodeGenFunction::EmitOMPTargetSimdDeviceFunction(
-    CodeGenModule &CGM, StringRef ParentName, const OMPTargetSimdDirective &S) {
+    CodeGenModule &CGM, StringRef ParentName, const OMPTargetSimdDirective &S,
+    const FunctionDecl *ParentFn) {
   // Emit SPMD target parallel for region as a standalone region.
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
     emitOMPSimdRegion(CGF, S, Action);
@@ -2466,7 +2469,7 @@ void CodeGenFunction::EmitOMPTargetSimdDeviceFunction(
   llvm::Constant *Addr;
   // Emit target region as a standalone region.
   CGM.getOpenMPRuntime().emitTargetOutlinedFunction(
-      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen);
+      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen, ParentFn);
   assert(Fn && Addr && "Target device function emission failed.");
 }
 
@@ -3351,7 +3354,7 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
   };
   llvm::Function *OutlinedFn = CGM.getOpenMPRuntime().emitTaskOutlinedFunction(
       S, *I, *PartId, *TaskT, S.getDirectiveKind(), CodeGen, Data.Tied,
-      Data.NumberOfParts);
+      Data.NumberOfParts, ParentFn);
   OMPLexicalScope Scope(*this, S, llvm::None,
                         !isOpenMPParallelDirective(S.getDirectiveKind()) &&
                             !isOpenMPSimdDirective(S.getDirectiveKind()));
@@ -3495,7 +3498,7 @@ void CodeGenFunction::EmitOMPTargetTaskBasedDirective(
   };
   llvm::Function *OutlinedFn = CGM.getOpenMPRuntime().emitTaskOutlinedFunction(
       S, *I, *PartId, *TaskT, S.getDirectiveKind(), CodeGen, /*Tied=*/true,
-      Data.NumberOfParts);
+      Data.NumberOfParts, ParentFn);
   llvm::APInt TrueOrFalse(32, S.hasClausesOfKind<OMPNowaitClause>() ? 1 : 0);
   IntegerLiteral IfCond(getContext(), TrueOrFalse,
                         getContext().getIntTypeForBitwidth(32, /*Signed=*/0),
@@ -3837,9 +3840,10 @@ void CodeGenFunction::EmitOMPDistributeDirective(
   CGM.getOpenMPRuntime().emitInlinedDirective(*this, OMPD_distribute, CodeGen);
 }
 
-static llvm::Function *emitOutlinedOrderedFunction(CodeGenModule &CGM,
-                                                   const CapturedStmt *S) {
-  CodeGenFunction CGF(CGM, /*suppressNewContext=*/true);
+static llvm::Function *
+emitOutlinedOrderedFunction(CodeGenModule &CGM, const CapturedStmt *S,
+                            const FunctionDecl *ParentFn) {
+  CodeGenFunction CGF(CGM, /*suppressNewContext=*/true, ParentFn);
   CodeGenFunction::CGCapturedStmtInfo CapStmtInfo;
   CGF.CapturedStmtInfo = &CapStmtInfo;
   llvm::Function *Fn = CGF.GenerateOpenMPCapturedStmtFunction(*S);
@@ -3862,7 +3866,8 @@ void CodeGenFunction::EmitOMPOrderedDirective(const OMPOrderedDirective &S) {
     if (C) {
       llvm::SmallVector<llvm::Value *, 16> CapturedVars;
       CGF.GenerateOpenMPCapturedVars(*CS, CapturedVars);
-      llvm::Function *OutlinedFn = emitOutlinedOrderedFunction(CGM, CS);
+      llvm::Function *OutlinedFn =
+          emitOutlinedOrderedFunction(CGM, CS, ParentFn);
       CGM.getOpenMPRuntime().emitOutlinedFunctionCall(CGF, S.getBeginLoc(),
                                                       OutlinedFn, CapturedVars);
     } else {
@@ -4408,8 +4413,8 @@ static void emitCommonOMPTargetDirective(CodeGenFunction &CGF,
         CGM.getMangledName(GlobalDecl(cast<FunctionDecl>(CGF.CurFuncDecl)));
 
   // Emit target region as a standalone region.
-  CGM.getOpenMPRuntime().emitTargetOutlinedFunction(S, ParentName, Fn, FnID,
-                                                    IsOffloadEntry, CodeGen);
+  CGM.getOpenMPRuntime().emitTargetOutlinedFunction(
+      S, ParentName, Fn, FnID, IsOffloadEntry, CodeGen, CGF.getParentFn());
   OMPLexicalScope Scope(CGF, S, OMPD_task);
   auto &&SizeEmitter =
       [IsOffloadEntry](CodeGenFunction &CGF,
@@ -4441,9 +4446,9 @@ static void emitTargetRegion(CodeGenFunction &CGF, const OMPTargetDirective &S,
   CGF.EmitStmt(S.getCapturedStmt(OMPD_target)->getCapturedStmt());
 }
 
-void CodeGenFunction::EmitOMPTargetDeviceFunction(CodeGenModule &CGM,
-                                                  StringRef ParentName,
-                                                  const OMPTargetDirective &S) {
+void CodeGenFunction::EmitOMPTargetDeviceFunction(
+    CodeGenModule &CGM, StringRef ParentName, const OMPTargetDirective &S,
+    const FunctionDecl *ParentFn) {
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
     emitTargetRegion(CGF, S, Action);
   };
@@ -4451,7 +4456,7 @@ void CodeGenFunction::EmitOMPTargetDeviceFunction(CodeGenModule &CGM,
   llvm::Constant *Addr;
   // Emit target region as a standalone region.
   CGM.getOpenMPRuntime().emitTargetOutlinedFunction(
-      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen);
+      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen, ParentFn);
   assert(Fn && Addr && "Target device function emission failed.");
 }
 
@@ -4469,7 +4474,8 @@ static void emitCommonOMPTeamsDirective(CodeGenFunction &CGF,
   const CapturedStmt *CS = S.getCapturedStmt(OMPD_teams);
   llvm::Function *OutlinedFn =
       CGF.CGM.getOpenMPRuntime().emitTeamsOutlinedFunction(
-          S, *CS->getCapturedDecl()->param_begin(), InnermostKind, CodeGen);
+          S, *CS->getCapturedDecl()->param_begin(), InnermostKind, CodeGen,
+          CGF.getParentFn());
 
   const auto *NT = S.getSingleClause<OMPNumTeamsClause>();
   const auto *TL = S.getSingleClause<OMPThreadLimitClause>();
@@ -4528,8 +4534,8 @@ static void emitTargetTeamsRegion(CodeGenFunction &CGF, PrePostActionTy &Action,
 }
 
 void CodeGenFunction::EmitOMPTargetTeamsDeviceFunction(
-    CodeGenModule &CGM, StringRef ParentName,
-    const OMPTargetTeamsDirective &S) {
+    CodeGenModule &CGM, StringRef ParentName, const OMPTargetTeamsDirective &S,
+    const FunctionDecl *ParentFn) {
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
     emitTargetTeamsRegion(CGF, Action, S);
   };
@@ -4537,7 +4543,7 @@ void CodeGenFunction::EmitOMPTargetTeamsDeviceFunction(
   llvm::Constant *Addr;
   // Emit target region as a standalone region.
   CGM.getOpenMPRuntime().emitTargetOutlinedFunction(
-      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen);
+      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen, ParentFn);
   assert(Fn && Addr && "Target device function emission failed.");
 }
 
@@ -4575,7 +4581,7 @@ emitTargetTeamsDistributeRegion(CodeGenFunction &CGF, PrePostActionTy &Action,
 
 void CodeGenFunction::EmitOMPTargetTeamsDistributeDeviceFunction(
     CodeGenModule &CGM, StringRef ParentName,
-    const OMPTargetTeamsDistributeDirective &S) {
+    const OMPTargetTeamsDistributeDirective &S, const FunctionDecl *ParentFn) {
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
     emitTargetTeamsDistributeRegion(CGF, Action, S);
   };
@@ -4583,7 +4589,7 @@ void CodeGenFunction::EmitOMPTargetTeamsDistributeDeviceFunction(
   llvm::Constant *Addr;
   // Emit target region as a standalone region.
   CGM.getOpenMPRuntime().emitTargetOutlinedFunction(
-      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen);
+      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen, ParentFn);
   assert(Fn && Addr && "Target device function emission failed.");
 }
 
@@ -4621,7 +4627,8 @@ static void emitTargetTeamsDistributeSimdRegion(
 
 void CodeGenFunction::EmitOMPTargetTeamsDistributeSimdDeviceFunction(
     CodeGenModule &CGM, StringRef ParentName,
-    const OMPTargetTeamsDistributeSimdDirective &S) {
+    const OMPTargetTeamsDistributeSimdDirective &S,
+    const FunctionDecl *ParentFn) {
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
     emitTargetTeamsDistributeSimdRegion(CGF, Action, S);
   };
@@ -4629,7 +4636,7 @@ void CodeGenFunction::EmitOMPTargetTeamsDistributeSimdDeviceFunction(
   llvm::Constant *Addr;
   // Emit target region as a standalone region.
   CGM.getOpenMPRuntime().emitTargetOutlinedFunction(
-      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen);
+      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen, ParentFn);
   assert(Fn && Addr && "Target device function emission failed.");
 }
 
@@ -4762,7 +4769,8 @@ static void emitTargetTeamsDistributeParallelForRegion(
 
 void CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDeviceFunction(
     CodeGenModule &CGM, StringRef ParentName,
-    const OMPTargetTeamsDistributeParallelForDirective &S) {
+    const OMPTargetTeamsDistributeParallelForDirective &S,
+    const FunctionDecl *ParentFn) {
   // Emit SPMD target teams distribute parallel for region as a standalone
   // region.
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
@@ -4772,7 +4780,7 @@ void CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDeviceFunction(
   llvm::Constant *Addr;
   // Emit target region as a standalone region.
   CGM.getOpenMPRuntime().emitTargetOutlinedFunction(
-      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen);
+      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen, ParentFn);
   assert(Fn && Addr && "Target device function emission failed.");
 }
 
@@ -4814,7 +4822,8 @@ static void emitTargetTeamsDistributeParallelForSimdRegion(
 
 void CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForSimdDeviceFunction(
     CodeGenModule &CGM, StringRef ParentName,
-    const OMPTargetTeamsDistributeParallelForSimdDirective &S) {
+    const OMPTargetTeamsDistributeParallelForSimdDirective &S,
+    const FunctionDecl *ParentFn) {
   // Emit SPMD target teams distribute parallel for simd region as a standalone
   // region.
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
@@ -4824,7 +4833,7 @@ void CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForSimdDeviceFunction(
   llvm::Constant *Addr;
   // Emit target region as a standalone region.
   CGM.getOpenMPRuntime().emitTargetOutlinedFunction(
-      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen);
+      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen, ParentFn);
   assert(Fn && Addr && "Target device function emission failed.");
 }
 
@@ -5105,7 +5114,7 @@ static void emitTargetParallelRegion(CodeGenFunction &CGF,
 
 void CodeGenFunction::EmitOMPTargetParallelDeviceFunction(
     CodeGenModule &CGM, StringRef ParentName,
-    const OMPTargetParallelDirective &S) {
+    const OMPTargetParallelDirective &S, const FunctionDecl *ParentFn) {
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
     emitTargetParallelRegion(CGF, S, Action);
   };
@@ -5113,7 +5122,7 @@ void CodeGenFunction::EmitOMPTargetParallelDeviceFunction(
   llvm::Constant *Addr;
   // Emit target region as a standalone region.
   CGM.getOpenMPRuntime().emitTargetOutlinedFunction(
-      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen);
+      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen, ParentFn);
   assert(Fn && Addr && "Target device function emission failed.");
 }
 
@@ -5144,7 +5153,7 @@ static void emitTargetParallelForRegion(CodeGenFunction &CGF,
 
 void CodeGenFunction::EmitOMPTargetParallelForDeviceFunction(
     CodeGenModule &CGM, StringRef ParentName,
-    const OMPTargetParallelForDirective &S) {
+    const OMPTargetParallelForDirective &S, const FunctionDecl *ParentFn) {
   // Emit SPMD target parallel for region as a standalone region.
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
     emitTargetParallelForRegion(CGF, S, Action);
@@ -5153,7 +5162,7 @@ void CodeGenFunction::EmitOMPTargetParallelForDeviceFunction(
   llvm::Constant *Addr;
   // Emit target region as a standalone region.
   CGM.getOpenMPRuntime().emitTargetOutlinedFunction(
-      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen);
+      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen, ParentFn);
   assert(Fn && Addr && "Target device function emission failed.");
 }
 
@@ -5183,7 +5192,7 @@ emitTargetParallelForSimdRegion(CodeGenFunction &CGF,
 
 void CodeGenFunction::EmitOMPTargetParallelForSimdDeviceFunction(
     CodeGenModule &CGM, StringRef ParentName,
-    const OMPTargetParallelForSimdDirective &S) {
+    const OMPTargetParallelForSimdDirective &S, const FunctionDecl *ParentFn) {
   // Emit SPMD target parallel for region as a standalone region.
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
     emitTargetParallelForSimdRegion(CGF, S, Action);
@@ -5192,7 +5201,7 @@ void CodeGenFunction::EmitOMPTargetParallelForSimdDeviceFunction(
   llvm::Constant *Addr;
   // Emit target region as a standalone region.
   CGM.getOpenMPRuntime().emitTargetOutlinedFunction(
-      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen);
+      S, ParentName, Fn, Addr, /*IsOffloadEntry=*/true, CodeGen, ParentFn);
   assert(Fn && Addr && "Target device function emission failed.");
 }
 

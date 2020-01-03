@@ -7,8 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "CGLoopInfo.h"
+#include "CGTransform.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
+#include "clang/Basic/LangOptions.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Constants.h"
@@ -455,14 +457,21 @@ void LoopAttributes::clear() {
 
 LoopInfo::LoopInfo(BasicBlock *Header, const LoopAttributes &Attrs,
                    const llvm::DebugLoc &StartLoc, const llvm::DebugLoc &EndLoc,
-                   LoopInfo *Parent)
+                   LoopInfo *Parent, CGTransformedTree *TN)
     : Header(Header), Attrs(Attrs), StartLoc(StartLoc), EndLoc(EndLoc),
       Parent(Parent) {
+
+  if (TN) {
+    assert(TN->isCodeGenned() && "Emitted loop must be marked as code-genned");
+    LoopMD = TN->makeLoopID(Header->getContext(), false);
+    AccGroup = TN->getAccessGroupOrNull();
+  }
 
   if (Attrs.IsParallel) {
     // Create an access group for this loop.
     LLVMContext &Ctx = Header->getContext();
-    AccGroup = MDNode::getDistinct(Ctx, {});
+    if (!AccGroup)
+      AccGroup = MDNode::getDistinct(Ctx, {});
   }
 
   if (!Attrs.IsParallel && Attrs.VectorizeWidth == 0 &&
@@ -477,7 +486,16 @@ LoopInfo::LoopInfo(BasicBlock *Header, const LoopAttributes &Attrs,
       !EndLoc)
     return;
 
+  assert(!LoopMD &&
+         "#pragma clang transform is incompatible with loop attributes");
   TempLoopID = MDNode::getTemporary(Header->getContext(), None);
+}
+
+LoopInfoStack::~LoopInfoStack() {
+  for (auto N : AllNodes)
+    delete N;
+  for (auto T : AllTransforms)
+    delete T;
 }
 
 void LoopInfo::finish() {
@@ -563,10 +581,13 @@ void LoopInfo::finish() {
 }
 
 void LoopInfoStack::push(BasicBlock *Header, const llvm::DebugLoc &StartLoc,
-                         const llvm::DebugLoc &EndLoc) {
-  Active.emplace_back(
-      new LoopInfo(Header, StagedAttrs, StartLoc, EndLoc,
-                   Active.empty() ? nullptr : Active.back().get()));
+                         const llvm::DebugLoc &EndLoc,
+                         const clang::Stmt *LoopStmt) {
+
+  LoopInfo *Parent = Active.empty() ? nullptr : Active.back().get();
+  Active.emplace_back(new LoopInfo(Header, StagedAttrs, StartLoc, EndLoc,
+                                   Parent, lookupTransformedNode(LoopStmt)));
+
   // Clear the attributes so nested loops do not inherit them.
   StagedAttrs.clear();
 }
@@ -574,11 +595,13 @@ void LoopInfoStack::push(BasicBlock *Header, const llvm::DebugLoc &StartLoc,
 void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
                          ArrayRef<const clang::Attr *> Attrs,
                          const llvm::DebugLoc &StartLoc,
-                         const llvm::DebugLoc &EndLoc) {
+                         const llvm::DebugLoc &EndLoc,
+                         const clang::Stmt *LoopStmt) {
 
   // Identify loop hint attributes from Attrs.
   for (const auto *Attr : Attrs) {
     const LoopHintAttr *LH = dyn_cast<LoopHintAttr>(Attr);
+
     const OpenCLUnrollHintAttr *OpenCLHint =
         dyn_cast<OpenCLUnrollHintAttr>(Attr);
 
@@ -753,13 +776,29 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
   }
 
   /// Stage the attributes.
-  push(Header, StartLoc, EndLoc);
+  push(Header, StartLoc, EndLoc, LoopStmt);
 }
 
 void LoopInfoStack::pop() {
   assert(!Active.empty() && "No active loops to pop");
   Active.back()->finish();
   Active.pop_back();
+}
+
+CGTransformedTree *LoopInfoStack::lookupTransformedNode(const clang::Stmt *S) {
+  const Stmt *Loop = getAssociatedLoop(S);
+  if (!Loop)
+    return nullptr;
+  return StmtToTree.lookup(Loop);
+}
+
+void LoopInfoStack::initBuild(clang::ASTContext &ASTCtx,
+                              const clang::LangOptions &LangOpts,
+                              llvm::LLVMContext &LLVMCtx, CGDebugInfo *DbgInfo,
+                              clang::Stmt *Body) {
+  CGTransformedTreeBuilder Builder(ASTCtx, LangOpts, LLVMCtx, AllNodes,
+                                   AllTransforms, DbgInfo);
+  Builder.computeTransformedStructure(Body, StmtToTree);
 }
 
 void LoopInfoStack::InsertHelper(Instruction *I) const {

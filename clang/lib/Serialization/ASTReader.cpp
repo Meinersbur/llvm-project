@@ -12475,3 +12475,60 @@ void OMPClauseReader::VisitOMPNontemporalClause(OMPNontemporalClause *C) {
     Vars.push_back(Record.readSubExpr());
   C->setPrivateRefs(Vars);
 }
+
+//===----------------------------------------------------------------------===//
+// TransformClauseReader implementation
+//===----------------------------------------------------------------------===//
+namespace {
+class TransformClauseReader {
+  ASTRecordReader &Record;
+  ASTContext &Context;
+
+public:
+  TransformClauseReader(ASTRecordReader &Record)
+      : Record(Record), Context(Record.getContext()) {}
+
+  TransformClause *readClause();
+
+#define TRANSFORM_CLAUSE(Keyword, Name)                                        \
+  Name##Clause *read##Name##Clause(SourceRange);
+#include "clang/AST/TransformClauseKinds.def"
+};
+}; // namespace
+
+TransformClause *ASTRecordReader::readTransformClause() {
+  return TransformClauseReader(*this).readClause();
+}
+
+TransformClause *TransformClauseReader::readClause() {
+  uint64_t Kind = Record.readInt();
+  SourceRange Range = Record.readSourceRange();
+
+  switch (Kind) {
+#define TRANSFORM_CLAUSE(Keyword, Name)                                        \
+  case TransformClause::Kind::Name##Kind:                                      \
+    return read##Name##Clause(Range);
+#include "clang/AST/TransformClauseKinds.def"
+  default:
+    llvm_unreachable("Unknown transform clause kind");
+  }
+}
+
+FullClause *TransformClauseReader::readFullClause(SourceRange Range) {
+  return FullClause::create(Context, Range);
+}
+
+PartialClause *TransformClauseReader::readPartialClause(SourceRange Range) {
+  Expr *Factor = Record.readExpr();
+  return PartialClause::create(Context, Range, Factor);
+}
+
+WidthClause *TransformClauseReader::readWidthClause(SourceRange Range) {
+  Expr *Width = Record.readExpr();
+  return WidthClause::create(Context, Range, Width);
+}
+
+FactorClause *TransformClauseReader::readFactorClause(SourceRange Range) {
+  Expr *Factor = Record.readExpr();
+  return FactorClause::create(Context, Range, Factor);
+}

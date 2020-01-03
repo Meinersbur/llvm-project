@@ -1883,6 +1883,7 @@ void CodeGenFunction::startOutlinedSEHHelper(CodeGenFunction &ParentCGF,
 
   StartFunction(GlobalDecl(), RetTy, Fn, FnInfo, Args,
                 OutlinedStmt->getBeginLoc(), OutlinedStmt->getBeginLoc());
+  LoopStack.initAsOutlined(ParentCGF.LoopStack);
   CurSEHParent = ParentCGF.CurSEHParent;
 
   CGM.SetLLVMFunctionAttributes(GlobalDecl(), FnInfo, CurFn);

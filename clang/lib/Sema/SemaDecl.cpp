@@ -14171,6 +14171,8 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
            "Leftover expressions for odr-use checking");
   }
 
+  HandleLoopTransformations(FD);
+
   if (!IsInstantiation)
     PopDeclContext();
 

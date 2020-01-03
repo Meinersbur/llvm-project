@@ -27,6 +27,7 @@
 #include "clang/AST/StmtCXX.h"
 #include "clang/AST/StmtObjC.h"
 #include "clang/AST/StmtOpenMP.h"
+#include "clang/AST/StmtTransform.h"
 #include "clang/Sema/Designator.h"
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/Ownership.h"
@@ -343,6 +344,51 @@ public:
   ///
   /// \returns the transformed statement.
   StmtResult TransformStmt(Stmt *S, StmtDiscardKind SDK = SDK_Discarded);
+
+  Transform *TransformTransform(Transform *T) { return T; }
+
+  TransformClause *TransformTransformClause(TransformClause *S);
+
+  TransformClause *TransformFullClause(FullClause *C) {
+    return RebuildFullClause(C->getRange());
+  }
+
+  TransformClause *RebuildFullClause(SourceRange Range) {
+    return getSema().ActOnFullClause(Range);
+  }
+
+  TransformClause *TransformPartialClause(PartialClause *C) {
+    ExprResult E = getDerived().TransformExpr(C->getFactor());
+    if (E.isInvalid())
+      return nullptr;
+    return getDerived().RebuildPartialClause(C->getRange(), E.get());
+  }
+
+  TransformClause *RebuildPartialClause(SourceRange Range, Expr *Factor) {
+    return getSema().ActOnPartialClause(Range, Factor);
+  }
+
+  TransformClause *TransformWidthClause(WidthClause *C) {
+    ExprResult E = getDerived().TransformExpr(C->getWidth());
+    if (E.isInvalid())
+      return nullptr;
+    return getDerived().RebuildWidthClause(C->getRange(), E.get());
+  }
+
+  TransformClause *RebuildWidthClause(SourceRange Range, Expr *Width) {
+    return getSema().ActOnWidthClause(Range, Width);
+  }
+
+  TransformClause *TransformFactorClause(FactorClause *C) {
+    ExprResult E = getDerived().TransformExpr(C->getFactor());
+    if (E.isInvalid())
+      return nullptr;
+    return getDerived().RebuildFactorClause(C->getRange(), E.get());
+  }
+
+  TransformClause *RebuildFactorClause(SourceRange Range, Expr *Factor) {
+    return getSema().ActOnFactorClause(Range, Factor);
+  }
 
   /// Transform the given statement.
   ///
@@ -1504,6 +1550,17 @@ public:
   StmtResult RebuildObjCAtThrowStmt(SourceLocation AtLoc,
                                           Expr *Operand) {
     return getSema().BuildObjCAtThrowStmt(AtLoc, Operand);
+  }
+
+  StmtResult
+  RebuildTransformExecutableDirective(Transform::Kind Kind,
+                                      llvm::ArrayRef<TransformClause *> Clauses,
+                                      Stmt *AStmt, SourceRange Loc) {
+    StmtResult Result =
+        getSema().ActOnLoopTransformDirective(Kind, Clauses, AStmt, Loc);
+    assert(!Result.isUsable() ||
+           isa<TransformExecutableDirective>(Result.get()));
+    return Result;
   }
 
   /// Build a new OpenMP executable directive.
@@ -7879,6 +7936,42 @@ template<typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformSEHLeaveStmt(SEHLeaveStmt *S) {
   return S;
+}
+
+template <typename Derived>
+TransformClause *
+TreeTransform<Derived>::TransformTransformClause(TransformClause *S) {
+  if (!S)
+    return S;
+
+  switch (S->getKind()) {
+#define TRANSFORM_CLAUSE(Keyword, Name)                                        \
+  case TransformClause::Kind::Name##Kind:                                      \
+    return getDerived().Transform##Name##Clause(cast<Name##Clause>(S));
+#include "clang/AST/TransformClauseKinds.def"
+  case TransformClause::Kind::UnknownKind:
+    llvm_unreachable("Should not be unknown");
+  }
+
+  return S;
+}
+
+template <typename Derived>
+StmtResult TreeTransform<Derived>::TransformTransformExecutableDirective(
+    TransformExecutableDirective *D) {
+  llvm::SmallVector<TransformClause *, 16> TClauses;
+  for (TransformClause *C : D->clauses()) {
+    TransformClause *TClause = getDerived().TransformTransformClause(C);
+    TClauses.push_back(TClause);
+  }
+
+  Stmt *AStmt = D->getAssociated();
+  StmtResult TBody = getDerived().TransformStmt(AStmt);
+  assert(TBody.isUsable());
+
+  StmtResult TDirective = getDerived().RebuildTransformExecutableDirective(
+      D->getTransformKind(), TClauses, TBody.get(), D->getRange());
+  return TDirective;
 }
 
 //===----------------------------------------------------------------------===//

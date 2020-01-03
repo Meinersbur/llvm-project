@@ -14,7 +14,9 @@
 #ifndef LLVM_CLANG_LIB_CODEGEN_CGLOOPINFO_H
 #define LLVM_CLANG_LIB_CODEGEN_CGLOOPINFO_H
 
+#include "clang/Basic/Transform.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Value.h"
@@ -24,12 +26,18 @@ namespace llvm {
 class BasicBlock;
 class Instruction;
 class MDNode;
+class LLVMContext;
 } // end namespace llvm
 
 namespace clang {
 class Attr;
 class ASTContext;
+class Stmt;
+class Transform;
+
 namespace CodeGen {
+class CGTransformedTree;
+class CGDebugInfo;
 
 /// Attributes that may be specified on loops.
 struct LoopAttributes {
@@ -82,10 +90,14 @@ public:
   /// Construct a new LoopInfo for the loop with entry Header.
   LoopInfo(llvm::BasicBlock *Header, const LoopAttributes &Attrs,
            const llvm::DebugLoc &StartLoc, const llvm::DebugLoc &EndLoc,
-           LoopInfo *Parent);
+           LoopInfo *Parent, CGTransformedTree *TN);
 
   /// Get the loop id metadata for this loop.
-  llvm::MDNode *getLoopID() const { return TempLoopID.get(); }
+  llvm::MDNode *getLoopID() const {
+    if (LoopMD)
+      return LoopMD;
+    return TempLoopID.get();
+  }
 
   /// Get the header block of this loop.
   llvm::BasicBlock *getHeader() const { return Header; }
@@ -100,9 +112,13 @@ public:
   /// been processed.
   void finish();
 
+  CGTransformedTree *Syntactical;
+
 private:
   /// Loop ID metadata.
   llvm::TempMDTuple TempLoopID;
+  llvm::MDNode *LoopMD = nullptr;
+
   /// Header block of this loop.
   llvm::BasicBlock *Header;
   /// The attributes for this loop.
@@ -193,17 +209,27 @@ class LoopInfoStack {
 
 public:
   LoopInfoStack() {}
+  ~LoopInfoStack();
+
+  CGTransformedTree *lookupTransformedNode(const Stmt *S);
+
+  void initAsOutlined(LoopInfoStack &ParentLIS) {
+    StmtToTree = ParentLIS.StmtToTree;
+  }
+
+  void initBuild(ASTContext &ASTCtx, const LangOptions &LangOpts,
+                 llvm::LLVMContext &LLVMCtx, CGDebugInfo *DbgInfo, Stmt *Body);
 
   /// Begin a new structured loop. The set of staged attributes will be
   /// applied to the loop and then cleared.
   void push(llvm::BasicBlock *Header, const llvm::DebugLoc &StartLoc,
-            const llvm::DebugLoc &EndLoc);
+            const llvm::DebugLoc &EndLoc, const Stmt *LoopStmt);
 
   /// Begin a new structured loop. Stage attributes from the Attrs list.
   /// The staged attributes are applied to the loop and then cleared.
   void push(llvm::BasicBlock *Header, clang::ASTContext &Ctx,
             llvm::ArrayRef<const Attr *> Attrs, const llvm::DebugLoc &StartLoc,
-            const llvm::DebugLoc &EndLoc);
+            const llvm::DebugLoc &EndLoc, const Stmt *LoopStmt);
 
   /// End the current loop.
   void pop();
@@ -280,6 +306,17 @@ private:
   LoopAttributes StagedAttrs;
   /// Stack of active loops.
   llvm::SmallVector<std::unique_ptr<LoopInfo>, 4> Active;
+
+  // CGTransformedTree *TransformedStructure = nullptr;
+
+  /// Dictionary to find the TransformedNode representation for any loop.
+  llvm::DenseMap<Stmt *, CGTransformedTree *> StmtToTree;
+
+  /// Objects to free later.
+  /// @{
+  llvm::SmallVector<CGTransformedTree *, 64> AllNodes;
+  llvm::SmallVector<Transform *, 64> AllTransforms;
+  /// @}
 };
 
 } // end namespace CodeGen

@@ -2018,6 +2018,29 @@ void ASTStmtReader::VisitAsTypeExpr(AsTypeExpr *E) {
 }
 
 //===----------------------------------------------------------------------===//
+// Transformation Directives.
+//===----------------------------------------------------------------------===//
+
+void ASTStmtReader::VisitTransformExecutableDirective(
+    TransformExecutableDirective *D) {
+  VisitStmt(D);
+  unsigned NumClauses = Record.readInt();
+  assert(D->getNumClauses() == NumClauses);
+  // The binary layout up to here is also assumed by
+  // ASTReader::ReadStmtFromStream and must be kept in-sync.
+
+  D->setRange(readSourceRange());
+
+  SmallVector<TransformClause *, 8> Clauses;
+  Clauses.reserve(NumClauses);
+  for (unsigned i = 0; i < NumClauses; ++i)
+    Clauses.push_back(Record.readTransformClause());
+  D->setClauses(Clauses);
+
+  D->setAssociated(Record.readSubStmt());
+}
+
+//===----------------------------------------------------------------------===//
 // OpenMP Directives.
 //===----------------------------------------------------------------------===//
 
@@ -3283,6 +3306,11 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
           Context, NumClauses, CollapsedNum, Empty);
       break;
     }
+
+    case STMT_TRANSFORM_EXECUTABLE_DIRECTIVE:
+      S = TransformExecutableDirective::createEmpty(
+          Context, Record[ASTStmtReader::NumStmtFields]);
+      break;
 
     case EXPR_CXX_OPERATOR_CALL:
       S = CXXOperatorCallExpr::CreateEmpty(

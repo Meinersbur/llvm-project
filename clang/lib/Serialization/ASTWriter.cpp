@@ -6550,3 +6550,52 @@ void OMPClauseWriter::VisitOMPNontemporalClause(OMPNontemporalClause *C) {
   for (auto *E : C->private_refs())
     Record.AddStmt(E);
 }
+
+//===----------------------------------------------------------------------===//
+// TransformClause Serialization
+//===----------------------------------------------------------------------===//
+namespace {
+class TransformClauseWriter
+    : public ConstTransformClauseVisitor<TransformClauseWriter> {
+  ASTRecordWriter &Record;
+
+public:
+  TransformClauseWriter(ASTRecordWriter &Record) : Record(Record) {}
+
+  void writeClause(const TransformClause *C);
+
+#define TRANSFORM_CLAUSE(Keyword, Name)                                        \
+  void Visit##Name##Clause(const Name##Clause *);
+#include "clang/AST/TransformClauseKinds.def"
+
+  void VisitTransformClause(const TransformClause *C) {
+    llvm_unreachable("Serialization of this clause not implemented");
+  }
+};
+} // namespace
+
+void ASTRecordWriter::writeTransformClause(TransformClause *C) {
+  TransformClauseWriter(*this).writeClause(C);
+}
+
+void TransformClauseWriter::writeClause(const TransformClause *C) {
+  Record.push_back(C->getKind());
+  Record.AddSourceRange(C->getRange());
+  Visit(C);
+}
+
+void TransformClauseWriter::VisitFullClause(const FullClause *C) {
+  // The full clause has no arguments.
+}
+
+void TransformClauseWriter::VisitPartialClause(const PartialClause *C) {
+  Record.AddStmt(C->getFactor());
+}
+
+void TransformClauseWriter::VisitWidthClause(const WidthClause *C) {
+  Record.AddStmt(C->getWidth());
+}
+
+void TransformClauseWriter::VisitFactorClause(const FactorClause *C) {
+  Record.AddStmt(C->getFactor());
+}
