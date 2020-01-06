@@ -642,7 +642,7 @@ function(llvm_add_library name)
 endfunction()
 
 function(add_llvm_install_targets target)
-  cmake_parse_arguments(ARG "" "COMPONENT;PREFIX" "DEPENDS" ${ARGN})
+  cmake_parse_arguments(ARG "" "COMPONENT;PREFIX;SYMLINK" "DEPENDS" ${ARGN})
   if(ARG_COMPONENT)
     set(component_option -DCMAKE_INSTALL_COMPONENT="${ARG_COMPONENT}")
   endif()
@@ -678,6 +678,11 @@ function(add_llvm_install_targets target)
   if(target_dependencies)
     add_dependencies(${target} ${target_dependencies})
     add_dependencies(${target}-stripped ${target_dependencies})
+  endif()
+
+  if(ARG_SYMLINK)
+    add_dependencies(${target} install-${ARG_SYMLINK})
+    add_dependencies(${target}-stripped install-${ARG_SYMLINK}-stripped)
   endif()
 endfunction()
 
@@ -1054,6 +1059,17 @@ macro(add_llvm_example name)
   endif()
   set_target_properties(${name} PROPERTIES FOLDER "Examples")
 endmacro(add_llvm_example name)
+
+macro(add_llvm_example_library name)
+  if( NOT LLVM_BUILD_EXAMPLES )
+    set(EXCLUDE_FROM_ALL ON)
+    add_llvm_library(${name} BUILDTREE_ONLY ${ARGN})
+  else()
+    add_llvm_library(${name} ${ARGN})
+  endif()
+
+  set_target_properties(${name} PROPERTIES FOLDER "Examples")
+endmacro(add_llvm_example_library name)
 
 # This is a macro that is used to create targets for executables that are needed
 # for development, but that are not intended to be installed by default.
@@ -1616,8 +1632,9 @@ function(llvm_install_library_symlink name dest type)
 
   if (NOT LLVM_ENABLE_IDE AND NOT ARG_ALWAYS_GENERATE)
     add_llvm_install_targets(install-${name}
-                             DEPENDS ${name} ${dest} install-${dest}
-                             COMPONENT ${name})
+                             DEPENDS ${name} ${dest}
+                             COMPONENT ${name}
+                             SYMLINK ${dest})
   endif()
 endfunction()
 
@@ -1649,8 +1666,9 @@ function(llvm_install_symlink name dest)
 
   if (NOT LLVM_ENABLE_IDE AND NOT ARG_ALWAYS_GENERATE)
     add_llvm_install_targets(install-${name}
-                             DEPENDS ${name} ${dest} install-${dest}
-                             COMPONENT ${name})
+                             DEPENDS ${name} ${dest}
+                             COMPONENT ${name}
+                             SYMLINK ${dest})
   endif()
 endfunction()
 

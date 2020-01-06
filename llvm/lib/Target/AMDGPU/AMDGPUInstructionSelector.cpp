@@ -13,6 +13,7 @@
 
 #include "AMDGPUInstructionSelector.h"
 #include "AMDGPUInstrInfo.h"
+#include "AMDGPUGlobalISelUtils.h"
 #include "AMDGPURegisterBankInfo.h"
 #include "AMDGPURegisterInfo.h"
 #include "AMDGPUSubtarget.h"
@@ -440,15 +441,29 @@ bool AMDGPUInstructionSelector::selectG_UADDO_USUBO(MachineInstr &I) const {
 
 bool AMDGPUInstructionSelector::selectG_EXTRACT(MachineInstr &I) const {
   MachineBasicBlock *BB = I.getParent();
+  Register DstReg = I.getOperand(0).getReg();
+  Register SrcReg = I.getOperand(1).getReg();
+  LLT DstTy = MRI->getType(DstReg);
+  LLT SrcTy = MRI->getType(SrcReg);
+  const unsigned SrcSize = SrcTy.getSizeInBits();
+  const unsigned DstSize = DstTy.getSizeInBits();
+
+  // TODO: Should handle any multiple of 32 offset.
   unsigned Offset = I.getOperand(2).getImm();
-  if (Offset % 32 != 0)
+  if (Offset % DstSize != 0)
     return false;
 
-  unsigned SubReg = TRI.getSubRegFromChannel(Offset / 32);
+  const RegisterBank *SrcBank = RBI.getRegBank(SrcReg, *MRI, TRI);
+  const TargetRegisterClass *SrcRC =
+    TRI.getRegClassForSizeOnBank(SrcSize, *SrcBank, *MRI);
+  if (!SrcRC)
+    return false;
+
+  ArrayRef<int16_t> SubRegs = TRI.getRegSplitParts(SrcRC, DstSize / 8);
+
   const DebugLoc &DL = I.getDebugLoc();
-  MachineInstr *Copy = BuildMI(*BB, &I, DL, TII.get(TargetOpcode::COPY),
-                               I.getOperand(0).getReg())
-                               .addReg(I.getOperand(1).getReg(), 0, SubReg);
+  MachineInstr *Copy = BuildMI(*BB, &I, DL, TII.get(TargetOpcode::COPY), DstReg)
+                               .addReg(SrcReg, 0, SubRegs[Offset / DstSize]);
 
   for (const MachineOperand &MO : Copy->operands()) {
     const TargetRegisterClass *RC =
@@ -469,7 +484,7 @@ bool AMDGPUInstructionSelector::selectG_MERGE_VALUES(MachineInstr &MI) const {
 
   const unsigned SrcSize = SrcTy.getSizeInBits();
   if (SrcSize < 32)
-    return false;
+    return selectImpl(MI, *CoverageInfo);
 
   const DebugLoc &DL = MI.getDebugLoc();
   const RegisterBank *DstBank = RBI.getRegBank(DstReg, *MRI, TRI);
@@ -801,38 +816,6 @@ static unsigned extractSWZ(unsigned AuxiliaryData) {
   return (AuxiliaryData >> 3) & 1;
 }
 
-// Returns Base register, constant offset, and offset def point.
-static std::tuple<Register, unsigned, MachineInstr *>
-getBaseWithConstantOffset(MachineRegisterInfo &MRI, Register Reg) {
-  MachineInstr *Def = getDefIgnoringCopies(Reg, MRI);
-  if (!Def)
-    return std::make_tuple(Reg, 0, nullptr);
-
-  if (Def->getOpcode() == AMDGPU::G_CONSTANT) {
-    unsigned Offset;
-    const MachineOperand &Op = Def->getOperand(1);
-    if (Op.isImm())
-      Offset = Op.getImm();
-    else
-      Offset = Op.getCImm()->getZExtValue();
-
-    return std::make_tuple(Register(), Offset, Def);
-  }
-
-  int64_t Offset;
-  if (Def->getOpcode() == AMDGPU::G_ADD) {
-    // TODO: Handle G_OR used for add case
-    if (mi_match(Def->getOperand(1).getReg(), MRI, m_ICst(Offset)))
-      return std::make_tuple(Def->getOperand(0).getReg(), Offset, Def);
-
-    // FIXME: matcher should ignore copies
-    if (mi_match(Def->getOperand(1).getReg(), MRI, m_Copy(m_ICst(Offset))))
-      return std::make_tuple(Def->getOperand(0).getReg(), Offset, Def);
-  }
-
-  return std::make_tuple(Reg, 0, Def);
-}
-
 static unsigned getBufferStoreOpcode(LLT Ty,
                                      const unsigned MemSize,
                                      const bool Offen) {
@@ -929,7 +912,7 @@ AMDGPUInstructionSelector::splitBufferOffsets(MachineIRBuilder &B,
   MachineInstr *OffsetDef;
 
   std::tie(BaseReg, TotalConstOffset, OffsetDef)
-    = getBaseWithConstantOffset(*MRI, OrigOffset);
+    = AMDGPU::getBaseWithConstantOffset(*MRI, OrigOffset);
 
   unsigned ImmOffset = TotalConstOffset;
 
@@ -2133,4 +2116,20 @@ void AMDGPUInstructionSelector::renderTruncImm32(MachineInstrBuilder &MIB,
   Optional<int64_t> CstVal = getConstantVRegVal(MI.getOperand(0).getReg(), *MRI);
   assert(CstVal && "Expected constant value");
   MIB.addImm(CstVal.getValue());
+}
+
+bool AMDGPUInstructionSelector::isInlineImmediate16(int64_t Imm) const {
+  return AMDGPU::isInlinableLiteral16(Imm, STI.hasInv2PiInlineImm());
+}
+
+bool AMDGPUInstructionSelector::isInlineImmediate32(int64_t Imm) const {
+  return AMDGPU::isInlinableLiteral32(Imm, STI.hasInv2PiInlineImm());
+}
+
+bool AMDGPUInstructionSelector::isInlineImmediate64(int64_t Imm) const {
+  return AMDGPU::isInlinableLiteral64(Imm, STI.hasInv2PiInlineImm());
+}
+
+bool AMDGPUInstructionSelector::isInlineImmediate(const APFloat &Imm) const {
+  return TII.isInlineConstant(Imm);
 }
