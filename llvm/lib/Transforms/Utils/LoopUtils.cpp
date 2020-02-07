@@ -266,8 +266,8 @@ Optional<const MDOperand *> llvm::findStringMetadataForLoop(const Loop *TheLoop,
   }
 }
 
-static Optional<bool> getOptionalBoolLoopAttribute(const Loop *TheLoop,
-                                                   StringRef Name) {
+Optional<bool> llvm::getOptionalBoolLoopAttribute(const Loop *TheLoop,
+                                                  StringRef Name) {
   MDNode *MD = findOptionMDForLoop(TheLoop, Name);
   if (!MD)
     return None;
@@ -284,7 +284,7 @@ static Optional<bool> getOptionalBoolLoopAttribute(const Loop *TheLoop,
   llvm_unreachable("unexpected number of options");
 }
 
-static bool getBooleanLoopAttribute(const Loop *TheLoop, StringRef Name) {
+bool llvm::getBooleanLoopAttribute(const Loop *TheLoop, StringRef Name) {
   return getOptionalBoolLoopAttribute(TheLoop, Name).getValueOr(false);
 }
 
