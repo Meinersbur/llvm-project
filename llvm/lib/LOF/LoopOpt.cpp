@@ -11,6 +11,9 @@
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
+#include "llvm/Analysis/AliasAnalysisEvaluator.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/Analysis/AliasAnalysis.h"
 
 using namespace llvm;
 
@@ -582,7 +585,7 @@ void LoopOptimizerImpl::codegen(const GreenRoot *Root) {
 
   // Make a clone of the original function.
   FunctionType *FT = Func->getFunctionType();
-  std::string FuncName = Func->getName();
+  std::string FuncName = Func->getName().str();
   Function *NewFunc = Function::Create(FT, Func->getLinkage(), Twine(), M);
   NewFunc->addFnAttr("lof-output");
   // TODO: Carry-over function attributes
@@ -675,7 +678,7 @@ struct llvm::DOTGraphTraits<const llvm::GreenNode *>
       Node->printLine(OS);
     else
       Node->printText(OS);
-    return OS.str();
+    return OS.str().str();
   }
 };
 
