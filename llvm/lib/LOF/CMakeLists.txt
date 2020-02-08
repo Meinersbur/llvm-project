@@ -5,6 +5,8 @@ add_llvm_library(LLVMLOF
   Dep.cpp
   LoopOpt.cpp
   LoopOptPass.cpp
+  Green.cpp
+  Red.cpp
 
   ADDITIONAL_HEADER_DIRS
     ${LLVM_MAIN_INCLUDE_DIR}/llvm/LOF
