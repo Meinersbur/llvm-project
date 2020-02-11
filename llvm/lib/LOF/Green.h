@@ -3,7 +3,10 @@
 
 
 #include "llvm/IR/Instruction.h"
+#include "llvm/IR/Operator.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Analysis/ValueTracking.h"
+
 
 namespace llvm {
   namespace lof {
@@ -12,10 +15,26 @@ namespace llvm {
     class Operation {
     private:
       // Using this only to avoid duplicating the representation of an LLVM instruction. It's SSA value and operands have no meaning in the green DAG.
-      llvm::Instruction* Inst = nullptr;
+      llvm::Value* Inst = nullptr;
     public:
+      Operation() {  }
+      Operation(llvm::Value* Inst) : Inst(Inst) {  }
 
       bool isValid() const { return Inst != nullptr; }
+      bool isFloating() const { 
+        // TODO: must not depend on operators
+        return isa<Constant>(Inst) ||llvm:: isSafeToSpeculativelyExecute (Inst);
+      }
+
+      int getNumInputs() const {
+        return cast<llvm::Operator >(Inst)->getNumOperands();
+      }
+      int getNumOutputs() const { 
+        if (isa<StoreInst>(Inst))
+          return 0;
+        return 1;
+      }
+
     };
 
 
@@ -49,10 +68,10 @@ namespace llvm {
       bool IsLoop;
 
       // Execution Predicate (for Stmt,Loop)
-      Green* ExecPred;
+      Green* ExecPred=nullptr;
 
       // Re-execution condition (for Loop)
-      Green* BackedgePred;
+      Green* BackedgePred=nullptr;
 
       SmallVector<Green*, 8> Children;
       SmallVector<Dep*, 8> Connections;
@@ -60,10 +79,26 @@ namespace llvm {
       SmallVector<Input, 4> Inputs;
       SmallVector<Output, 4> Outputs;
 
-      Green() {      }
+      Green(Operation Op): Op(Op) {      }
 
     public:
-      static Green* create() { return new Green(); }
+      static Green* createFloating(Operation Op) {
+        assert(Op.isFloating());
+        return new Green(Op); 
+      }
+      static Green* createStmt(Operation Op) {
+        assert(Op.isFloating());
+        return new Green(Op);
+      }
+      static Green* createSequence(ArrayRef <Green*> Insts) {
+        return new Green(Operation());
+      }
+      static Green* createLoop(ArrayRef <Green*> Stmts) {
+        return new Green(Operation());
+      }
+      static Green* createFunc(ArrayRef <Green*> Stmts) {
+        return new Green(Operation());
+      }
 
       bool isExpr() const { return Op.isValid() && IsFloating; }
       bool isStmt() const { return !IsFloating; }

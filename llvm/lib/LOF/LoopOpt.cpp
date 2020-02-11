@@ -4,6 +4,7 @@
 #include "GreenTree.h"
 #include "RedTree.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "Green.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
@@ -16,6 +17,7 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 
 using namespace llvm;
+using namespace llvm::lof;
 
 namespace {
 class StagedSequence;
@@ -70,6 +72,7 @@ private:
   GreenStmt *createHierarchy(BasicBlock *BB) const;
 
   GreenExpr *createExpr(Value *I);
+  Green *createInst(Value *I);
 
   DenseMap<Value *, GreenExpr *> ExprCache;
   GreenExpr *getGreenExpr(Value *C);
@@ -302,6 +305,11 @@ GreenExpr *LoopOptimizerImpl::createExpr(Value *I) {
   }
 
   llvm_unreachable("unimplemented");
+}
+
+
+Green* LoopOptimizerImpl::createInst(Value* I) {
+  return Green::create();
 }
 
 GreenInst *LoopOptimizerImpl::getGreenInst(Instruction *I) {
@@ -690,3 +698,4 @@ LoopOptimizer *llvm::createLoopOptimizer(Function *Func, LoopInfo *LI,
                                          ScalarEvolution *SE) {
   return new LoopOptimizerImpl(Func, LI, SE);
 }
+
