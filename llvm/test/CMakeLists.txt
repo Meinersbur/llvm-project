@@ -29,6 +29,12 @@ configure_lit_site_cfg(
   MAIN_CONFIG
   ${CMAKE_CURRENT_SOURCE_DIR}/Unit/lit.cfg.py
   )
+configure_lit_site_cfg(
+  ${CMAKE_CURRENT_SOURCE_DIR}/Compiled/lit.site.cfg.py.in
+  ${CMAKE_CURRENT_BINARY_DIR}/Compiled/lit.site.cfg.py
+  MAIN_CONFIG
+  ${CMAKE_CURRENT_SOURCE_DIR}/Compiled/lit.cfg.py
+  )
 
 # Set the depends list as a variable so that it can grow conditionally.
 # NOTE: Sync the substitutions in test/lit.cfg when adding to this list.
@@ -107,6 +113,7 @@ set(LLVM_TEST_DEPENDS
           verify-uselistorder
           yaml-bench
           yaml2obj
+          regression
         )
 
 if(TARGET llvm-lto)
@@ -161,6 +168,12 @@ if(TARGET ocaml_llvm)
         )
 endif()
 
+
+
+
+
+
+
 add_custom_target(llvm-test-depends DEPENDS ${LLVM_TEST_DEPENDS})
 set_target_properties(llvm-test-depends PROPERTIES FOLDER "Tests")
 
@@ -187,3 +200,6 @@ add_lit_testsuites(LLVM ${CMAKE_CURRENT_SOURCE_DIR}
 add_custom_target(check)
 add_dependencies(check check-llvm)
 set_target_properties(check PROPERTIES FOLDER "Tests")
+
+
+
