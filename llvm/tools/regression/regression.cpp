@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "BreakpointPrinter.h"
+#include "Debugify.h"
 #include "NewPMDriver.h"
 #include "PassPrinters.h"
 #include "llvm/ADT/Triple.h"
@@ -29,10 +30,10 @@
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/IRPrintingPasses.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/LLVMRemarkStreamer.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/LegacyPassNameParser.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/RemarkStreamer.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/InitializePasses.h"
@@ -54,9 +55,7 @@
 #include "llvm/Transforms/Coroutines.h"
 #include "llvm/Transforms/IPO/AlwaysInliner.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
-#include "llvm/Transforms/IPO/WholeProgramDevirt.h"
 #include "llvm/Transforms/Utils/Cloning.h"
-#include "llvm/Transforms/Utils/Debugify.h"
 #include "llvm/LOF/LoopOptPass.h"
 #include <algorithm>
 #include <memory>
@@ -195,12 +194,6 @@ static cl::opt<bool>
 DisableSimplifyLibCalls("disable-simplify-libcalls",
                         cl::desc("Disable simplify-libcalls"));
 
-static cl::list<std::string>
-DisableBuiltins("disable-builtin",
-                cl::desc("Disable specific target library builtin function"),
-                cl::ZeroOrMore);
-
-
 static cl::opt<bool>
 Quiet("q", cl::desc("Obsolete option"), cl::Hidden);
 
@@ -259,20 +252,19 @@ static cl::opt<bool> Coroutines(
   cl::desc("Enable coroutine passes."),
   cl::init(false), cl::Hidden);
 
-static cl::opt<bool> RemarksWithHotness(
+static cl::opt<bool> PassRemarksWithHotness(
     "pass-remarks-with-hotness",
     cl::desc("With PGO, include profile count in optimization remarks"),
     cl::Hidden);
 
-static cl::opt<unsigned>
-    RemarksHotnessThreshold("pass-remarks-hotness-threshold",
-                            cl::desc("Minimum profile count required for "
-                                     "an optimization remark to be output"),
-                            cl::Hidden);
+static cl::opt<unsigned> PassRemarksHotnessThreshold(
+    "pass-remarks-hotness-threshold",
+    cl::desc("Minimum profile count required for an optimization remark to be output"),
+    cl::Hidden);
 
 static cl::opt<std::string>
     RemarksFilename("pass-remarks-output",
-                    cl::desc("Output filename for pass remarks"),
+                    cl::desc("YAML output filename for pass remarks"),
                     cl::value_desc("filename"));
 
 static cl::opt<std::string>
@@ -280,11 +272,6 @@ static cl::opt<std::string>
                   cl::desc("Only record optimization remarks from passes whose "
                            "names match the given regular expression"),
                   cl::value_desc("regex"));
-
-static cl::opt<std::string> RemarksFormat(
-    "pass-remarks-format",
-    cl::desc("The format used for serializing remarks (default: YAML)"),
-    cl::value_desc("format"), cl::init("yaml"));
 
 cl::opt<PGOKind>
     PGOKindFlag("pgo-kind", cl::init(NoPGO), cl::Hidden,
@@ -336,7 +323,7 @@ public:
     PassKind Kind = P->getPassKind();
     StringRef Name = P->getPassName();
 
-    // TODO: Implement Debugify for LoopPass.
+    // TODO: Implement Debugify for BasicBlockPass, LoopPass.
     switch (Kind) {
       case PT_Function:
         super::add(createDebugifyFunctionPass());
@@ -484,36 +471,18 @@ static TargetMachine* GetTargetMachine(Triple TheTriple, StringRef CPUStr,
                                         getCodeModel(), GetCodeGenOptLevel());
 }
 
-#ifdef BUILD_EXAMPLES
-void initializeExampleIRTransforms(llvm::PassRegistry &Registry);
+#ifdef LINK_POLLY_INTO_TOOLS
+namespace polly {
+void initializePollyPasses(llvm::PassRegistry &Registry);
+}
 #endif
 
 
-void exportDebugifyStats(llvm::StringRef Path, const DebugifyStatsMap &Map) {
-  std::error_code EC;
-  raw_fd_ostream OS{Path, EC};
-  if (EC) {
-    errs() << "Could not open file: " << EC.message() << ", " << Path << '\n';
-    return;
-  }
-
-  OS << "Pass Name" << ',' << "# of missing debug values" << ','
-     << "# of missing locations" << ',' << "Missing/Expected value ratio" << ','
-     << "Missing/Expected location ratio" << '\n';
-  for (const auto &Entry : Map) {
-    StringRef Pass = Entry.first;
-    DebugifyStatistics Stats = Entry.second;
-
-    OS << Pass << ',' << Stats.NumDbgValuesMissing << ','
-       << Stats.NumDbgLocsMissing << ',' << Stats.getMissingValueRatio() << ','
-       << Stats.getEmptyLocationRatio() << '\n';
-  }
-}
 
 //===----------------------------------------------------------------------===//
 // main for opt
 //
-int main(int argc, char **argv) {
+int main2(int argc, char **argv) {
   InitLLVM X(argc, argv);
 
   // Enable debug stream buffering.
@@ -565,11 +534,10 @@ int main(int argc, char **argv) {
   initializeWasmEHPreparePass(Registry);
   initializeWriteBitcodePassPass(Registry);
   initializeHardwareLoopsPass(Registry);
-  initializeTypePromotionPass(Registry);
 
 
-#ifdef BUILD_EXAMPLES
-  initializeExampleIRTransforms(Registry);
+#ifdef LINK_POLLY_INTO_TOOLS
+  polly::initializePollyPasses(Registry);
 #endif
 
   cl::ParseCommandLineOptions(argc, argv,
@@ -586,15 +554,31 @@ int main(int argc, char **argv) {
   if (!DisableDITypeMap)
     Context.enableDebugTypeODRUniquing();
 
-  Expected<std::unique_ptr<ToolOutputFile>> RemarksFileOrErr =
-      setupLLVMOptimizationRemarks(Context, RemarksFilename, RemarksPasses,
-                                   RemarksFormat, RemarksWithHotness,
-                                   RemarksHotnessThreshold);
-  if (Error E = RemarksFileOrErr.takeError()) {
-    errs() << toString(std::move(E)) << '\n';
-    return 1;
+  if (PassRemarksWithHotness)
+    Context.setDiagnosticsHotnessRequested(true);
+
+  if (PassRemarksHotnessThreshold)
+    Context.setDiagnosticsHotnessThreshold(PassRemarksHotnessThreshold);
+
+  std::unique_ptr<ToolOutputFile> OptRemarkFile;
+  if (RemarksFilename != "") {
+    std::error_code EC;
+    OptRemarkFile =
+        llvm::make_unique<ToolOutputFile>(RemarksFilename, EC, sys::fs::F_None);
+    if (EC) {
+      errs() << EC.message() << '\n';
+      return 1;
+    }
+    Context.setRemarkStreamer(llvm::make_unique<RemarkStreamer>(
+        RemarksFilename,
+        llvm::make_unique<remarks::YAMLSerializer>(OptRemarkFile->os())));
+
+    if (!RemarksPasses.empty())
+      if (Error E = Context.getRemarkStreamer()->setFilter(RemarksPasses)) {
+        errs() << E << '\n';
+        return 1;
+      }
   }
-  std::unique_ptr<ToolOutputFile> RemarksFile = std::move(*RemarksFileOrErr);
 
   // Load the input module...
   std::unique_ptr<Module> M =
@@ -630,13 +614,6 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // Enable testing of whole program devirtualization on this module by invoking
-  // the facility for updating public visibility to linkage unit visibility when
-  // specified by an internal option. This is normally done during LTO which is
-  // not performed via opt.
-  updateVCallVisibilityInModule(*M,
-                                /* WholeProgramVisibilityEnabledInLTO */ false);
-
   // Figure out what stream we are supposed to write to...
   std::unique_ptr<ToolOutputFile> Out;
   std::unique_ptr<ToolOutputFile> ThinLinkOut;
@@ -650,9 +627,7 @@ int main(int argc, char **argv) {
       OutputFilename = "-";
 
     std::error_code EC;
-    sys::fs::OpenFlags Flags = OutputAssembly ? sys::fs::OF_Text
-                                              : sys::fs::OF_None;
-    Out.reset(new ToolOutputFile(OutputFilename, EC, Flags));
+    Out.reset(new ToolOutputFile(OutputFilename, EC, sys::fs::F_None));
     if (EC) {
       errs() << EC.message() << '\n';
       return 1;
@@ -660,7 +635,7 @@ int main(int argc, char **argv) {
 
     if (!ThinLinkBitcodeFile.empty()) {
       ThinLinkOut.reset(
-          new ToolOutputFile(ThinLinkBitcodeFile, EC, sys::fs::OF_None));
+          new ToolOutputFile(ThinLinkBitcodeFile, EC, sys::fs::F_None));
       if (EC) {
         errs() << EC.message() << '\n';
         return 1;
@@ -717,10 +692,10 @@ int main(int argc, char **argv) {
     // string. Hand off the rest of the functionality to the new code for that
     // layer.
     return runPassPipeline(argv[0], *M, TM.get(), Out.get(), ThinLinkOut.get(),
-                           RemarksFile.get(), PassPipeline, OK, VK,
+                           OptRemarkFile.get(), PassPipeline, OK, VK,
                            PreserveAssemblyUseListOrder,
                            PreserveBitcodeUseListOrder, EmitSummaryIndex,
-                           EmitModuleHash, EnableDebugify, Coroutines)
+                           EmitModuleHash, EnableDebugify)
                ? 0
                : 1;
   }
@@ -736,19 +711,6 @@ int main(int argc, char **argv) {
   // The -disable-simplify-libcalls flag actually disables all builtin optzns.
   if (DisableSimplifyLibCalls)
     TLII.disableAllFunctions();
-  else {
-    // Disable individual builtin functions in TargetLibraryInfo.
-    LibFunc F;
-    for (auto &FuncName : DisableBuiltins)
-      if (TLII.getLibFunc(FuncName, F))
-        TLII.setUnavailable(F);
-      else {
-        errs() << argv[0] << ": cannot disable nonexistent builtin function "
-               << FuncName << '\n';
-        return 1;
-      }
-  }
-
   Passes.add(new TargetLibraryInfoWrapperPass(TLII));
 
   // Add internal analysis passes from the target machine.
@@ -773,8 +735,8 @@ int main(int argc, char **argv) {
         OutputFilename = "-";
 
       std::error_code EC;
-      Out = std::make_unique<ToolOutputFile>(OutputFilename, EC,
-                                              sys::fs::OF_None);
+      Out = llvm::make_unique<ToolOutputFile>(OutputFilename, EC,
+                                              sys::fs::F_None);
       if (EC) {
         errs() << EC.message() << '\n';
         return 1;
@@ -842,6 +804,9 @@ int main(int argc, char **argv) {
 
       if (AnalyzeOnly) {
         switch (Kind) {
+        case PT_BasicBlock:
+          Passes.add(createBasicBlockPassPrinter(PassInf, Out->os(), Quiet));
+          break;
         case PT_Region:
           Passes.add(createRegionPassPrinter(PassInf, Out->os(), Quiet));
           break;
@@ -912,14 +877,12 @@ int main(int argc, char **argv) {
   std::unique_ptr<raw_svector_ostream> BOS;
   raw_ostream *OS = nullptr;
 
-  const bool ShouldEmitOutput = !NoOutput && !AnalyzeOnly;
-
   // Write bitcode or assembly to the output as the last step...
-  if (ShouldEmitOutput || RunTwice) {
+  if (!NoOutput && !AnalyzeOnly) {
     assert(Out);
     OS = &Out->os();
     if (RunTwice) {
-      BOS = std::make_unique<raw_svector_ostream>(Buffer);
+      BOS = make_unique<raw_svector_ostream>(Buffer);
       OS = BOS.get();
     }
     if (OutputAssembly) {
@@ -963,16 +926,13 @@ int main(int argc, char **argv) {
              "Writing the result of the second run to the specified output.\n"
              "To generate the one-run comparison binary, just run without\n"
              "the compile-twice option\n";
-      if (ShouldEmitOutput) {
-        Out->os() << BOS->str();
-        Out->keep();
-      }
-      if (RemarksFile)
-        RemarksFile->keep();
+      Out->os() << BOS->str();
+      Out->keep();
+      if (OptRemarkFile)
+        OptRemarkFile->keep();
       return 1;
     }
-    if (ShouldEmitOutput)
-      Out->os() << BOS->str();
+    Out->os() << BOS->str();
   }
 
   if (DebugifyEach && !DebugifyExport.empty())
@@ -982,11 +942,30 @@ int main(int argc, char **argv) {
   if (!NoOutput || PrintBreakpoints)
     Out->keep();
 
-  if (RemarksFile)
-    RemarksFile->keep();
+  if (OptRemarkFile)
+    OptRemarkFile->keep();
 
   if (ThinLinkOut)
     ThinLinkOut->keep();
 
   return 0;
 }
+
+
+static cl::opt<std::string> Definition("D", cl::desc("IR section to use"), cl::Required, cl::ValueRequired);
+
+int main(int argc, char *argv[]) {
+
+  InitLLVM X(argc, argv);
+  cl::ParseCommandLineOptions(argc, argv, "regression test helper\n");
+
+  llvm::errs() << "Executing regression\n";
+  llvm::errs() << "Input: " << InputFilename << "\n";
+  llvm::errs() << "Def: " << Definition.getValue() << "\n";
+
+
+  exit(1);
+  return EXIT_SUCCESS;
+}
+
+
