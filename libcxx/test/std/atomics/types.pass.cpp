@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+// UNSUPPORTED: libcpp-has-no-threads
+
 // <atomic>
 
 // Test nested types
@@ -32,7 +34,7 @@ template <class A>
 void
 test_atomic()
 {
-    A a;
+    A a; (void)a;
 #if TEST_STD_VER >= 17
     static_assert((std::is_same<typename A::value_type, decltype(a.load())>::value), "");
 #endif

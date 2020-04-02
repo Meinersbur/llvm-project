@@ -258,6 +258,10 @@ protected:
   bool InsertVZEROUPPER = false;
 
   /// True if there is no performance penalty for writing NOPs with up to
+  /// 7 bytes.
+  bool HasFast7ByteNOP = false;
+
+  /// True if there is no performance penalty for writing NOPs with up to
   /// 11 bytes.
   bool HasFast11ByteNOP = false;
 
@@ -392,6 +396,9 @@ protected:
 
   /// Processor supports PCONFIG instruction
   bool HasPCONFIG = false;
+
+  /// Processor supports SERIALIZE instruction
+  bool HasSERIALIZE = false;
 
   /// Processor has a single uop BEXTR implementation.
   bool HasFastBEXTR = false;
@@ -702,6 +709,7 @@ public:
   bool threewayBranchProfitable() const { return ThreewayBranchProfitable; }
   bool hasINVPCID() const { return HasINVPCID; }
   bool hasENQCMD() const { return HasENQCMD; }
+  bool hasSERIALIZE() const { return HasSERIALIZE; }
   bool useRetpolineIndirectCalls() const { return UseRetpolineIndirectCalls; }
   bool useRetpolineIndirectBranches() const {
     return UseRetpolineIndirectBranches;
