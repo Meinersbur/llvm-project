@@ -175,9 +175,8 @@ private:
     }
   }
 
-  DenseMap<Instruction *, GreenInst *>
-      InstCache; // FIXME: Instructions may not be re-usable, so do not cache.
-  GreenInst *getGreenInst(Instruction *I);
+  DenseMap<Instruction *, GreenInst *> InstCache; // FIXME: Instructions may not be re-usable, so do not cache.
+  Green *getGreenInst(Instruction *I);
 
   GreenStmt *createGreenStmt(const GreenExpr *MustExecutePredicate,
                              const GreenExpr *MayExecutePredicate,
@@ -233,7 +232,8 @@ public:
   LoopOptimizerImpl(Function *Func, LoopInfo *LI, ScalarEvolution *SE)
       : Func(Func), LI(LI), SE(SE) {}
 
-  GreenRoot *buildOriginalLoopTree();
+  Green *buildOriginalLoop(Loop *L, BasicBlock *Entry, Green *Cond);
+  Green *buildOriginalLoopTree();
   const GreenRoot *parallelize(const GreenRoot *Root);
   void codegen(const GreenRoot *Root);
 
@@ -307,11 +307,13 @@ GreenExpr *LoopOptimizerImpl::createExpr(Value *I) {
   llvm_unreachable("unimplemented");
 }
 
-
-Green* LoopOptimizerImpl::createInst(Value* I) {
-  return Green::create();
+#if 0
+Green* LoopOptimizerImpl::createInst(Instruction* I) {
+  return Green::createStmt(Operation(Operation::LLVMInst, I ) );
 }
+#endif
 
+#if 0
 GreenInst *LoopOptimizerImpl::getGreenInst(Instruction *I) {
   auto &Result = InstCache[I];
   if (!Result) {
@@ -336,6 +338,7 @@ GreenInst *LoopOptimizerImpl::getGreenInst(Instruction *I) {
   }
   return Result;
 }
+#endif
 
 GreenStmt *LoopOptimizerImpl::createGreenStmt(
     const GreenExpr *MustExecutePredicate, const GreenExpr *MayExecutePredicate,
@@ -379,8 +382,76 @@ GreenRoot *LoopOptimizerImpl::createGreenRoot(StagedSequence *TopLoop) {
   return Green;
 }
 
-GreenRoot *LoopOptimizerImpl::buildOriginalLoopTree() {
+Green* LoopOptimizerImpl::buildOriginalLoop(Loop* L, BasicBlock *Entry, Green *Cond) {
+  std::deque < std::pair< BasicBlock*, Green*>> Worklist; 
+  Worklist.push_back({ Entry, Green::createTrueExpr() });
 
+  SmallVector<Green*, 32> LvlInsts;
+
+
+  auto QueueSuccessor = [&,this](BasicBlock* BB, Green *BBCond) {
+    // Backedge
+    if (L && BB == L->getHeader())
+      return;
+
+    // Exiting edge
+    if (L && !L->contains(BB))
+      return;
+
+    auto InLoop = LI->getLoopFor(BB);
+    if (L == InLoop) {
+      Worklist.push_back({ BB , Green::createTrueExpr()  });
+      return;
+    }
+
+    assert(InLoop->getHeader()==BB);
+    auto InnerLoop = buildOriginalLoop(InLoop, BB, BBCond);
+    LvlInsts.push_back(InnerLoop);
+  };
+
+  while (!Worklist.empty()) {
+    auto p = Worklist.front();
+    auto BB = p.first;
+    auto BBCond = p.second;
+    Worklist.pop_front();
+
+    for (auto& Inst: *BB) {
+      if (Inst.isTerminator()) {
+        // TODO: Detect rejoining branches
+        if (auto BrInst = dyn_cast<BranchInst>(&Inst)) {
+          if (BrInst->isUnconditional()) {
+            QueueSuccessor(BrInst->getSuccessor(0), BBCond);
+            break;
+          }
+          if (BrInst->isConditional()) {
+            auto BrCond = Green::createExpr(Operation(Operation::LLVMFloating,   BrInst->getCondition()), {});
+              QueueSuccessor(BrInst->getSuccessor(0),  Green::createConjunctionExpr(BBCond, BrCond ) );
+              QueueSuccessor(BrInst->getSuccessor(1),  Green::createConjunctionExpr(BBCond, Green ::createNotExpr( BrCond )) );
+              break;
+          }
+        }
+        if (auto RetInst = dyn_cast<ReturnInst>(&Inst)) {
+          assert(!L && "Dont support ret inside loops yet");
+          break;
+        }
+
+        llvm_unreachable("Unsupported branch");
+      }
+
+      auto GInst = Green::createStmt ( Operation(Operation::LLVMInst,  &Inst) );
+      LvlInsts.push_back(GInst);
+    }
+  }
+
+  if (L)
+    return Green::createLoop(LvlInsts);
+  return Green::createFunc(LvlInsts);
+}
+
+Green *LoopOptimizerImpl::buildOriginalLoopTree() {
+  return buildOriginalLoop(nullptr, &Func->getEntryBlock(),  Green::createTrueExpr() );
+
+#if 0
   DenseMap<BasicBlock *, AtomDisjointSet *> SuccessorAtoms;
   for (auto &BB : *Func) {
     auto Term = BB.getTerminator();
@@ -412,8 +483,7 @@ GreenRoot *LoopOptimizerImpl::buildOriginalLoopTree() {
   }
 
   DenseMap<Loop *, StagedLoop *> LoopMap;
-  LoopMap[nullptr] =
-      new StagedLoop(nullptr, nullptr, LoopExitAtoms.lookup(nullptr));
+  LoopMap[nullptr] = new StagedLoop(nullptr, nullptr, LoopExitAtoms.lookup(nullptr));
   StagedSequence *RootBlock = LoopMap[nullptr]->Body;
   for (auto L : LI->getLoopsInPreorder()) {
     // TODO: Use own analysis on loop tree instead of SCEV.
@@ -575,6 +645,7 @@ GreenRoot *LoopOptimizerImpl::buildOriginalLoopTree() {
 
   OriginalRoot = createGreenRoot(RootBlock);
   return OriginalRoot;
+  #endif
 }
 
 const GreenRoot *LoopOptimizerImpl::parallelize(const GreenRoot *Root) {
@@ -635,6 +706,8 @@ void LoopOptimizerImpl::codegen(const GreenRoot *Root) {
 bool LoopOptimizerImpl::optimize() {
   auto OrigTree = buildOriginalLoopTree();
 
+  return false;
+#if 0
   auto OrigRedTree = RedRoot::Create(OrigTree);
   OrigRedTree->findAllDefinitions();
 
@@ -646,6 +719,7 @@ bool LoopOptimizerImpl::optimize() {
 
   codegen(OptimizedTree);
   return true;
+#endif
 }
 
 template <> struct llvm::GraphTraits<const llvm::GreenNode *> {
@@ -698,4 +772,3 @@ LoopOptimizer *llvm::createLoopOptimizer(Function *Func, LoopInfo *LI,
                                          ScalarEvolution *SE) {
   return new LoopOptimizerImpl(Func, LI, SE);
 }
-
