@@ -80,12 +80,10 @@ public:
 
 char LoopOptimizationFramework::ID = 0;
 
-INITIALIZE_PASS_BEGIN(LoopOptimizationFramework, "lof",
-                      "Loop Optimization Framework", false, false)
+INITIALIZE_PASS_BEGIN(LoopOptimizationFramework, "lof", "Loop Optimization Framework", false, false)
 INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(OptimizationRemarkEmitterWrapperPass)
-INITIALIZE_PASS_END(LoopOptimizationFramework, "lof",
-                    "Loop Optimization Framework", false, false)
+INITIALIZE_PASS_END(LoopOptimizationFramework, "lof", "Loop Optimization Framework", false, false)

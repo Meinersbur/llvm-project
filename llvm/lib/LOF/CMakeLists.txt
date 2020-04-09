@@ -6,6 +6,7 @@ add_llvm_library(LLVMLOF
   LoopOpt.cpp
   LoopOptPass.cpp
   Green.cpp
+  GreenBuilder.cpp
   Red.cpp
 
   ADDITIONAL_HEADER_DIRS

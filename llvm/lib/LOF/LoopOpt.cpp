@@ -5,6 +5,7 @@
 #include "RedTree.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "Green.h"
+#include "GreenBuilder.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
@@ -57,6 +58,62 @@ StagedLoop::StagedLoop(Loop *LoopInfoLoop, Value *Iterations,
                        AtomDisjointSet *Atoms)
     : L(LoopInfoLoop), Body(new StagedSequence()), Iterations(Iterations),
       Atoms(Atoms) {}
+
+
+
+class GreenCodeGen {
+  using BuilderTy = IRBuilder<>;
+private:
+  Green* Root;
+  BuilderTy AllocaBuilder;
+  LLVMContext& C;
+ 
+  void emitGreen(Green*G, BuilderTy& Builder) {
+    if (G->isExpr() || G->isStmt()) {
+      auto& Op = G->getOperation();
+      return;
+    }
+
+    if (G->isLoop()) {
+      for (auto C : G->children()) {
+        emitGreen(G, Builder);
+      }
+
+    }
+
+    llvm_unreachable("Not yet implemented");
+  }
+
+public:
+  GreenCodeGen(Green *Root, LLVMContext &C) :Root(Root), AllocaBuilder(C), C(C) {}
+
+
+  Function* emitAsFunction(Module *M) {
+    auto Func = Function::Create(FunctionType::get( Type::getVoidTy(C), false ), GlobalValue::InternalLinkage  , "", M);
+    auto AllocaBB = BasicBlock::Create(C, "func.alloca", Func);
+    auto EntryBB = BasicBlock::Create(C, "func.entry", Func);
+   
+
+    AllocaBuilder.SetInsertPoint(AllocaBB);
+    AllocaBuilder.CreateBr(EntryBB);
+    AllocaBuilder.SetInsertPoint(AllocaBB, AllocaBB->getFirstInsertionPt());
+
+    BuilderTy Builder(EntryBB);
+    Builder.SetInsertPoint(EntryBB);
+    
+
+    emitGreen(Root, Builder);
+
+
+    auto ExitBB = BasicBlock::Create(C, "func.exit", Func);
+    Builder.CreateBr(ExitBB);
+    Builder.SetInsertPoint(ExitBB);
+    Builder.CreateRetVoid();
+
+    return Func;
+  }
+};
+
 
 class LoopOptimizerImpl : public LoopOptimizer {
 private:
@@ -233,13 +290,33 @@ public:
       : Func(Func), LI(LI), SE(SE) {}
 
   Green *buildOriginalLoop(Loop *L, BasicBlock *Entry, Green *Cond);
-  Green *buildOriginalLoopTree();
-  const GreenRoot *parallelize(const GreenRoot *Root);
+  Green* buildOriginalLoopTree() {
+      return buildOriginalLoop(nullptr, &Func->getEntryBlock(),  Green::createTrueExpr() );
+  }
+
   void codegen(const GreenRoot *Root);
 
-  bool optimize() override;
+  bool optimize() override {
+    auto OrigTree = buildOriginalLoopTree();
 
-  void view(const GreenRoot *Root);
+    emitAsFunc(OrigTree);
+
+    return false;
+  }
+
+
+  
+
+  Function* emitAsFunc(Green* Root) {
+    GreenCodeGen CG(Root, Func->getContext());
+    return CG.emitAsFunction(Func->getParent());
+  }
+
+  void view( Green* Root) {
+    ViewGraph< Green *>(Root, "lof", false, "Loop Hierarchy Graph");
+  }
+
+
 
   void print(raw_ostream &OS) override { OS << "Nothing to print yet\n"; }
 };
@@ -382,12 +459,21 @@ GreenRoot *LoopOptimizerImpl::createGreenRoot(StagedSequence *TopLoop) {
   return Green;
 }
 
+
+
+
 Green* LoopOptimizerImpl::buildOriginalLoop(Loop* L, BasicBlock *Entry, Green *Cond) {
   std::deque < std::pair< BasicBlock*, Green*>> Worklist; 
   Worklist.push_back({ Entry, Green::createTrueExpr() });
 
-  SmallVector<Green*, 32> LvlInsts;
+ // SmallVector<GreenMeaning, 32> LvlInsts;
+  SmallVector<Dep*, 16> InputDeps;
+  int NumIntermediates = 0;
+  int NumOutputs = 0;
 
+  //DenseMap<Instruction*,  GVal*> DefVals;
+  DenseMap<Value*, GVal*> InputsVals;
+  GreenBuilder Builder;
 
   auto QueueSuccessor = [&,this](BasicBlock* BB, Green *BBCond) {
     // Backedge
@@ -406,8 +492,11 @@ Green* LoopOptimizerImpl::buildOriginalLoop(Loop* L, BasicBlock *Entry, Green *C
 
     assert(InLoop->getHeader()==BB);
     auto InnerLoop = buildOriginalLoop(InLoop, BB, BBCond);
-    LvlInsts.push_back(InnerLoop);
+    //GreenMeaning GMeaning(InnerLoop, {}, {});
+    //LvlInsts.push_back(GMeaning);
+    Builder.addStmt(InnerLoop, {});
   };
+
 
   while (!Worklist.empty()) {
     auto p = Worklist.front();
@@ -424,9 +513,9 @@ Green* LoopOptimizerImpl::buildOriginalLoop(Loop* L, BasicBlock *Entry, Green *C
             break;
           }
           if (BrInst->isConditional()) {
-            auto BrCond = Green::createExpr(Operation(Operation::LLVMFloating,   BrInst->getCondition()), {});
-              QueueSuccessor(BrInst->getSuccessor(0),  Green::createConjunctionExpr(BBCond, BrCond ) );
-              QueueSuccessor(BrInst->getSuccessor(1),  Green::createConjunctionExpr(BBCond, Green ::createNotExpr( BrCond )) );
+            auto BrCond = nullptr;//TODO
+              QueueSuccessor(BrInst->getSuccessor(0),  GreenBuilder::buildConjunctionExpr(BBCond, BrCond ) );
+              QueueSuccessor(BrInst->getSuccessor(1),  GreenBuilder::buildConjunctionExpr(BBCond, GreenBuilder ::buildNotExpr( BrCond )) );
               break;
           }
         }
@@ -438,217 +527,54 @@ Green* LoopOptimizerImpl::buildOriginalLoop(Loop* L, BasicBlock *Entry, Green *C
         llvm_unreachable("Unsupported branch");
       }
 
-      auto GInst = Green::createStmt ( Operation(Operation::LLVMInst,  &Inst) );
-      LvlInsts.push_back(GInst);
+     // auto GInst = Green::createOperation();
+    //  auto GSlots = Builder.addOperation(Operation(Operation::LLVMInst, &Inst), {});
+
+      SmallVector<GVal*, 8> OperandVals;
+      OperandVals.set_size(Inst.getNumOperands());
+      for (auto &Operand : Inst.operands()) {
+        assert(Operand.getUser() == &Inst);
+        auto OpIdx = Operand.getOperandNo();
+        auto Def = Operand.get();
+       //  OutputSlot* OperandSlot;
+
+        if (InputsVals.count(Def)) {
+          OperandVals[OpIdx] = InputsVals[Def];
+        } else if (auto DefInst = dyn_cast<Instruction>(Def)) {
+            auto OperandSlot =Builder.addArgument ( DefInst);
+            InputsVals[DefInst] = OperandSlot;
+            OperandVals[OpIdx] = OperandSlot;
+        }else         if (auto Arg = dyn_cast<Argument>(Def)) {
+          auto OperandSlot =Builder.addArgument( Arg );
+          InputsVals[Arg] = OperandSlot;
+          OperandVals[OpIdx] = OperandSlot;
+          //Builder.connect(OperandSlot,GSlots.Inputs[Operand.getOperandNo()]);
+        }else if (auto C = dyn_cast<Constant>(Def)) {
+            auto GConst =    Green:: createConstExpr(C);
+            auto Slots = Builder.addStmt(GConst, {});
+            OperandVals[OpIdx] = Slots.front();
+        } else 
+          llvm_unreachable("unhandled def");
+      }
+
+      //GreenMeaning GMeaning(GInst, {}, {});
+      //LvlInsts.push_back(GMeaning);
+      auto GSlots = Builder.addOperation(Operation(Operation::LLVMInst, &Inst), OperandVals);
+      assert(GSlots.size()==1);
+      InputsVals[&Inst] = GSlots.front();
     }
   }
 
-  if (L)
-    return Green::createLoop(LvlInsts);
-  return Green::createFunc(LvlInsts);
+  if (L) {
+    //return Green::createLoop(InputDeps.size(), InputDeps, NumIntermediates, NumOutputs, LvlInsts);
+    return Builder.createLoop();
+  }
+//  return Green::createFunc(InputDeps.size(), InputDeps, NumIntermediates, NumOutputs,  LvlInsts);
+  return Builder.createStmt();
 }
 
-Green *LoopOptimizerImpl::buildOriginalLoopTree() {
-  return buildOriginalLoop(nullptr, &Func->getEntryBlock(),  Green::createTrueExpr() );
-
 #if 0
-  DenseMap<BasicBlock *, AtomDisjointSet *> SuccessorAtoms;
-  for (auto &BB : *Func) {
-    auto Term = BB.getTerminator();
-    if (auto Br = dyn_cast<BranchInst>(Term)) {
-      AtomDisjointSet *AtomSet;
-      if (Br->isUnconditional()) {
-        AtomSet = new AtomDisjointSet(1);
-      } else {
-        AtomSet = new AtomDisjointSet(2);
-      }
-      SuccessorAtoms[&BB] = AtomSet;
-      continue;
-    } else if (isa<ReturnInst>(Term)) {
-      // No successors
-      continue;
-    } else if (isa<UnreachableInst>(Term)) {
-      // No successors
-      continue;
-    }
-    llvm_unreachable("unimplemented terminator");
-  }
-
-  DenseMap<Loop *, AtomDisjointSet *> LoopExitAtoms;
-  for (auto L : LI->getLoopsInPreorder()) {
-    SmallVector<BasicBlock *, 4> ExitBlocks;
-    L->getExitBlocks(ExitBlocks);
-    auto AtomSet = new AtomDisjointSet(ExitBlocks.size());
-    LoopExitAtoms[L] = AtomSet;
-  }
-
-  DenseMap<Loop *, StagedLoop *> LoopMap;
-  LoopMap[nullptr] = new StagedLoop(nullptr, nullptr, LoopExitAtoms.lookup(nullptr));
-  StagedSequence *RootBlock = LoopMap[nullptr]->Body;
-  for (auto L : LI->getLoopsInPreorder()) {
-    // TODO: Use own analysis on loop tree instead of SCEV.
-    auto Taken = SE->getBackedgeTakenCount(L);
-    Taken = SE->getSCEVAtScope(Taken, L->getParentLoop());
-
-    // auto IterCount = SE->getMinusSCEV(Taken,  SE->getSCEV(
-    // ConstantInt::get(Context, APInt(2, -1, true) ) ) );
-    Value *IterCountV;
-    if (isa<SCEVSMaxExpr>(Taken)) {
-      IterCountV = cast<SCEVUnknown>(cast<SCEVSMaxExpr>(Taken)->getOperand(1))
-                       ->getValue();
-    } else {
-      IterCountV = cast<SCEVConstant>(Taken)->getValue();
-    }
-
-    // FIXME: This assume the form without loop-rotation
-    //    for (int = 0; i < 0; i+=1)
-    assert(IterCountV);
-    LoopMap[L] = new StagedLoop(L, IterCountV, LoopExitAtoms.lookup(L));
-  }
-
-  DenseMap<BasicBlock *, const GreenExpr *> BBPredicate;
-  BBPredicate[&Func->getEntryBlock()] =
-      getGreenBool(true); // Assume no branch to entry
-
-  // Build a temporary loop tree.
-  ReversePostOrderTraversal<Function *> RPOT(Func);
-  for (auto Block : RPOT) {
-    auto Loop = LI->getLoopFor(Block);
-    auto SLoop = LoopMap.lookup(Loop);
-    auto SBody = SLoop->Body;
-
-    bool isLoopHeader = Loop && Block == Loop->getHeader();
-
-    auto &Predicate = BBPredicate[Block];
-    int NPreds = 0;
-    if (!Predicate) {
-      Predicate = getGreenBool(false);
-      for (auto Pred : predecessors(Block)) {
-        if (isLoopHeader && Loop->contains(Pred)) {
-          // We assume that loops are the only reason for back-edges => no
-          // irreducible loops.
-          continue;
-        }
-
-        auto PredLoop = LI->getLoopFor(Pred);
-        CtrlAtom *PredAtom = nullptr;
-        if (PredLoop && PredLoop->isLoopExiting(Block)) {
-          assert(PredLoop);
-          // If this is exiting from a loop, take the loop's own predicate to
-          // ignore the exit-loop condition, i.e. assume that the loop will
-          // leave eventually.
-          // FIXME: This assumes we're exiting at most one loop.
-
-          // Find the number of the exit loop
-          SmallVector<BasicBlock *, 4> ExitBlocks;
-          PredLoop->getExitBlocks(ExitBlocks);
-          int ExitIdx = -1;
-          for (int i = 0; i < ExitBlocks.size(); i += 1) {
-            if (ExitBlocks[i] != Pred) {
-              ExitIdx = i;
-              break;
-            }
-          }
-          assert(ExitIdx >= 0);
-
-          auto ExitAtomSet = LoopExitAtoms[PredLoop];
-          PredAtom = ExitAtomSet->getAtom(ExitIdx);
-        } else {
-          auto BlockAtomSet = SuccessorAtoms[Pred];
-
-          if (auto Br = dyn_cast<BranchInst>(Pred->getTerminator())) {
-            int SuccIdx = -1;
-
-            for (int i = 0; i < Br->getNumSuccessors(); i += 1) {
-              if (Br->getSuccessor(i) == Block) {
-                // FIXME: This assumes that there can be only a single edge from
-                // predecessor to block (which is problably true because
-                // PHINodes cannot differentiate edges)
-                SuccIdx = i;
-                break;
-              }
-            }
-
-            PredAtom = BlockAtomSet->getAtom(SuccIdx);
-          } else
-            llvm_unreachable("Unhandled terminator");
-
-          NPreds += 1;
-        }
-        assert(PredAtom);
-        auto PredCond = getGreenCtrl(PredAtom);
-        Predicate = getGreenLogicOr(Predicate, PredCond);
-
-#if 0
-        auto PredLoop = LI->getLoopFor(Pred);
-        const GreenExpr *PredPredicate;
-
-        if (!isLoopHeader && (Loop != PredLoop)) {
-          // If this is exiting from a loop, take the loop's own predicate to
-          // ignore the exit-loop condition, i.e. assume that the loop will
-          // leave eventually.
-          // FIXME: Multiple loop exits => atoms.
-          PredPredicate = BBPredicate.lookup(LoopMap.lookup(PredLoop)->L->getHeader());
-        } else {
-          PredPredicate = BBPredicate.lookup(Pred);
-        }
-
-        assert(PredPredicate);
-
-
-        if (Loop && Loop->isLoopExiting(Pred)) {
-          // Ignore continue-loop conditions to avoid them to be propagated to
-          // the statement predicates; these are implicit by the surrounding
-          // loop
-          Predicate = getGreenLogicOr(Predicate, PredPredicate);
-          continue;
-        } else if (auto Br = dyn_cast<BranchInst>(Pred->getTerminator())) {
-          const GreenExpr *Cond;
-          if (Br->isUnconditional()) {
-            Cond = getGreenBool(true);
-          } else {
-            Cond = getGreenExpr(Br->getCondition());
-          }
-
-          auto AndCond = getGreenLogicAnd(PredPredicate, Cond);
-          Predicate = getGreenLogicOr(Predicate, AndCond);
-          continue;
-        }
-        llvm_unreachable("unimplemented terminator");
-#endif
-      }
-    }
-
-    if (isLoopHeader) {
-      auto ParentLoop = Loop->getParentLoop();
-      auto ParentSLoop = LoopMap.lookup(ParentLoop);
-      auto ParentSBody = ParentSLoop->Body;
-      ParentSBody->appendLoop(SLoop, Predicate, LoopExitAtoms.lookup(SLoop->L));
-    }
-
-    for (auto &I : *Block) {
-      if (I.isTerminator())
-        continue;
-      if (!I.mayHaveSideEffects())
-        continue;
-      auto Inst = getGreenInst(&I);
-      auto Stmt = createGreenStmt(Predicate, Predicate, {Inst}, nullptr);
-
-      SBody->appendStmt(Stmt, Predicate, nullptr);
-    }
-
-    auto Term = getGreenInst(Block->getTerminator());
-    auto TermStmt = createGreenStmt(Predicate, Predicate, {Term},
-                                    SuccessorAtoms.lookup(Block));
-    SBody->appendStmt(TermStmt, Predicate, SuccessorAtoms.lookup(Block));
-  }
-
-  OriginalRoot = createGreenRoot(RootBlock);
-  return OriginalRoot;
-  #endif
-}
-
-const GreenRoot *LoopOptimizerImpl::parallelize(const GreenRoot *Root) {
+const GreenRoot *parallelize(const GreenRoot *Root) {
   auto NewSeq = parallelizeSequence(Root->getSequence());
   if (NewSeq == Root->getSequence())
     return Root;
@@ -657,6 +583,7 @@ const GreenRoot *LoopOptimizerImpl::parallelize(const GreenRoot *Root) {
   NewRoot->setSequence(NewSeq);
   return NewRoot;
 }
+#endif
 
 void LoopOptimizerImpl::codegen(const GreenRoot *Root) {
   auto M = Func->getParent();
@@ -703,24 +630,9 @@ void LoopOptimizerImpl::codegen(const GreenRoot *Root) {
   NewFunc->setName(FuncName);
 }
 
-bool LoopOptimizerImpl::optimize() {
-  auto OrigTree = buildOriginalLoopTree();
 
-  return false;
-#if 0
-  auto OrigRedTree = RedRoot::Create(OrigTree);
-  OrigRedTree->findAllDefinitions();
 
-  auto OptimizedTree = parallelize(OrigTree);
-  if (OptimizedTree == OrigTree)
-    return false;
 
-  view(OptimizedTree);
-
-  codegen(OptimizedTree);
-  return true;
-#endif
-}
 
 template <> struct llvm::GraphTraits<const llvm::GreenNode *> {
   using GraphRef = const GreenNode *;
@@ -746,10 +658,9 @@ template <> struct llvm::GraphTraits<const llvm::GreenNode *> {
 };
 
 template <>
-struct llvm::DOTGraphTraits<const llvm::GreenNode *>
-    : public DefaultDOTGraphTraits {
-  using GraphRef = const GreenNode *;
-  using NodeRef = const GreenNode *;
+struct llvm::DOTGraphTraits<const Green *> : public DefaultDOTGraphTraits {
+  using GraphRef = const Green *;
+  using NodeRef = const Green *;
 
   DOTGraphTraits(bool isSimple = false) : DefaultDOTGraphTraits(isSimple) {}
 
@@ -757,18 +668,15 @@ struct llvm::DOTGraphTraits<const llvm::GreenNode *>
     SmallString<256> Result;
     raw_svector_ostream OS(Result);
     if (isSimple())
-      Node->printLine(OS);
+      Node->print(OS);
     else
-      Node->printText(OS);
+      Node->print(OS);
     return OS.str().str();
   }
 };
 
-void LoopOptimizerImpl::view(const GreenRoot *Root) {
-  ViewGraph<const GreenNode *>(Root, "lof", false, "Loop Hierarchy Graph");
-}
 
-LoopOptimizer *llvm::createLoopOptimizer(Function *Func, LoopInfo *LI,
-                                         ScalarEvolution *SE) {
+
+LoopOptimizer *llvm::createLoopOptimizer(Function *Func, LoopInfo *LI,  ScalarEvolution *SE) {
   return new LoopOptimizerImpl(Func, LI, SE);
 }

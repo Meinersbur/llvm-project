@@ -14,8 +14,7 @@ public:
   virtual void print(raw_ostream &OS) = 0;
 };
 
-LoopOptimizer *createLoopOptimizer(Function *Func, LoopInfo *LI,
-                                   ScalarEvolution *SE);
+LoopOptimizer *createLoopOptimizer(Function *Func, LoopInfo *LI, ScalarEvolution *SE);
 } // namespace llvm
 
 #endif /* LLVM_LOF_LOOPOPT_H */
