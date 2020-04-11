@@ -7,13 +7,6 @@ import lit.util
 import lit.worker
 
 
-# No-operation semaphore for supporting `None` for parallelism_groups.
-#   lit_config.parallelism_groups['my_group'] = None
-class NopSemaphore(object):
-    def acquire(self): pass
-    def release(self): pass
-
-
 class MaxFailuresError(Exception):
     pass
 class TimeoutError(Exception):
@@ -49,7 +42,7 @@ class Run(object):
 
         Upon completion, each test in the run will have its result
         computed. Tests which were not actually executed (for any reason) will
-        be given an UNRESOLVED result.
+        be marked SKIPPED.
         """
         self.failures = 0
 
@@ -58,34 +51,27 @@ class Run(object):
         timeout = self.timeout or one_week
         deadline = time.time() + timeout
 
-        self._execute(deadline)
-
-        # Mark any tests that weren't run as UNRESOLVED.
-        for test in self.tests:
-            if test.result is None:
-                test.setResult(lit.Test.Result(lit.Test.UNRESOLVED, '', 0.0))
+        try:
+            self._execute(deadline)
+        finally:
+            skipped = lit.Test.Result(lit.Test.SKIPPED)
+            for test in self.tests:
+                if test.result is None:
+                    test.setResult(skipped)
 
     def _execute(self, deadline):
-        semaphores = {
-            k: NopSemaphore() if v is None else
-            multiprocessing.BoundedSemaphore(v) for k, v in
-            self.lit_config.parallelism_groups.items()}
-
         self._increase_process_limit()
 
-        # Start a process pool. Copy over the data shared between all test runs.
-        # FIXME: Find a way to capture the worker process stderr. If the user
-        # interrupts the workers before we make it into our task callback, they
-        # will each raise a KeyboardInterrupt exception and print to stderr at
-        # the same time.
+        semaphores = {k: multiprocessing.BoundedSemaphore(v)
+                      for k, v in self.lit_config.parallelism_groups.items()
+                      if v is not None}
+
         pool = multiprocessing.Pool(self.workers, lit.worker.initialize,
                                     (self.lit_config, semaphores))
 
-        self._install_win32_signal_handler(pool)
-
         async_results = [
             pool.apply_async(lit.worker.execute, args=[test],
-                             callback=self._process_completed)
+                             callback=self.progress_callback)
             for test in self.tests]
         pool.close()
 
@@ -111,13 +97,6 @@ class Run(object):
                     if self.failures == self.max_failures:
                         raise MaxFailuresError()
 
-    def _process_completed(self, test):
-        # Avoid racing with the main thread, which is going to terminate the
-        # process pool soon.
-        if self.failures == self.max_failures:
-            return
-        self.progress_callback(test)
-
     # TODO(yln): interferes with progress bar
     # Some tests use threads internally, and at least on Linux each of these
     # threads counts toward the current process limit. Try to raise the (soft)
@@ -142,13 +121,3 @@ class Run(object):
             # Warn, unless this is Windows, in which case this is expected.
             if os.name != 'nt':
                 self.lit_config.warning('Failed to raise process limit: %s' % ex)
-
-    def _install_win32_signal_handler(self, pool):
-        if lit.util.win32api is not None:
-            def console_ctrl_handler(type):
-                print('\nCtrl-C detected, terminating.')
-                pool.terminate()
-                pool.join()
-                lit.util.abort_now()
-                return True
-            lit.util.win32api.SetConsoleCtrlHandler(console_ctrl_handler, True)
