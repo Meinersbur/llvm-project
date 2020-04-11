@@ -72,6 +72,7 @@ namespace llvm {
 
   template <> 
   struct GraphTraits<lof:: Green *> {
+    using GraphRef =lof::Green*;
     using NodeRef = lof::Green*;
 
     // Green as graph node; enumerate children
@@ -679,7 +680,25 @@ public:
   } // namespace lof
 
 
+#if 0
+  template <>
+  struct llvm::DOTGraphTraits<const Green *> : public DefaultDOTGraphTraits {
+    using GraphRef = const Green *;
+    using NodeRef = const Green *;
 
+    DOTGraphTraits(bool isSimple = false) : DefaultDOTGraphTraits(isSimple) {}
+
+    std::string getNodeLabel(NodeRef Node, GraphRef Graph) {
+      SmallString<256> Result;
+      raw_svector_ostream OS(Result);
+      if (isSimple())
+        Node->print(OS);
+      else
+        Node->print(OS);
+      return OS.str().str();
+    }
+  };
+#endif
 
 
 
