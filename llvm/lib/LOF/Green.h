@@ -13,6 +13,9 @@
 namespace llvm {
   namespace lof {
     class Green;
+    class GSymbol;
+    class GExpr;
+    class GOpExpr;
   }
   template<>
   struct GraphTraits<lof::Green*>;
@@ -20,6 +23,8 @@ namespace llvm {
 
 
   namespace lof {
+
+#if 0
     // We define our manual iterator to make it available for GraphTraits<lof:: Green *>::ChildIteratorType
     class  green_child_iterator :public iterator_facade_base<green_child_iterator, std::random_access_iterator_tag, Green*>
     {
@@ -60,6 +65,7 @@ namespace llvm {
         return Idx < That.Idx;
       }
     };
+#endif
   } // namespace lof
 
 
@@ -69,7 +75,8 @@ namespace llvm {
     using NodeRef = lof::Green*;
 
     // Green as graph node; enumerate children
-    using  ChildIteratorType =lof:: green_child_iterator;
+    //using  ChildIteratorType =lof:: green_child_iterator;
+    using  ChildIteratorType = ArrayRef<NodeRef>::iterator;
     static inline ChildIteratorType child_begin(NodeRef N);
     static inline ChildIteratorType child_end(NodeRef N);
 
@@ -89,9 +96,12 @@ namespace llvm {
     public:
       enum Kind {
         Unknown,
-        Nop,
+
+        Nop, // Effectively only does an assignment
+
         LLVMInst,
         LLVMFloating,
+
         False,
         True,
         Negation,
@@ -111,14 +121,18 @@ namespace llvm {
       Operation(Kind K, llvm::Value* Inst) : K(K), Inst(Inst) {  }
 
       Kind getKind() const { return K; }
+      Value* getLLVMInst() const {
+        assert(K == LLVMInst || K==LLVMFloating);
+        return Inst;
+      }
 
       bool isValid() const {
         return K != Unknown;
       }
-      bool isFloating() const {
+
+      bool isSpeculable() const {
         assert(isValid());
         return K != LLVMInst;
-
       }
 
       int getNumInputs() const {
@@ -127,6 +141,8 @@ namespace llvm {
           return 1;
         case LLVMInst:
         case LLVMFloating:
+          if (auto C = dyn_cast<Constant>(Inst))
+            return 0;
           return cast<llvm::Operator >(Inst)->getNumOperands();
         case False:
         case True:
@@ -163,7 +179,7 @@ namespace llvm {
         llvm_unreachable("Not implemented kind");
       }
 
-    };
+    }; // class Operation
 
 
 
@@ -179,7 +195,7 @@ namespace llvm {
       virtual bool isScalar() const  = 0;
     };
 
-
+#if 0
     class GUse;
 
     class GVal {
@@ -275,20 +291,170 @@ namespace llvm {
 
       bool isScalar() const override { return true; }
     };
+#endif
+
+
+
+    class GCommon {
+    public:
+      virtual ~GCommon() {  }
+
+    public:
+      enum Kind { Unknown, RefExpr, OpExpr, Stmt };
+      virtual Kind getKind() const = 0;
+      static bool classof(const GCommon *) { return true; }
+
+    public:
+      bool isExpr() const { return isa<GExpr>(this); }
+      bool isStmt() const { return getKind() == Stmt; }
+      virtual bool isInstruction() const { return false; }
+      virtual bool isContainer() const { return false;  }
+      virtual bool isLoop() const { return false;  }
+
+    public:
+      // TODO: whether something is read, killed or written depends on conditions; Current idea: DenseMap to conditions/GreenNode when this happens 
+      // TODO: Use SetVector
+      void determineScalars(DenseSet<GSymbol*>& Reads, DenseSet<GSymbol*>& Kills, DenseSet<GSymbol*>& Writes,  DenseSet<GSymbol*>& AllReferences );
+      
+#if 0
+      DenseSet<GSymbol*> reads() {
+        DenseSet<GSymbol*> Reads;
+        DenseSet<GSymbol*> Kills;
+        DenseSet<GSymbol*> Writes;
+        determineScalars(Reads, Kills,Writes );
+        return Reads;
+      }
+      DenseSet<GSymbol*> kills() {}
+      DenseSet<GSymbol*> writes() {}
+#endif
+    };
+
+
+
+    class GExpr : public GCommon {
+    public:
+      static bool classof(const GCommon* O) { auto K = O->getKind(); return (K == Kind::RefExpr) || (K == Kind::OpExpr); }
+
+    public:
+          virtual ~GExpr() {  }
+
+         // virtual bool isRef() const { return false;  }
+         // virtual bool isOp() const { return false;  }
+
+       static GSymbol* createRef(GSymbol* Sym) { assert(Sym); return Sym; }
+       static GOpExpr* createOp(Operation Op, ArrayRef<GExpr*> Args);
+    };
+
+    class GSymbol : public GExpr {
+    public:
+      Kind getKind() const override { return Kind::RefExpr; }
+      static bool classof(const GCommon* O) { return O->getKind() == GExpr::RefExpr; }
+
+    private:
+      Value* LLVMName;
+    public:
+      Value* getLLVMValue() const { return LLVMName; }
+      Type* getType() const { return LLVMName -> getType();  }
+ 
+    private:
+      GSymbol(Value* LLVMName):LLVMName(LLVMName) {}
+    public:
+      static GSymbol* create(Value* LLVMName) { return new GSymbol(LLVMName); }
+
+     // virtual bool isRef() const override { return true;  }
+
+
+      
+    };
+    using GRefExpr = GSymbol;
+
+
+    /// Speculable, single result operation
+    class GOpExpr : public GExpr {
+    private:
+      Operation Op;
+      SmallVector<GExpr*, 4> Args;
+
+    public:
+      const Operation& getOperation() const { return Op; }
+      const auto &args() const { return Args; }
+      const auto &getArguments() const { return Args; }
+
+    private:
+      GOpExpr(Operation Op, ArrayRef<GExpr*> Args) : Op(Op), Args(Args.begin(), Args.end()) {}
+    public:
+      static GOpExpr* create(Operation Op, ArrayRef<GExpr*> Args) {
+        assert(Op.isSpeculable());
+        assert(Op.getNumInputs() ==Args.size());
+        return new GOpExpr(Op, Args);
+      }
+
+    public:
+       Kind getKind() const override { return GExpr::OpExpr; }
+      static bool classof(const GCommon* O) { return O->getKind() == GExpr::OpExpr; }
+
+
+    public:
+      // TODO: It's a singleton, or more general: uniqueing
+      // TODO: move GExpr, how it's implemented doesn't matter
+      static GOpExpr* createTrueExpr() {
+        return createOp (Operation(Operation::True, nullptr), {});
+      }
+      static GOpExpr* createFalseExpr() {
+        return createOp(Operation(Operation::False, nullptr), {});
+      }
+
+      static GOpExpr* createConstExpr(Constant *Val) {
+        return createOp(Operation(Operation::LLVMFloating, Val), {});
+      }
+
+      static GOpExpr* createNotExpr(GExpr* Subexpr) {
+        return createOp(Operation(Operation::Negation, nullptr), {Subexpr});
+      }
+
+      // TOOD: List of operands
+      static GOpExpr* createConjunctionExpr(GExpr* LHS, GExpr* RHS) {
+        return createOp(Operation(Operation::Conjuction, nullptr), {LHS,RHS});
+      }
+      static GOpExpr* createDisjunctionExpr(GExpr* LHS, GExpr* RHS) {
+        return createOp(Operation(Operation::Disjunction, nullptr), {LHS,RHS});
+      }
+    };
 
 
 
 
-    class Green {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // TODO: rename Green to GStmt; rename GCommon to Green
+    class Green : public GCommon {
     public:
       friend class GreenBuilder;
       friend class green_child_iterator;
 
     private:
-      bool Staging = true;
-      bool IsFloating = false;
-      bool IsLooping = false;
+      //bool Staging = true;
+      //bool IsFloating = false;
 
+
+      // Expression: single, operation, speculable, single result
+      //bool IsExpr = false;
+
+
+#if 0
     private:
       struct ChildMeaning {
         friend class green_child_iterator;
@@ -307,12 +473,44 @@ namespace llvm {
         Green* getChild() const { return Child; }
       };
       SmallVector<ChildMeaning, 8> Children;
+#endif
 
+    private:
+      SmallVector < GExpr*, 8 > Conds;
+      SmallVector<Green*, 8> Children;
+
+
+    private:
+      Green(  ArrayRef<Green*> Children ,   ArrayRef<GExpr*> Conds ,  bool IsLooping ) : Children(Children.begin(), Children.end()), Conds(Conds.begin(), Conds.end()),  IsLoop(IsLooping)  {}
 
 
     private:
       Operation Op;
+      SmallVector <GExpr*, 1> Arguments;
+      SmallVector <GSymbol*, 1> Assignments;
      
+
+    public:
+      auto getArguments() const { return Arguments; }
+      auto getAssignments() const { return Assignments; }
+
+
+    private:
+      Green(Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments): Op(Op) , Arguments(Arguments.begin(), Arguments.end()), Assignments(Assignments.begin(), Assignments.end()){
+        validate();
+      }
+    public:
+     static  Green* createInstruction(Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments) {
+        return new Green(Op, Arguments, Assignments);
+      }
+      bool isInstruction() const override  { return Op.isValid(); }
+
+
+
+
+
+    private:
+      //SmallVector<GSymbol*, 4> OpArgs;
 
       // DontOptimize, DontCanonicalize
 
@@ -323,14 +521,14 @@ namespace llvm {
       // Re-execution condition (for Loop)
       Green* BackedgePred = nullptr;
 
-
+#if 0
       SmallVector<GVal*, 8> Arguments;
       SmallVector<GUse*, 8> Results;
-
+#endif
 
       //SmallVector<Green*, 8> Children;
 
-
+#if 0
       int NumInputs;
       //SmallVector<Dep*, 8> InputConsumers;
 
@@ -338,54 +536,38 @@ namespace llvm {
 
       int NumOutputs;
       //SmallVector<Dep*, 8> OutputProducers;
+#endif
 
 
-      // An operation
-      Green(Operation Op) : 
-        Op(Op), NumInputs(Op.getNumInputs()), NumOutputs(Op.getNumOutputs()), IsFloating(Op.isFloating())
-      { 
-        validate();
-      }
 
-      // A sequence of stmts
-      Green() { 
-      }
-
+#if 0
       static Green* createStaged() {
         auto Result = new Green();
         Result->Staging = true;
         return Result;
       }
-
+#endif
 
     public:
       Operation& getOperation() {
         return Op;
       }
 
-      // TODO: It's a singleton
-      static Green* createTrueExpr() {
-        return new Green(Operation(Operation::True, nullptr));
-      }
-      static Green* createFalseExpr() {
-        return new Green(Operation(Operation::False, nullptr));
-      }
-
-      static Green* createConstExpr(Constant *Val) {
-        return new Green(Operation(Operation::LLVMFloating,  Val));
-      }
-
-
 
 
 #if 0
-
       static Green* createExpr(Operation Op, ArrayRef<Green*> Ops) {
         assert(Op.isFloating());
         return new Green(Op, Ops);
       }
 #endif
+      public:
+      Kind getKind() const { return GCommon::Stmt ; }
+      static bool classof(const GCommon* O) { return O->getKind() == GCommon::Stmt; }
+
+
       void validate() const {
+#if 0
         if (Staging)
           return;
 
@@ -412,19 +594,21 @@ namespace llvm {
 
         if (isOperation()) {
           assert(Op.isValid());
-          assert(NumInputs == Op.getNumInputs());
-          assert(NumIntermediate==0 );
-          assert(NumOutputs == Op.getNumOutputs());
+          //assert(NumInputs == Op.getNumInputs());
+          //assert(NumIntermediate==0 );
+          //assert(NumOutputs == Op.getNumOutputs());
           assert(Children.empty());
         } else {
           assert(Op.getKind() == Operation::Unknown);
         }
+#endif
       }
 
+#if 0
       static Green* createOperation(Operation Op) {
         return new Green(Op);
       }
-
+#endif
 
     //  static Green* createLoop(int NumInputs, ArrayRef<Dep*> InputConsumers, int NumIntermediate, int NumOutputs, ArrayRef<GreenMeaning> Children);
     //  static Green* createFunc(int NumInputs, ArrayRef<Dep*> InputConsumers, int NumIntermediate, int NumOutputs, ArrayRef<GreenMeaning> Children);
@@ -435,6 +619,7 @@ namespace llvm {
       }
 #endif
 
+#if 0
       /// Operation is a leaf in the LOF.
       bool isOperation() const { return Op.isValid(); }
 
@@ -443,12 +628,17 @@ namespace llvm {
 
       /// A statement needs to the root or someone's child
       bool isStmt() const { return !IsFloating ; }
+#endif
 
       /// A loop is a stmt that executes its children multiple times
-      bool isLoop() const { return IsLooping; }
-      //bool isContainer() const { return IsContainer; }
+    private:
+      bool IsLoop = false;
+public:
+      bool isLoop() const override { return IsLoop; }
+      bool isContainer() const override { return ! Op.isValid(); }
 
 
+#if 0
       int getNumInputs() const {
         return NumInputs;
       }
@@ -456,13 +646,15 @@ namespace llvm {
         return NumOutputs;
       }
 
-
+      
       GVal* getArgument(int ArgIdx) const {
         return Arguments [0];
       }
+#endif
 
      auto children() const {
-       return make_range( green_child_iterator(this, 0), green_child_iterator(this, Children.size())  );
+      // return make_range( green_child_iterator(this, 0), green_child_iterator(this, Children.size())  );
+       return ArrayRef<Green*>(Children.data(), Children.size()  );
       }
 
       auto descententsDepthFirst() {
@@ -477,10 +669,11 @@ namespace llvm {
       void print(raw_ostream& OS) const;
     };
 
-
+#if 0
     Green* green_child_iterator ::operator*() const {
       return Parent->Children[Idx].Child;
     }
+#endif
 
 
   } // namespace lof

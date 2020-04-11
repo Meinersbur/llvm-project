@@ -1,6 +1,7 @@
 #include "Green.h"
 //#include "GreenBuilder.h"
 
+using namespace llvm;
 using namespace llvm::lof;
 
 namespace llvm {
@@ -10,6 +11,47 @@ namespace llvm {
 
   }
 }
+
+
+GOpExpr* GExpr:: createOp(Operation Op, ArrayRef<GExpr*> Args) { 
+  return GOpExpr::create(Op,Args);
+}
+
+
+
+static void visitDetermineScalar(GCommon* G, DenseSet<GSymbol*>& Reads, DenseSet<GSymbol*>& Kills, DenseSet<GSymbol*>& Writes,  DenseSet<GSymbol*>& AllReferences) {
+  if (auto Ref = dyn_cast<GSymbol>(G)) {
+    Reads.insert(Ref);
+    AllReferences.insert(Ref);
+  } else if (auto E = dyn_cast<GOpExpr>(G)) {
+    for (auto A : E->args())
+      visitDetermineScalar(A, Reads, Kills, Writes,AllReferences);
+  } else if (G->isInstruction()) {
+    auto Stmt = cast<Green>(G);
+    auto Op = Stmt->getOperation();
+    for (auto A : Stmt->getArguments()) {
+      visitDetermineScalar(A, Reads, Kills, Writes,AllReferences);
+    }
+    for (auto A : Stmt->getAssignments()) {
+      Writes.insert(A);
+      // TODO: depending on conditions, also kills
+      AllReferences.insert(A);
+    }
+  }  else if (G->isStmt()) {
+    auto Stmt = cast<Green>(G);
+    for (auto C : Stmt->children()) 
+      visitDetermineScalar(C, Reads, Kills, Writes,AllReferences);
+ 
+  }  else 
+    llvm_unreachable("unhandled");
+}
+
+void GCommon:: determineScalars(DenseSet<GSymbol*>& Reads, DenseSet<GSymbol*>& Kills, DenseSet<GSymbol*>& Writes,  DenseSet<GSymbol*>& AllReferences) {
+  visitDetermineScalar(this, Reads, Kills, Writes,  AllReferences);
+}
+
+
+
 
 #if 0
  Green* Green::createNotExpr(Green* Subexpr) {

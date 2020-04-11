@@ -30,9 +30,12 @@ namespace llvm {
 
     class GreenBuilder {
     private:
-      Green* Staged =  Green::createStaged();
+     // Green* Staged =  Green::createStaged();
 
-      DenseMap<GVal*, GUse*> LastUses;
+      //DenseMap<GVal*, GUse*> LastUses;
+
+      SmallVector <GExpr*, 8 > Conds;
+      SmallVector <Green*,8> Children;
 
 # if 0
       bool IsFloating = true;
@@ -48,6 +51,7 @@ namespace llvm {
 #endif
   
     private :
+#if 0
        void registerUse(GUse *U ) {
          auto Def = U->getDef();
          auto& LastUse = LastUses[Def];
@@ -58,9 +62,10 @@ namespace llvm {
          }
          LastUse = U;
        }
-
+#endif
 
     public:
+#if 0
       static Green* buildOpExpr(ArrayRef <Green*> Subexprs, Operation::Kind K) {
         GreenBuilder Builder;
 
@@ -100,8 +105,9 @@ namespace llvm {
       static Green* buildDisjunctionExpr(Green* LHS, Green* RHS) {
         return buildBinaryOpExpr( LHS,RHS, Operation::Disjunction );
       }
+#endif
 
-
+#if 0
       GVal* addArgument(Value *LLVMVal) {
         auto Arg = GVal::createArgument(Staged, Staged->Arguments.size(), LLVMVal);
         Staged->Arguments.push_back( Arg );
@@ -113,7 +119,14 @@ namespace llvm {
         Staged->Results.push_back(Ret);
         return Ret;
       }
+#endif
 
+
+     void addStmt(GExpr * Cond , Green* SubStmt) {
+       Conds.push_back(Cond);
+       Children.push_back(SubStmt);
+      }
+#if 0
       std::vector<GVal*> addStmt(Green* SubStmt, ArrayRef<GVal*> Operands) {
         if (SubStmt->isExpr()) {
           // TODO: These do not need to be added as child, but how do we reference its GVal then?
@@ -143,9 +156,13 @@ namespace llvm {
         Staged->Children.push_back( Green::ChildMeaning( SubStmt, ChildIdx,  Inputs , Outputs ) );
         return { Outputs.begin(), Outputs.end() };
       }
+#endif
 
-      std::vector<GVal*> addOperation(Operation Op, ArrayRef<GVal*> Operands) {
-       return addStmt(Green::createOperation(Op), Operands);
+
+     Green* addInstruction( GExpr*Cond,  Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments) {
+       auto Result = Green::createInstruction(Op,Arguments, Assignments );
+        addStmt(Cond,Result);
+        return Result;
       }
 
 
@@ -167,7 +184,8 @@ namespace llvm {
       }
 
       private:
-        Green* finish(bool IsLooping) {
+        Green* finish( bool IsLooping) {
+         return  new Green(   Children, Conds, IsLooping );
 #if 0
           SmallVector< Dep*, 8 > InputConsumers;
 
@@ -197,12 +215,15 @@ namespace llvm {
           auto Result = new Green (InputConsumers, 0, OutputProducers, Meanings, IsFloating, IsLooping);
           assert(Result->isStmt());
 #endif
+
+#if 0
           auto Result = Staged;
           Staged = nullptr;
 
           Result->Staging = false;
           Result->validate();
           return Staged;
+#endif
         }
     };
 
