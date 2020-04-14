@@ -2,6 +2,7 @@
 #define LLVM_LOF_GREEN_BUILDER_H
 
 #include "Green.h"
+#include "LOFUtils.h"
 
 namespace llvm {
   namespace lof {
@@ -37,7 +38,7 @@ namespace llvm {
       SmallVector <GExpr*, 8 > Conds;
       SmallVector <Green*,8> Children;
 
-# if 0
+#if 0
       bool IsFloating = true;
 
       SmallVector<OutputSlot*, 8> InputSlots;
@@ -159,8 +160,8 @@ namespace llvm {
 #endif
 
 
-     Green* addInstruction( GExpr*Cond,  Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments) {
-       auto Result = Green::createInstruction(Op,Arguments, Assignments );
+     Green* addInstruction( GExpr*Cond,  Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments, Instruction *OrigInst) {
+       auto Result = Green::createInstruction(Op,Arguments, Assignments, OrigInst );
         addStmt(Cond,Result);
         return Result;
       }
@@ -174,59 +175,49 @@ namespace llvm {
 #endif
 
 
-      Green* createStmt() {
-        return finish(false);
+      Green* createStmt(Instruction *OrigBegin, Instruction *OrigEnd) {
+        return finish( GOpExpr::createTrueExpr() , false, OrigBegin,OrigEnd);
       }
+
 
       // TODO: Parameters defining number of iterations
-      Green* createLoop() {
-        return finish(true);
+      Green* createLoop(GExpr *ExecCond, Instruction *OrigBegin, Instruction *OrigEnd) {
+        return finish(ExecCond,true,OrigBegin,OrigEnd);
       }
 
+
       private:
-        Green* finish( bool IsLooping) {
-         return  new Green(   Children, Conds, IsLooping );
-#if 0
-          SmallVector< Dep*, 8 > InputConsumers;
+        Optional<SmallVector<GSymbol*,4>> ScalarReads =None;
+        public:
+      void setScalarReads(ArrayRef<GSymbol*> Reads) {
+        ScalarReads .emplace( Reads.begin(), Reads.end() );
+      }
 
-          SmallVector< Dep*, 8 > OutputProducers;
-          for (int i = 0; i < OutputSlots.size(); i+=1) {
-            auto Def = Connections.lookup(OutputSlots[i]);
-            //OutputProducers.push_back(new Dep(Children[ Def->ChildIdx], Def->OutputIdx, nullptr, i ));
+           private:
+             Optional<SmallVector<GSymbol*,4>> ScalarKills =None;
+        public:
+          void setScalarKills(ArrayRef<GSymbol*> Kills) {
+            ScalarKills .emplace( Kills.begin(), Kills.end());
           }
 
 
-          //SmallVector<GreenMeaning, 8> Meanings;
-          //Meanings.reserve( Children.size() );
-          for (int i = 0; i < Children.size(); i += 1) {
-            auto Child = Children[i];
-
-            SmallVector< Dep*, 8 > InputMeanings;
-            for (int j = 0; j < Child->getNumInputs(); j += 1) {
-              auto Def = Connections.lookup(ChildSlots[i].Inputs[j]  );
-              //InputMeanings.push_back(new Dep( Children[Def->ChildIdx], Def->OutputIdx, Child, i  ));
-            }
-
-            SmallVector< Dep*, 8 > OutputMeanings;
-            //Meanings.push_back(GreenMeaning(Children[i], InputMeanings, OutputMeanings));
+        private:
+          Optional<SmallVector<GSymbol*,4>> ScalarWrites =None;
+        public:
+          void setScalarWrites(ArrayRef<GSymbol*> Writes) {
+            ScalarWrites .emplace( Writes.begin(), Writes.end());
           }
 
 
-          auto Result = new Green (InputConsumers, 0, OutputProducers, Meanings, IsFloating, IsLooping);
-          assert(Result->isStmt());
-#endif
+      private:
+        Green* finish(GExpr *ExecCond, bool IsLooping, Instruction *OrigBegin, Instruction *OrigEnd) {
 
-#if 0
-          auto Result = Staged;
-          Staged = nullptr;
-
-          Result->Staging = false;
-          Result->validate();
-          return Staged;
-#endif
+         return new Green(ExecCond, Children, Conds, IsLooping, OrigBegin, OrigEnd, 
+           make_optional_ArrayRef<GSymbol*>(ScalarReads),
+           make_optional_ArrayRef<GSymbol*>(ScalarKills),
+           make_optional_ArrayRef<GSymbol*>(ScalarKills));
         }
     };
-
 
 
   } // namespace lof

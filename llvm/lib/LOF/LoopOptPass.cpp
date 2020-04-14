@@ -35,6 +35,7 @@ private:
 public:
   static char ID;
 
+  // TODO: Make a SCC pass since it may outline functions
   LoopOptimizationFramework() : FunctionPass(ID) {
     initializeLoopOptimizationFrameworkPass(*PassRegistry::getPassRegistry());
   }

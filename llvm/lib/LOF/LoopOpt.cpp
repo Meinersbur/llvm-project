@@ -54,18 +54,18 @@ public:
   bool optimize() override {
     auto OrigTree = buildOriginalLoopTree();
 
-    emitAsFunc(OrigTree);
+ 
 
-    return false;
+    GreenCodeGen CG(OrigTree,Func->getParent(), Func->getContext());
+    CG.replaceOrig(OrigTree );
+
+    return true;
   }
 
 
   
 
-  Function* emitAsFunc(Green* Root) {
-    GreenCodeGen CG(Root,Func->getParent(), Func->getContext());
-    return CG.emitAsFunction();
-  }
+
 
   void view( Green* Root) {
     ViewGraph< Green *>(Root, "lof", false, "Loop Hierarchy Graph");

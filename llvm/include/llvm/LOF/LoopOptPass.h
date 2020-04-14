@@ -4,9 +4,7 @@
 #include "llvm/PassRegistry.h"
 
 namespace llvm {
-
-void initializeLoopOptimizationFrameworkPass(PassRegistry &);
-
+  void initializeLoopOptimizationFrameworkPass(PassRegistry &);
 }
 
 #endif /* LLVM_LOF_LOOPOPTPASS_H */

@@ -8,6 +8,8 @@
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/BreadthFirstIterator.h"
 #include "llvm/ADT/iterator.h"
+#include "llvm/ADT/SetVector.h"
+#include "LOFUtils.h"
 
 
 namespace llvm {
@@ -16,6 +18,7 @@ namespace llvm {
     class GSymbol;
     class GExpr;
     class GOpExpr;
+    class GCommon;
   }
   template<>
   struct GraphTraits<lof::Green*>;
@@ -24,15 +27,14 @@ namespace llvm {
 
   namespace lof {
 
-#if 0
     // We define our manual iterator to make it available for GraphTraits<lof:: Green *>::ChildIteratorType
     class  green_child_iterator :public iterator_facade_base<green_child_iterator, std::random_access_iterator_tag, Green*>
     {
-      const Green* Parent;
+      const GCommon* Parent;
       size_t Idx;
     public:
       green_child_iterator() = default;
-      green_child_iterator( const Green* Parent, size_t Idx) : Parent(Parent), Idx(Idx) {}
+      green_child_iterator(const GCommon* Parent, size_t Idx) : Parent(Parent), Idx(Idx) {}
       green_child_iterator(const green_child_iterator& That) : Parent(That.Parent), Idx(That.Idx) {}
 
       green_child_iterator& operator=(const green_child_iterator& That) {
@@ -41,7 +43,7 @@ namespace llvm {
         return *this;
       }
 
-      Green* operator*() const;
+      GCommon* operator*() const;
 
       bool operator==(const green_child_iterator& That) const {
         return Parent == That.Parent && Idx == That.Idx;
@@ -65,7 +67,7 @@ namespace llvm {
         return Idx < That.Idx;
       }
     };
-#endif
+
   } // namespace lof
 
 
@@ -109,6 +111,9 @@ namespace llvm {
         Conjuction,
         Disjunction,
 
+        // Should work with normalized loop induction variables.
+        AddRecExpr,
+
         Last = Disjunction
       };
 
@@ -117,9 +122,68 @@ namespace llvm {
 
       // Using this only to avoid duplicating the representation of an LLVM instruction. It's SSA value and operands have no meaning in the green DAG.
       llvm::Value* Inst = nullptr;
+
+
+
+      void assertOK() const {
+        switch (K) {
+        case Operation::Unknown:
+          assert(Inst==nullptr);
+          return;
+        case Operation::Nop:
+          assert(Inst==nullptr); // There is no "nop" LLVM instruction
+          break;
+        case Operation::LLVMFloating:
+        case Operation::LLVMInst:
+          assert(Inst);
+          assert(PointerType::isValidElementType( Inst->getType()) && "Must be allocatable");
+          assert(!isa<PHINode>(Inst )&& "PHIs are not regular operation");
+          if (auto I = dyn_cast <Instruction>(Inst)) {
+            assert( !cast<Instruction>(I)->isTerminator() && "Operations don't cover control-flow");
+          }
+          break;
+        case Operation::True:
+          if (Inst) {
+            auto C = cast<ConstantInt>(Inst);
+            assert(C->getType()->isIntegerTy(1));
+            assert(C->isOne());
+          }
+            break;
+        case Operation::False:
+          if (Inst) {
+            auto C = cast<ConstantInt>(Inst);
+            assert(C->getType()->isIntegerTy(1));
+            assert(C->isZero());
+          }
+          break;
+        case Operation::Negation:
+          assert(!Inst);
+          break;
+        case Operation::Conjuction:
+          if (Inst) {
+            auto O = cast<BinaryOperator >(Inst);
+            assert(O->getType()->isIntegerTy(1));
+            assert(O->getOpcode() == Instruction::And );
+          }
+          break;
+        case Operation::Disjunction:
+          if (Inst) {
+            auto O = cast<BinaryOperator >(Inst);
+            assert(O->getType()->isIntegerTy(1));
+            assert(O->getOpcode() == Instruction::Or );
+          }
+          break;
+          default:
+            llvm_unreachable("Not supported kind?!?");
+        }
+      }
+
+
     public:
       Operation() {  }
-      Operation(Kind K, llvm::Value* Inst) : K(K), Inst(Inst) {  }
+      Operation(Kind K, llvm::Value* Inst) : K(K), Inst(Inst) { 
+        assertOK();
+      }
 
       Kind getKind() const { return K; }
       Value* getLLVMInst() const {
@@ -153,7 +217,7 @@ namespace llvm {
         case Conjuction:
         case Disjunction:
           return 2;
-        case Unknown:
+        default:
           llvm_unreachable("Don't know this operation");
         }
         llvm_unreachable("Not implemented kind");
@@ -174,7 +238,7 @@ namespace llvm {
         case Conjuction:
         case Disjunction:
           return 1;
-        case Unknown:
+        default:
           llvm_unreachable("Don't know this operation");
         }
         llvm_unreachable("Not implemented kind");
@@ -195,104 +259,6 @@ namespace llvm {
 
       virtual bool isScalar() const  = 0;
     };
-
-#if 0
-    class GUse;
-
-    class GVal {
-      friend class GreenBuilder;
-
-      enum Kind {
-        Unknown,
-
-        // Arguments are the input slots that can be used as values by the children inside a green node
-        Argument,
-
-        // Outputs are definitions of values by children to be used inside the green node.
-        Output,
-
-        // Expressions (e.g. constants) are not added as children of a green node; their time of evaluation do not matter as long a their scalar dependencies are fulfilled.
-        // TODO: not used atm.
-        Expr,
-      };
-
-    private:
-      Green* Parent;
-      Kind K;
-      GUse* FirstUse=nullptr;
-
-      // Argument kind
-      int ArgumentIdx=-1;
-      Value* LLVMVal=nullptr;
-
-      // Output Kind
-      int ChildIdx=-1;
-      int OutputIdx=-1;
-
-      GVal(Green* Parent, int ArgumentIdx, Value* LLVMVal) : Parent(Parent), K(Argument) , ArgumentIdx(ArgumentIdx), LLVMVal(LLVMVal) {}
-      GVal(Green* Parent, int ChildIdx,   int OutputIdx ) : Parent(Parent), K(Output) , LLVMVal(LLVMVal) {}
-    public:
-     static  GVal* createArgument(Green* Parent, int ArgumentIdx, Value* LLVMVal ) {
-        return new GVal(Parent, ArgumentIdx, LLVMVal);
-      }
-
-    static  GVal* createOutput(Green* Parent,int ChildIdx,   int OutputIdx  ) {
-        return new GVal(Parent, ChildIdx, OutputIdx);
-      }
-
-    Value* getLLVMVal() const {
-      assert(K==Argument);
-      return LLVMVal;
-    }
-
-    };
-
-    class GUse : Dep {
-      friend class GreenBuilder;
-
-      enum Kind {
-        Unknown,
-        Result,
-        Input,
-      };
-
-    private:
-      GVal* Def;
-      Kind K;
-      GUse* NextUse=nullptr;
-
-      // Result kind
-      int ResultIdx=-1;
-      Instruction* LLVMVal=nullptr;
-
-      // Input kind
-      int ChildIdx=-1;
-      int InputIdx=-1;
-
-      GUse(GVal* Def, int ResultIdx, Instruction *LLVMVal) : Def(Def), K(Result), ResultIdx(ResultIdx), LLVMVal(LLVMVal) {}
-      GUse(GVal* Def, int ChildIdx,int InputIdx) : Def(Def), K(Result), ChildIdx(ChildIdx), InputIdx(InputIdx) {}
-    public:
-     static  GUse* createResult(GVal* Def , int ResultIdx, Instruction *LLVMVal) {
-        return new GUse(Def, ResultIdx, LLVMVal);
-      }
-
-    static   GUse* createInput(GVal* Def , int ChildIdx,  int InputIdx ) {
-        return new GUse(Def, ChildIdx, InputIdx);
-      }
-
-
-    GVal* getDef() const {
-      return Def;
-    }
-
-    Instruction* getLLVMVal() const {
-      assert(K==Result);
-      return LLVMVal;
-    }
-
-      bool isScalar() const override { return true; }
-    };
-#endif
 
 
 
@@ -353,19 +319,38 @@ namespace llvm {
 
     private:
       Value* LLVMName;
+
+      // TODO: Define exactly what this means
+      bool IsScalar =true;
+
+      // Number of subscript dimensions
+      // For Arrays: Need the size of each dimension
+      // For Scalar: Number of loop surrounding the definition of the scalar; can be indexed by `last`, or surrounding loop counter value of the definition we want to use
+      int Dims = 0;
+
     public:
       Value* getLLVMValue() const { return LLVMName; }
-      Type* getType() const { return LLVMName -> getType();  }
- 
+
+
     private:
-      GSymbol(Value* LLVMName):LLVMName(LLVMName) {}
+      std::string Name;
     public:
-      static GSymbol* create(Value* LLVMName) { return new GSymbol(LLVMName); }
+      StringRef getName() const { return Name; }
 
-     // virtual bool isRef() const override { return true;  }
+    private:
+      Type* Ty;
+    public:
+      Type* getType() const { return Ty; }
 
 
-      
+    private:
+      GSymbol(StringRef Name , Value* LLVMName, Type *Ty): Name(Name), LLVMName(LLVMName) , Ty(Ty) {
+        assert(Ty);
+        assert(PointerType::isValidElementType(Ty) );
+      }
+    public:
+      static GSymbol* createLLVM(Value* LLVMName) { return new GSymbol(LLVMName->getName(), LLVMName, LLVMName->getType() ); }
+      static GSymbol* createFromScratch(StringRef  Name, Type *Ty) { return new GSymbol(Name, nullptr, Ty); }
     };
     using GRefExpr = GSymbol;
 
@@ -433,13 +418,6 @@ namespace llvm {
 
 
 
-
-
-
-
-
-
-
     // TODO: rename Green to GStmt; rename GCommon to Green
     class Green : public GCommon {
     public:
@@ -451,38 +429,63 @@ namespace llvm {
       //bool IsFloating = false;
 
 
-      // Expression: single, operation, speculable, single result
-      //bool IsExpr = false;
+  
 
 
-#if 0
+
+      // TOOD: Generalize marking regions in the original IR.
     private:
-      struct ChildMeaning {
-        friend class green_child_iterator;
-      
-        Green* Child;
-        int ChildIdx;
+      Instruction* OrigBegin = nullptr;
+      Instruction* OrigEnd   = nullptr;
+      Loop* OrigLoop = nullptr;
+    public:
+      std::pair<Instruction*, Instruction*> getOrigRange() const { return { OrigBegin, OrigEnd }; }
+      Loop* getOrigLoop() const { return OrigLoop; }
 
-        SmallVector<GUse*, 4> InputMeaning;
-        SmallVector<GVal*, 2> OutputMeaning;
 
-    
-        ChildMeaning(Green *Child, int ChildIdx, ArrayRef<GUse*> InputMeaning, ArrayRef<GVal*> OutputMeaning): 
-          Child(Child), ChildIdx(ChildIdx), InputMeaning(InputMeaning.begin(), InputMeaning.end()), OutputMeaning(OutputMeaning.begin(), OutputMeaning.end()) {
-        }
 
-        Green* getChild() const { return Child; }
-      };
-      SmallVector<ChildMeaning, 8> Children;
-#endif
 
     private:
-      SmallVector < GExpr*, 8 > Conds;
+      /// Loop: Condition for executing first / another iterations 
+      /// Stmt (Instruction or Sequence): Not yet used, but might also be used as execution condition (in addition to the parent's ChildConds)
+      GExpr* ExecCond=nullptr;
+    public:
+      GExpr* getExecCond() const {
+        return ExecCond;
+      }
+
+
+
+
+    private:
+      Optional< SmallSetVector<GSymbol*, 4> > ScalarReads;
+      Optional< SmallSetVector<GSymbol*, 4>> ScalarKills;
+      Optional< SmallSetVector<GSymbol*, 4>> ScalarWrites;
+    public:
+      const auto& getScalarReads() const { return ScalarReads.getValue(); }
+      const auto& getScalarKills() const { return ScalarKills.getValue() ;  }
+      const auto& getScalarWrites() const { return ScalarWrites.getValue() ;   }
+      bool hasComputedScalars() const {
+        return ScalarReads.hasValue() && ScalarKills.hasValue() && ScalarWrites.hasValue();
+      }
+
+    private:
+      SmallVector<GExpr*, 8 > ChildConds;
       SmallVector<Green*, 8> Children;
 
 
     private:
-      Green(  ArrayRef<Green*> Children ,   ArrayRef<GExpr*> Conds ,  bool IsLooping ) : Children(Children.begin(), Children.end()), Conds(Conds.begin(), Conds.end()),  IsLoop(IsLooping)  {}
+      Green(GExpr *ExecCond, ArrayRef<Green*> Children ,   ArrayRef<GExpr*> Conds ,  bool IsLooping, Instruction *OrigBegin, Instruction *OrigEnd, Optional< ArrayRef<GSymbol*>> ScalarReads,  Optional< ArrayRef<GSymbol*>> ScalarKills, Optional< ArrayRef<GSymbol*>> ScalarWrites) : ExecCond(ExecCond), Children(Children.begin(), Children.end()), ChildConds(Conds.begin(), Conds.end()),  IsLoop(IsLooping) , OrigBegin(OrigBegin), OrigEnd(OrigEnd) {
+        if (ScalarReads.hasValue()) {
+          this->  ScalarReads.emplace( ScalarReads.getValue().begin() , ScalarReads.getValue().end());
+        }
+        if (ScalarKills.hasValue()) {
+          this->  ScalarKills.emplace( ScalarKills.getValue().begin() , ScalarKills.getValue().end());
+        }
+        if (ScalarWrites.hasValue()) {
+          this->  ScalarWrites.emplace( ScalarWrites.getValue().begin() , ScalarWrites.getValue().end());
+        }
+      }
 
 
     private:
@@ -490,19 +493,18 @@ namespace llvm {
       SmallVector <GExpr*, 1> Arguments;
       SmallVector <GSymbol*, 1> Assignments;
      
-
     public:
       auto getArguments() const { return Arguments; }
       auto getAssignments() const { return Assignments; }
 
 
     private:
-      Green(Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments): Op(Op) , Arguments(Arguments.begin(), Arguments.end()), Assignments(Assignments.begin(), Assignments.end()){
-        validate();
+      Green(Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments,Instruction *OrigBegin, Instruction *OrigEnd, Loop *OrigLoop): Op(Op) , Arguments(Arguments.begin(), Arguments.end()), Assignments(Assignments.begin(), Assignments.end()), OrigBegin(OrigBegin), OrigEnd(OrigEnd), OrigLoop(OrigLoop) {
+        assertOK();
       }
     public:
-     static  Green* createInstruction(Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments) {
-        return new Green(Op, Arguments, Assignments);
+     static  Green* createInstruction(Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments,Instruction *OrigInst) {
+        return new Green(Op, Arguments, Assignments,OrigInst,OrigInst->getNextNode(),nullptr);
       }
       bool isInstruction() const override  { return Op.isValid(); }
 
@@ -510,64 +512,21 @@ namespace llvm {
 
 
 
-    private:
-      //SmallVector<GSymbol*, 4> OpArgs;
+  
 
-      // DontOptimize, DontCanonicalize
-
-
-      // Execution Predicate (for Stmt,Loop)
-      Green* ExecPred = nullptr;
-
-      // Re-execution condition (for Loop)
-      Green* BackedgePred = nullptr;
-
-#if 0
-      SmallVector<GVal*, 8> Arguments;
-      SmallVector<GUse*, 8> Results;
-#endif
-
-      //SmallVector<Green*, 8> Children;
-
-#if 0
-      int NumInputs;
-      //SmallVector<Dep*, 8> InputConsumers;
-
-      int NumIntermediate = 0; // Don't need?
-
-      int NumOutputs;
-      //SmallVector<Dep*, 8> OutputProducers;
-#endif
-
-
-
-#if 0
-      static Green* createStaged() {
-        auto Result = new Green();
-        Result->Staging = true;
-        return Result;
-      }
-#endif
-
+   
     public:
       Operation& getOperation() {
         return Op;
       }
 
 
-
-#if 0
-      static Green* createExpr(Operation Op, ArrayRef<Green*> Ops) {
-        assert(Op.isFloating());
-        return new Green(Op, Ops);
-      }
-#endif
-      public:
+    public:
       Kind getKind() const { return GCommon::Stmt ; }
       static bool classof(const GCommon* O) { return O->getKind() == GCommon::Stmt; }
 
 
-      void validate() const {
+      void assertOK() const {
 #if 0
         if (Staging)
           return;
@@ -605,31 +564,6 @@ namespace llvm {
 #endif
       }
 
-#if 0
-      static Green* createOperation(Operation Op) {
-        return new Green(Op);
-      }
-#endif
-
-    //  static Green* createLoop(int NumInputs, ArrayRef<Dep*> InputConsumers, int NumIntermediate, int NumOutputs, ArrayRef<GreenMeaning> Children);
-    //  static Green* createFunc(int NumInputs, ArrayRef<Dep*> InputConsumers, int NumIntermediate, int NumOutputs, ArrayRef<GreenMeaning> Children);
-
-#if 0
-      static Green* createSequence(ArrayRef <Green*> Insts) {
-        return new Green(Operation(), Insts);
-      }
-#endif
-
-#if 0
-      /// Operation is a leaf in the LOF.
-      bool isOperation() const { return Op.isValid(); }
-
-      /// An expression is not anyone's child. It cannot have side-effects and must be speculable.
-      bool isExpr() const { return IsFloating; }
-
-      /// A statement needs to the root or someone's child
-      bool isStmt() const { return !IsFloating ; }
-#endif
 
       /// A loop is a stmt that executes its children multiple times
     private:
@@ -639,19 +573,6 @@ public:
       bool isContainer() const override { return ! Op.isValid(); }
 
 
-#if 0
-      int getNumInputs() const {
-        return NumInputs;
-      }
-      int getNumOutputs() const {
-        return NumOutputs;
-      }
-
-      
-      GVal* getArgument(int ArgIdx) const {
-        return Arguments [0];
-      }
-#endif
 
      auto children() const {
       // return make_range( green_child_iterator(this, 0), green_child_iterator(this, Children.size())  );
@@ -670,11 +591,8 @@ public:
       void print(raw_ostream& OS) const;
     };
 
-#if 0
-    Green* green_child_iterator ::operator*() const {
-      return Parent->Children[Idx].Child;
-    }
-#endif
+
+
 
 
   } // namespace lof
