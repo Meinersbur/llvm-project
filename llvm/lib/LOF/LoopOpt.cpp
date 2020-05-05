@@ -4,7 +4,7 @@
 #include "llvm/ADT/PostOrderIterator.h"
 #include "Green.h"
 #include "GreenBuilder.h"
-#include "LoopTreeBuilder.h"
+#include "LoopTreeConverter.h"
 #include "LoopTreeCodegen.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
@@ -19,7 +19,7 @@
 #include "llvm/IR/IRBuilder.h"
 
 using namespace llvm;
-using namespace llvm::lof;
+using namespace lof;
 
 namespace {
 
@@ -80,7 +80,7 @@ public:
 
 
 
-LoopOptimizer *llvm::createLoopOptimizer(Function *Func, LoopInfo *LI,  ScalarEvolution *SE) {
+LoopOptimizer *lof::createLoopOptimizer(Function *Func, LoopInfo *LI,  ScalarEvolution *SE) {
   return new LoopOptimizerImpl(Func, LI, SE);
 }
 

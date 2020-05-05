@@ -4,8 +4,9 @@
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "LLVM.h"
 
-namespace llvm {
+namespace lof {
 
 
   template<typename T, typename C>
@@ -18,7 +19,7 @@ namespace llvm {
 
 
   template< typename T1, typename T2, typename IteratorCategoryT, typename T>
-  class  iterator_union : public iterator_facade_base<iterator_union<T1,T2,IteratorCategoryT,T> , IteratorCategoryT, T>
+  class  iterator_union : public llvm::iterator_facade_base<iterator_union<T1,T2,IteratorCategoryT,T> , IteratorCategoryT, T>
   {
     // TODO: make a proper union like PointerUnion
     int Discriminator;
@@ -101,5 +102,5 @@ namespace llvm {
     }
   }; // class iterator_union
 
-} // namespace llvm
+} // namespace lof
 #endif /* LLVM_LOF_LOFUTILS_H */

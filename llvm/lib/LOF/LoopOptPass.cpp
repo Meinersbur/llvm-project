@@ -26,6 +26,7 @@
 #include <string>
 
 using namespace llvm;
+using namespace lof;
 
 namespace {
 class LoopOptimizationFramework : public FunctionPass {

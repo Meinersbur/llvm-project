@@ -1,4 +1,4 @@
-#include "LoopTreeBuilder.h"
+#include "LoopTreeConverter.h"
 
 using namespace llvm;
 using namespace lof;
@@ -17,7 +17,7 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
     LoopCond = GExpr::createRef(FirstSym);
   }
 
-  Instruction* OrigEnd = nullptr;
+  llvm:: Instruction* OrigEnd = nullptr;
 
   DenseSet<GSymbol*> Inputs;
   DenseSet<GSymbol*> Outputs;

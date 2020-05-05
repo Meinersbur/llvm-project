@@ -5,6 +5,6 @@
 
 namespace llvm {
   void initializeLoopOptimizationFrameworkPass(PassRegistry &);
-}
+} // namespace llvm
 
 #endif /* LLVM_LOF_LOOPOPTPASS_H */

@@ -4,7 +4,7 @@
 #include "Green.h"
 #include "LOFUtils.h"
 
-namespace llvm {
+
   namespace lof {
 
 #if 0
@@ -160,7 +160,7 @@ namespace llvm {
 #endif
 
 
-     Green* addInstruction( GExpr*Cond,  Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments, Instruction *OrigInst) {
+     Green* addInstruction( GExpr*Cond,  Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments,llvm:: Instruction *OrigInst) {
        auto Result = Green::createInstruction(Op,Arguments, Assignments, OrigInst );
         addStmt(Cond,Result);
         return Result;
@@ -175,13 +175,13 @@ namespace llvm {
 #endif
 
 
-      Green* createStmt(Instruction *OrigBegin, Instruction *OrigEnd) {
+      Green* createStmt(llvm::Instruction *OrigBegin,llvm:: Instruction *OrigEnd) {
         return finish( GOpExpr::createTrueExpr() , false, OrigBegin,OrigEnd);
       }
 
 
       // TODO: Parameters defining number of iterations
-      Green* createLoop(GExpr *ExecCond, Instruction *OrigBegin, Instruction *OrigEnd) {
+      Green* createLoop(GExpr *ExecCond,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd) {
         return finish(ExecCond,true,OrigBegin,OrigEnd);
       }
 
@@ -210,7 +210,7 @@ namespace llvm {
 
 
       private:
-        Green* finish(GExpr *ExecCond, bool IsLooping, Instruction *OrigBegin, Instruction *OrigEnd) {
+        Green* finish(GExpr *ExecCond, bool IsLooping, llvm::Instruction *OrigBegin, llvm::Instruction *OrigEnd) {
 
          return new Green(ExecCond, Children, Conds, IsLooping, OrigBegin, OrigEnd, 
            make_optional_ArrayRef<GSymbol*>(ScalarReads),
@@ -221,5 +221,5 @@ namespace llvm {
 
 
   } // namespace lof
-} // namespace llvm
+
 #endif /* LLVM_LOF_GREEN_BUILDER_H */

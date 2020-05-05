@@ -6,37 +6,36 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 
-namespace llvm {
+
   namespace lof {
 
     class GreenCodeGen {
-      using BuilderTy = IRBuilder<>;
+      using BuilderTy =llvm:: IRBuilder<>;
     private:
       Green* Root;
-      Module* M;
-      LLVMContext& LLVMCtx;
+      llvm::  Module* M;
+      llvm:: LLVMContext& LLVMCtx;
 
-      Function* Func=nullptr;
+      llvm::Function* Func=nullptr;
       BuilderTy AllocaBuilder;
-      DenseMap<GSymbol*, Value*> SymbolPtrs;
+      DenseMap<GSymbol*, llvm::Value*> SymbolPtrs;
 
       void emitSequence(Green* G, BuilderTy& Builder);
       void emitLoop(Green* G, BuilderTy& Builder);
-      Value*emitOperation(const  Operation& Op, ArrayRef<GExpr*> Arguments, BuilderTy& Builder, bool IsExpr);
-      Value*emitExpr(GExpr* G, BuilderTy& Builder);
+      llvm:: Value*emitOperation(const  Operation& Op, ArrayRef<GExpr*> Arguments, BuilderTy& Builder, bool IsExpr);
+      llvm::  Value*emitExpr(GExpr* G, BuilderTy& Builder);
       void emitInstruction(Green* G, BuilderTy& Builder);
       void emitGreen(GCommon* G, BuilderTy& Builder);
 
-      Value* getPtr(GSymbol* Sym);
+      llvm:: Value* getPtr(GSymbol* Sym);
 
     public:
-      GreenCodeGen(Green *Root,Module *M, LLVMContext &C) :Root(Root), M(M), AllocaBuilder(C), LLVMCtx(C) {}
+      GreenCodeGen(Green *Root,llvm::Module *M,llvm:: LLVMContext &C) :Root(Root), M(M), AllocaBuilder(C), LLVMCtx(C) {}
 
-      std::tuple< Function*, std::vector<GSymbol*>, std::vector<GSymbol*> > emitAsFunction();
+      std::tuple< llvm::Function*, std::vector<GSymbol*>, std::vector<GSymbol*> > emitAsFunction();
 
       void replaceOrig(Green* Orig);
     };
 
   } // namespace lof
-} // namespace llvm
 #endif /* LLVM_LOF_LOOPTREECODEGEN_H */

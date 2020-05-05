@@ -10,25 +10,33 @@
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/SetVector.h"
 #include "LOFUtils.h"
+//#include "Dep.h"
 
 
-namespace llvm {
+
+
   namespace lof {
     class Green;
     class GSymbol;
     class GExpr;
     class GOpExpr;
     class GCommon;
-  }
-  template<>
-  struct GraphTraits<lof::Green*>;
+    class Dep;
 
+    class Red;
+  } // namespace lof
+
+
+  namespace llvm {
+    template<>
+    struct GraphTraits<lof::Green*>;
+  } // namespace llvm
 
 
   namespace lof {
 
     // We define our manual iterator to make it available for GraphTraits<lof:: Green *>::ChildIteratorType
-    class  green_child_iterator :public iterator_facade_base<green_child_iterator, std::random_access_iterator_tag, Green*>
+    class  green_child_iterator :public llvm:: iterator_facade_base<green_child_iterator, std::random_access_iterator_tag, GCommon*, ptrdiff_t,GCommon**,GCommon* /* operator* returns RValue */ >
     {
       const GCommon* Parent;
       size_t Idx;
@@ -43,7 +51,7 @@ namespace llvm {
         return *this;
       }
 
-      GCommon* operator*() const;
+       GCommon* operator*() const;
 
       bool operator==(const green_child_iterator& That) const {
         return Parent == That.Parent && Idx == That.Idx;
@@ -70,26 +78,26 @@ namespace llvm {
 
   } // namespace lof
 
+  namespace llvm {
 
+    template <>
+    struct GraphTraits<lof::Green*> {
+      using GraphRef = lof::Green*;
+      using NodeRef = lof::Green*;
 
-  template <> 
-  struct GraphTraits<lof:: Green *> {
-    using GraphRef =lof::Green*;
-    using NodeRef = lof::Green*;
+      // Green as graph node; enumerate children
+      //using  ChildIteratorType =lof:: green_child_iterator;
+      using  ChildIteratorType = ArrayRef<NodeRef>::iterator;
+      static inline ChildIteratorType child_begin(NodeRef N);
+      static inline ChildIteratorType child_end(NodeRef N);
 
-    // Green as graph node; enumerate children
-    //using  ChildIteratorType =lof:: green_child_iterator;
-    using  ChildIteratorType = ArrayRef<NodeRef>::iterator;
-    static inline ChildIteratorType child_begin(NodeRef N);
-    static inline ChildIteratorType child_end(NodeRef N);
-
-    // Green as graph representing its subtree; enumerate all nodes in subtree
-    using  nodes_iterator = df_iterator<NodeRef, df_iterator_default_set<NodeRef>, false,  GraphTraits<NodeRef>>;    
-    static inline nodes_iterator nodes_begin(lof::Green* RI);
-    static inline nodes_iterator nodes_end(lof::Green* RI);
-    static NodeRef getEntryNode(lof::Green *G) { return G; }
-  };
-
+      // Green as graph representing its subtree; enumerate all nodes in subtree
+      using  nodes_iterator = df_iterator<NodeRef, df_iterator_default_set<NodeRef>, false, GraphTraits<NodeRef>>;
+      static inline nodes_iterator nodes_begin(lof::Green* RI);
+      static inline nodes_iterator nodes_end(lof::Green* RI);
+      static NodeRef getEntryNode(lof::Green* G) { return G; }
+    };
+  } // namespace llvm
 
   namespace lof {
     class Green;
@@ -114,6 +122,13 @@ namespace llvm {
         // Should work with normalized loop induction variables.
         AddRecExpr,
 
+        // Affine expression: Requires ISL 
+        ISLPwAff,
+
+        // mlir::AffineExpr
+        MLIRAff,
+        MLIRFlatAff,
+
         Last = Disjunction
       };
 
@@ -136,22 +151,22 @@ namespace llvm {
         case Operation::LLVMFloating:
         case Operation::LLVMInst:
           assert(Inst);
-          assert(PointerType::isValidElementType( Inst->getType()) && "Must be allocatable");
-          assert(!isa<PHINode>(Inst )&& "PHIs are not regular operation");
-          if (auto I = dyn_cast <Instruction>(Inst)) {
-            assert( !cast<Instruction>(I)->isTerminator() && "Operations don't cover control-flow");
+          assert(llvm::PointerType::isValidElementType( Inst->getType()) && "Must be allocatable");
+          assert(!isa<llvm::PHINode>(Inst )&& "PHIs are not regular operation");
+          if (auto I = dyn_cast <llvm::Instruction>(Inst)) {
+            assert( !cast<llvm::Instruction>(I)->isTerminator() && "Operations don't cover control-flow");
           }
           break;
         case Operation::True:
           if (Inst) {
-            auto C = cast<ConstantInt>(Inst);
+            auto C = cast<llvm::ConstantInt>(Inst);
             assert(C->getType()->isIntegerTy(1));
             assert(C->isOne());
           }
             break;
         case Operation::False:
           if (Inst) {
-            auto C = cast<ConstantInt>(Inst);
+            auto C = cast<llvm::ConstantInt>(Inst);
             assert(C->getType()->isIntegerTy(1));
             assert(C->isZero());
           }
@@ -161,16 +176,16 @@ namespace llvm {
           break;
         case Operation::Conjuction:
           if (Inst) {
-            auto O = cast<BinaryOperator >(Inst);
+            auto O = cast<llvm::BinaryOperator >(Inst);
             assert(O->getType()->isIntegerTy(1));
-            assert(O->getOpcode() == Instruction::And );
+            assert(O->getOpcode() == llvm::Instruction::And );
           }
           break;
         case Operation::Disjunction:
           if (Inst) {
-            auto O = cast<BinaryOperator >(Inst);
+            auto O = cast<llvm::BinaryOperator >(Inst);
             assert(O->getType()->isIntegerTy(1));
-            assert(O->getOpcode() == Instruction::Or );
+            assert(O->getOpcode() == llvm::Instruction::Or );
           }
           break;
           default:
@@ -186,7 +201,7 @@ namespace llvm {
       }
 
       Kind getKind() const { return K; }
-      Value* getLLVMInst() const {
+   llvm::   Value* getLLVMInst() const {
         assert(K == LLVMInst || K==LLVMFloating);
         return Inst;
       }
@@ -206,7 +221,7 @@ namespace llvm {
           return 1;
         case LLVMInst:
         case LLVMFloating:
-          if (auto C = dyn_cast<Constant>(Inst))
+          if (auto C = dyn_cast<llvm::Constant>(Inst))
             return 0;
           return cast<llvm::Operator >(Inst)->getNumOperands();
         case False:
@@ -252,14 +267,6 @@ namespace llvm {
      
 
 
-    class Dep {
-    private:
-    public:
-      virtual ~Dep() {}
-
-      virtual bool isScalar() const  = 0;
-    };
-
 
 
     class GCommon {
@@ -279,6 +286,15 @@ namespace llvm {
       virtual bool isLoop() const { return false;  }
 
     public:
+      bool isStaging() const { return false; }
+
+    public:
+      virtual size_t getNumChildren() const { return 0; }
+       auto children() {
+         return make_range(green_child_iterator(this, 0), green_child_iterator(this, getNumChildren()) );
+      }
+
+    public:
       // TODO: whether something is read, killed or written depends on conditions; Current idea: DenseMap to conditions/GreenNode when this happens 
       // TODO: Use SetVector
       void determineScalars(DenseSet<GSymbol*>& Reads, DenseSet<GSymbol*>& Kills, DenseSet<GSymbol*>& Writes,  DenseSet<GSymbol*>& AllReferences );
@@ -294,6 +310,9 @@ namespace llvm {
       DenseSet<GSymbol*> kills() {}
       DenseSet<GSymbol*> writes() {}
 #endif
+
+    public:
+      Red* asRedRoot() ;
     };
 
 
@@ -318,7 +337,7 @@ namespace llvm {
       static bool classof(const GCommon* O) { return O->getKind() == GExpr::RefExpr; }
 
     private:
-      Value* LLVMName;
+      llvm::Value* LLVMName;
 
       // TODO: Define exactly what this means
       bool IsScalar =true;
@@ -329,7 +348,7 @@ namespace llvm {
       int Dims = 0;
 
     public:
-      Value* getLLVMValue() const { return LLVMName; }
+      llvm::  Value* getLLVMValue() const { return LLVMName; }
 
 
     private:
@@ -338,19 +357,19 @@ namespace llvm {
       StringRef getName() const { return Name; }
 
     private:
-      Type* Ty;
+      llvm:: Type* Ty;
     public:
-      Type* getType() const { return Ty; }
+      llvm::  Type* getType() const { return Ty; }
 
 
     private:
-      GSymbol(StringRef Name , Value* LLVMName, Type *Ty): Name(Name), LLVMName(LLVMName) , Ty(Ty) {
+      GSymbol(StringRef Name ,llvm:: Value* LLVMName,llvm:: Type *Ty): Name(Name), LLVMName(LLVMName) , Ty(Ty) {
         assert(Ty);
-        assert(PointerType::isValidElementType(Ty) );
+        assert(llvm::PointerType::isValidElementType(Ty) );
       }
     public:
-      static GSymbol* createLLVM(Value* LLVMName) { return new GSymbol(LLVMName->getName(), LLVMName, LLVMName->getType() ); }
-      static GSymbol* createFromScratch(StringRef  Name, Type *Ty) { return new GSymbol(Name, nullptr, Ty); }
+      static GSymbol* createLLVM(llvm::Value* LLVMName) { return new GSymbol(LLVMName->getName(), LLVMName, LLVMName->getType() ); }
+      static GSymbol* createFromScratch(StringRef  Name, llvm::Type *Ty) { return new GSymbol(Name, nullptr, Ty); }
     };
     using GRefExpr = GSymbol;
 
@@ -365,6 +384,9 @@ namespace llvm {
       const Operation& getOperation() const { return Op; }
       const auto &args() const { return Args; }
       const auto &getArguments() const { return Args; }
+
+    public:
+      size_t getNumChildren() const override  { return Args.size(); }
 
     private:
       GOpExpr(Operation Op, ArrayRef<GExpr*> Args) : Op(Op), Args(Args.begin(), Args.end()) {}
@@ -390,7 +412,7 @@ namespace llvm {
         return createOp(Operation(Operation::False, nullptr), {});
       }
 
-      static GOpExpr* createConstExpr(Constant *Val) {
+      static GOpExpr* createConstExpr(llvm::Constant *Val) {
         return createOp(Operation(Operation::LLVMFloating, Val), {});
       }
 
@@ -435,12 +457,12 @@ namespace llvm {
 
       // TOOD: Generalize marking regions in the original IR.
     private:
-      Instruction* OrigBegin = nullptr;
-      Instruction* OrigEnd   = nullptr;
-      Loop* OrigLoop = nullptr;
+      llvm:: Instruction* OrigBegin = nullptr;
+      llvm:: Instruction* OrigEnd   = nullptr;
+      llvm:: Loop* OrigLoop = nullptr;
     public:
-      std::pair<Instruction*, Instruction*> getOrigRange() const { return { OrigBegin, OrigEnd }; }
-      Loop* getOrigLoop() const { return OrigLoop; }
+      std::pair<llvm::Instruction*,llvm:: Instruction*> getOrigRange() const { return { OrigBegin, OrigEnd }; }
+      llvm::    Loop* getOrigLoop() const { return OrigLoop; }
 
 
 
@@ -475,7 +497,7 @@ namespace llvm {
 
 
     private:
-      Green(GExpr *ExecCond, ArrayRef<Green*> Children ,   ArrayRef<GExpr*> Conds ,  bool IsLooping, Instruction *OrigBegin, Instruction *OrigEnd, Optional< ArrayRef<GSymbol*>> ScalarReads,  Optional< ArrayRef<GSymbol*>> ScalarKills, Optional< ArrayRef<GSymbol*>> ScalarWrites) : ExecCond(ExecCond), Children(Children.begin(), Children.end()), ChildConds(Conds.begin(), Conds.end()),  IsLoop(IsLooping) , OrigBegin(OrigBegin), OrigEnd(OrigEnd) {
+      Green(GExpr *ExecCond, ArrayRef<Green*> Children ,   ArrayRef<GExpr*> Conds ,  bool IsLooping,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, Optional< ArrayRef<GSymbol*>> ScalarReads,  Optional< ArrayRef<GSymbol*>> ScalarKills, Optional< ArrayRef<GSymbol*>> ScalarWrites) : ExecCond(ExecCond), Children(Children.begin(), Children.end()), ChildConds(Conds.begin(), Conds.end()),  IsLoop(IsLooping) , OrigBegin(OrigBegin), OrigEnd(OrigEnd) {
         if (ScalarReads.hasValue()) {
           this->  ScalarReads.emplace( ScalarReads.getValue().begin() , ScalarReads.getValue().end());
         }
@@ -499,11 +521,12 @@ namespace llvm {
 
 
     private:
-      Green(Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments,Instruction *OrigBegin, Instruction *OrigEnd, Loop *OrigLoop): Op(Op) , Arguments(Arguments.begin(), Arguments.end()), Assignments(Assignments.begin(), Assignments.end()), OrigBegin(OrigBegin), OrigEnd(OrigEnd), OrigLoop(OrigLoop) {
+      Green(Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments,llvm::Instruction *OrigBegin,llvm:: Instruction *OrigEnd, llvm::Loop *OrigLoop): Op(Op) , Arguments(Arguments.begin(), Arguments.end()), Assignments(Assignments.begin(), Assignments.end()), OrigBegin(OrigBegin), OrigEnd(OrigEnd), OrigLoop(OrigLoop) {
         assertOK();
       }
+
     public:
-     static  Green* createInstruction(Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments,Instruction *OrigInst) {
+     static  Green* createInstruction(Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments,llvm::Instruction *OrigInst) {
         return new Green(Op, Arguments, Assignments,OrigInst,OrigInst->getNextNode(),nullptr);
       }
       bool isInstruction() const override  { return Op.isValid(); }
@@ -573,28 +596,32 @@ public:
       bool isContainer() const override { return ! Op.isValid(); }
 
 
-
+       size_t getNumChildren() const override  { return Children.size(); }
+       ArrayRef<Green*> getChildren() const {
+         return Children;
+       }
      auto children() const {
       // return make_range( green_child_iterator(this, 0), green_child_iterator(this, Children.size())  );
-       return ArrayRef<Green*>(Children.data(), Children.size()  );
+       return getChildren();
       }
 
       auto descententsDepthFirst() {
-        return depth_first(this);
+        return llvm::depth_first(this);
       }
 
       auto descententsBreadtFirst() {
-        return breadth_first(this);
+        return llvm:: breadth_first(this);
       }
 
       LLVM_DUMP_METHOD void dump() const;
       void print(raw_ostream& OS) const;
-    };
 
 
+    public:
+    
+      std::vector<Dep*> getAllDependencies() ;
 
-
-
+    }; // class Green
   } // namespace lof
 
 
@@ -619,6 +646,7 @@ public:
 #endif
 
 
+  namespace llvm {
 
   GraphTraits<lof:: Green *>::ChildIteratorType GraphTraits<lof:: Green *>::child_begin(NodeRef N) { return N->children ().begin(); }
   GraphTraits<lof:: Green *>::ChildIteratorType GraphTraits<lof:: Green *>::child_end(NodeRef N)   { return N->children ().end(); }
