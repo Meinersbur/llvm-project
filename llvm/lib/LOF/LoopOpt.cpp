@@ -28,6 +28,7 @@ class LoopOptimizerImpl : public LoopOptimizer {
 private:
   Function *Func;
 
+  LoopContext* Ctx;
   LoopInfo *LI;
   ScalarEvolution *SE;
 
@@ -37,14 +38,17 @@ private:
 
 public:
   LoopOptimizerImpl(Function *Func, LoopInfo *LI, ScalarEvolution *SE)
-      : Func(Func), LI(LI), SE(SE) {}
+      : Func(Func), LI(LI), SE(SE) {
+  
+    Ctx = new LoopContext( Func->getContext() );
+  }
 
 
 
 
 
   Green* buildOriginalLoopTree() {
-    GreenConverter Converter(Func, LI );
+    GreenConverter Converter(*Ctx, Func, LI );
     return Converter.build();
   }
 

@@ -11,11 +11,13 @@
       DenseMap <llvm::Value*, GSymbol*> InputsVals;
       llvm::  Function* Func;
       llvm:: LoopInfo* LI;
-      llvm:: LLVMContext& LLVMCtx;
+      LoopContext& Ctx;
 
 
     public:
-      GreenConverter(llvm::Function *Func,llvm::LoopInfo* LI) : Func(Func),  LI(LI), LLVMCtx(Func->getContext()) {}
+      GreenConverter( LoopContext& Ctx, llvm::Function *Func,llvm::LoopInfo* LI) : Func(Func),  LI(LI), Ctx(Ctx) {
+        assert(& Ctx.getLLVMContext() == &Func->getContext() );
+      }
 
       Green* build() {
         for (auto &Arg : Func->args()) {
@@ -47,6 +49,4 @@
 
     }; // class GreenConverter
   } // namespace lof
-
-
 #endif /* LLVM_LOF_LOOPTREECONVERTER_H */

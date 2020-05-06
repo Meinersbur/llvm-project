@@ -2,7 +2,7 @@
 #define LLVM_LOF_LOOPTRANSFORM_H
 
 #include "Green.h"
-
+#include "LoopContext.h"
 
 namespace lof {
   
@@ -10,7 +10,7 @@ namespace lof {
     // G must be a loop node.
     //
     // This always jams the innermost loop(s), so no jam depth needs to be provided. 
-    Green* applyUnrollAndJam(Green* G, int Factor);
+    Green* applyUnrollAndJam(LoopContext &LoopCtx, Green* G, int Factor);
 
 
 } // namespace lof

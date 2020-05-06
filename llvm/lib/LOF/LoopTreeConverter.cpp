@@ -8,12 +8,12 @@ using namespace lof;
 Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Cond) {
   std::deque < std::pair< BasicBlock*, GExpr*>> Worklist; 
   Worklist.push_back({ Entry, GOpExpr::createTrueExpr() });
-  GreenBuilder Builder;
+  GreenBuilder Builder(Ctx);
 
   GSymbol* FirstSym = nullptr;
   GExpr* LoopCond;
   if (L) {
-    FirstSym = GSymbol::createFromScratch ( "loop.isfirst" , Type::getInt1Ty(LLVMCtx ) );
+    FirstSym = GSymbol::createFromScratch ( "loop.isfirst" , Type::getInt1Ty( Ctx.getLLVMContext() ) );
     LoopCond = GExpr::createRef(FirstSym);
   }
 
@@ -214,7 +214,7 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
 
     if (L) {
     //return Green::createLoop(InputDeps.size(), InputDeps, NumIntermediates, NumOutputs, LvlInsts);
-    return Builder.createLoop(LoopCond,&*Entry->begin(), OrigEnd );
+    return Builder.createLoop(LoopCond,&*Entry->begin(), OrigEnd , nullptr);
   }
   //  return Green::createFunc(InputDeps.size(), InputDeps, NumIntermediates, NumOutputs,  LvlInsts);
   return Builder.createStmt(&*Entry->begin(),OrigEnd);

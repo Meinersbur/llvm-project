@@ -1,7 +1,6 @@
 #include "Green.h"
-//#include "GreenBuilder.h"
 #include "Red.h"
-
+#include "LoopContext.h"
 
 
 using namespace lof;
@@ -181,5 +180,3 @@ void  Green::print(raw_ostream &OS) const  {
 
    return Result;
  }
-
-

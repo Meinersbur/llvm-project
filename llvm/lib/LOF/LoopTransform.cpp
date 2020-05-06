@@ -1,49 +1,103 @@
 #include "LoopTransform.h"
 #include "GreenBuilder.h"
 
-
 using namespace lof;
 
 
-static Green* jamLoop(Green* G) {
-}
+namespace {
 
-static Green* interleaveInstruction(Green* G) {
-}
+  struct UnrollAndJamTransformer {
+    LoopContext& Ctx;
+    int Factor;
+    GSymbol* OrigCounter;
+    SmallVector<GExpr*,8> UnrolledCounters;
 
-static Green* jam(Green* G) {
-  GreenBuilder Builder;
-  SmallVector<Green*, 4> Seq;
 
-  for (auto C : G->children()) {
-    if (!C->isLoop()) {
-      Seq.push_back(C);
-      continue;
+    UnrollAndJamTransformer(LoopContext& LoopCtx, int Factor) : Ctx(LoopCtx), Factor(Factor)  {}
+
+    void jamBuilder(Green* G, GreenBuilder &Builder) {
+
+      SmallVector<Green*, 8> Seq;
+      SmallVector<GExpr*, 8> SeqCond;
+
+
+      auto UnrollSeq = [&]() {
+        auto NumSeq = Seq.size();
+
+        for (int f = 0; f < Factor; f += 1) {
+          Builder.addAssignment(Ctx.getTrue(), OrigCounter, UnrolledCounters[f]);
+          for (int i = 0; i < NumSeq; i += 1) {
+            auto C = Seq[i];
+            auto Cond = SeqCond[i];
+            Builder.addStmt(Cond, C);
+          }
+        }
+
+        Seq.clear();
+        SeqCond.clear();
+      };
+
+
+      auto NumChildren = G->getNumChildren();
+
+      for (int i = 0; i < NumChildren; i += 1) {
+        auto C = G->getChild(i);
+        auto Cond = G->getChildCond(i);
+
+        if (!C->isLoop()) {
+          assert(C->isInstruction());
+          Seq.push_back(C);
+          SeqCond.push_back(Cond);
+          continue;
+        }
+
+        UnrollSeq();
+
+        // jam loop
+        auto Jammed = jam(C);
+        Builder.addStmt(Cond, Jammed);
+      }
+      UnrollSeq();
     }
 
-    if (!Seq.empty()) {
-      // unroll sequence
+     Green* jam(Green* G) {
+      GreenBuilder Builder(Ctx);
+
+      jamBuilder(G, Builder);
+
+      // Copy loop
+      return Builder.createLoop( Builder.getTrue(), G->getOrigRange().first, G->getOrigRange().second, G->getCanonicalCounter() );
     }
 
-    // jam loop
-    auto Jammed = jam(C);
-    Builder.addStmt( GOpExpr::createTrueExpr() ,  Jammed );
-  }
-  return nullptr;
-}
+     Green* unroll(Green *G) {
+       GreenBuilder Builder(Ctx);
 
-Green* lof:: applyUnrollAndJam(Green* G, int Factor) {
+       OrigCounter = G->getCanonicalCounter();
+       auto NewCnt = Builder.createSymbolFromScratch("unroll.cnt", nullptr);
+
+
+        UnrolledCounters.set_size(Factor);
+        for (int f = 0; f < Factor; f += 1) {
+          auto FConst = Builder.getConst(f);
+          UnrolledCounters[f] = GOpExpr::createOp(Operation(Operation::Add, nullptr), { NewCnt, FConst  });
+        }
+
+      
+       jamBuilder(G, Builder);
+
+       return Builder.createLoop(Builder.getTrue(), G->getOrigRange().first, G->getOrigRange().second, NewCnt);
+     }
+
+  }; //  class UnrollAndJamTransformer
+
+} // anon namespace
+
+
+
+Green* lof::applyUnrollAndJam(LoopContext& LoopCtx, Green* G, int Factor) {
   assert(Factor >= 1);
   assert(G->isLoop());
 
-  if (Factor == 1) {
-    return G;
-  }
-
-  jam(G);
-
-  GreenBuilder Builder;
-
-auto Result =   Builder.createLoop( GOpExpr::createTrueExpr(), nullptr, nullptr );
-return Result;
+  UnrollAndJamTransformer Transformer(LoopCtx, Factor);
+  return Transformer.unroll(G);
 }

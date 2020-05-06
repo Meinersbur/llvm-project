@@ -3,7 +3,7 @@
 
 #include "Green.h"
 #include "LOFUtils.h"
-
+#include "LoopContext.h"
 
   namespace lof {
 
@@ -31,12 +31,18 @@
 
     class GreenBuilder {
     private:
-     // Green* Staged =  Green::createStaged();
+      // Green* Staged =  Green::createStaged();
 
-      //DenseMap<GVal*, GUse*> LastUses;
+       //DenseMap<GVal*, GUse*> LastUses;
 
+      LoopContext& Ctx;
       SmallVector <GExpr*, 8 > Conds;
-      SmallVector <Green*,8> Children;
+      SmallVector <Green*, 8> Children;
+
+    public:
+      GreenBuilder()= delete;
+      explicit  GreenBuilder(LoopContext& Ctx)  : Ctx(Ctx) {}
+
 
 #if 0
       bool IsFloating = true;
@@ -50,19 +56,20 @@
 
       DenseMap<InputSlot*, OutputSlot*> Connections;
 #endif
-  
-    private :
+
+    private:
 #if 0
-       void registerUse(GUse *U ) {
-         auto Def = U->getDef();
-         auto& LastUse = LastUses[Def];
-         if (LastUse) {
-           LastUse->NextUse = U;
-         } else {
-           Def->FirstUse = U;
-         }
-         LastUse = U;
-       }
+      void registerUse(GUse* U) {
+        auto Def = U->getDef();
+        auto& LastUse = LastUses[Def];
+        if (LastUse) {
+          LastUse->NextUse = U;
+        }
+        else {
+          Def->FirstUse = U;
+        }
+        LastUse = U;
+      }
 #endif
 
     public:
@@ -72,60 +79,60 @@
 
         SmallVector<GVal*, 8 > OpArgs;
         for (auto Subexpr : Subexprs) {
-          SmallVector<GVal*,8> Operands;
+          SmallVector<GVal*, 8> Operands;
           for (int i = 0; i < Subexpr->getNumInputs(); i += 1)
-            Operands.push_back(  Builder.addArgument( Subexpr->getArgument(i)->getLLVMVal() ) );
-          auto Slots = Builder.addStmt(Subexpr,Operands );
-          OpArgs.append(Slots.begin(), Slots.end() );
+            Operands.push_back(Builder.addArgument(Subexpr->getArgument(i)->getLLVMVal()));
+          auto Slots = Builder.addStmt(Subexpr, Operands);
+          OpArgs.append(Slots.begin(), Slots.end());
         }
 
-        auto OpSlots = Builder.addOperation(Operation(K, nullptr),OpArgs );
+        auto OpSlots = Builder.addOperation(Operation(K, nullptr), OpArgs);
 
         return Builder.createStmt();
       }
 
       static Green* buildUnaryOpExpr(Green* Subexpr, Operation::Kind K) {
-        return buildOpExpr({Subexpr}, K);
+        return buildOpExpr({ Subexpr }, K);
       }
 
-      static Green* buildBinaryOpExpr(Green* LHS,Green* RHS, Operation::Kind K) {
-        return buildOpExpr({LHS, RHS}, K);
+      static Green* buildBinaryOpExpr(Green* LHS, Green* RHS, Operation::Kind K) {
+        return buildOpExpr({ LHS, RHS }, K);
       }
 
 
       static Green* buildNotExpr(Green* Subexpr) {
-        return buildUnaryOpExpr(Subexpr, Operation::Negation );
+        return buildUnaryOpExpr(Subexpr, Operation::Negation);
       }
 
 
       // TOOD: List of operands
       static Green* buildConjunctionExpr(Green* LHS, Green* RHS) {
-        return buildBinaryOpExpr( LHS,RHS, Operation::Conjuction );
+        return buildBinaryOpExpr(LHS, RHS, Operation::Conjuction);
       }
 
       static Green* buildDisjunctionExpr(Green* LHS, Green* RHS) {
-        return buildBinaryOpExpr( LHS,RHS, Operation::Disjunction );
+        return buildBinaryOpExpr(LHS, RHS, Operation::Disjunction);
       }
 #endif
 
 #if 0
-      GVal* addArgument(Value *LLVMVal) {
+      GVal* addArgument(Value* LLVMVal) {
         auto Arg = GVal::createArgument(Staged, Staged->Arguments.size(), LLVMVal);
-        Staged->Arguments.push_back( Arg );
+        Staged->Arguments.push_back(Arg);
         return Arg;
       }
 
-      GUse* addResult(GVal *Val, Instruction *LLVMVal) {
-        auto Ret = GUse::createResult( Val, Staged->Results.size(),LLVMVal  );
+      GUse* addResult(GVal* Val, Instruction* LLVMVal) {
+        auto Ret = GUse::createResult(Val, Staged->Results.size(), LLVMVal);
         Staged->Results.push_back(Ret);
         return Ret;
       }
 #endif
 
 
-     void addStmt(GExpr * Cond , Green* SubStmt) {
-       Conds.push_back(Cond);
-       Children.push_back(SubStmt);
+      void addStmt(GExpr* Cond, Green* SubStmt) {
+        Conds.push_back(Cond);
+        Children.push_back(SubStmt);
       }
 #if 0
       std::vector<GVal*> addStmt(Green* SubStmt, ArrayRef<GVal*> Operands) {
@@ -143,7 +150,7 @@
 
         SmallVector<GVal*, 8> Outputs;
         for (int i = 0; i < NumOutputs; i += 1) {
-          auto OutVal = GVal::createOutput(Staged,  ChildIdx, i );
+          auto OutVal = GVal::createOutput(Staged, ChildIdx, i);
           Outputs.push_back(OutVal);
         }
 
@@ -154,18 +161,41 @@
           registerUse(InpUse);
         }
 
-        Staged->Children.push_back( Green::ChildMeaning( SubStmt, ChildIdx,  Inputs , Outputs ) );
+        Staged->Children.push_back(Green::ChildMeaning(SubStmt, ChildIdx, Inputs, Outputs));
         return { Outputs.begin(), Outputs.end() };
       }
 #endif
 
 
-     Green* addInstruction( GExpr*Cond,  Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments,llvm:: Instruction *OrigInst) {
-       auto Result = Green::createInstruction(Op,Arguments, Assignments, OrigInst );
-        addStmt(Cond,Result);
+      GExpr* getTrue() {
+       return  Ctx.getTrue();
+      }
+      GExpr* getFalse() {
+        return  Ctx.getFalse();
+      }
+      GExpr* getBool(bool Val) {
+        return Val ? getTrue() : getFalse();
+      }
+      GExpr* getConst(int Val) {
+        return  Ctx.getConst(Val);
+      }
+
+       GSymbol* createSymbolFromScratch(StringRef Name, llvm::Type *Ty) {
+         // Do we want to register all symbols with LLVMContext? Maybe to disambiguate names
+        return GSymbol::createFromScratch(Name,  Ty); 
+      }
+
+
+      Green* addInstruction(GExpr* Cond, Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments, llvm::Instruction* OrigInst) {
+        auto Result = Green::createInstruction(Op, Arguments, Assignments, OrigInst);
+        addStmt(Cond, Result);
         return Result;
       }
 
+
+      Green* addAssignment(GExpr* Cond, GSymbol* Target, GExpr*Val ){
+        return addInstruction(Cond, Operation(Operation::Nop, nullptr), { Val }, {Target}, nullptr);
+    }
 
 #if 0
       void connect(OutputSlot* Def, InputSlot* I) {
@@ -176,13 +206,15 @@
 
 
       Green* createStmt(llvm::Instruction *OrigBegin,llvm:: Instruction *OrigEnd) {
-        return finish( GOpExpr::createTrueExpr() , false, OrigBegin,OrigEnd);
+        return finish( GOpExpr::createTrueExpr() , false, OrigBegin,OrigEnd,nullptr);
       }
 
 
       // TODO: Parameters defining number of iterations
-      Green* createLoop(GExpr *ExecCond,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd) {
-        return finish(ExecCond,true,OrigBegin,OrigEnd);
+      Green* createLoop(GExpr *ExecCond,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, GSymbol *LoopCounter) {
+        if (!LoopCounter)
+          LoopCounter = GSymbol::createFromScratch(StringRef(), nullptr);
+        return finish(ExecCond,true,OrigBegin,OrigEnd, LoopCounter);
       }
 
 
@@ -210,12 +242,12 @@
 
 
       private:
-        Green* finish(GExpr *ExecCond, bool IsLooping, llvm::Instruction *OrigBegin, llvm::Instruction *OrigEnd) {
-
+        Green* finish(GExpr *ExecCond, bool IsLooping, llvm::Instruction *OrigBegin, llvm::Instruction *OrigEnd, GSymbol* CanonicalCounter) {
+         
          return new Green(ExecCond, Children, Conds, IsLooping, OrigBegin, OrigEnd, 
            make_optional_ArrayRef<GSymbol*>(ScalarReads),
            make_optional_ArrayRef<GSymbol*>(ScalarKills),
-           make_optional_ArrayRef<GSymbol*>(ScalarKills));
+           make_optional_ArrayRef<GSymbol*>(ScalarKills), CanonicalCounter);
         }
     };
 

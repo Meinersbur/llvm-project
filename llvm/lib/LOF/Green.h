@@ -22,6 +22,7 @@
     class GOpExpr;
     class GCommon;
     class Dep;
+    class LoopContext;
 
     class Red;
   } // namespace lof
@@ -108,16 +109,19 @@
       enum Kind {
         Unknown,
 
-        Nop, // Effectively only does an assignment
+        // Do an assignment
+        Nop, 
 
-        LLVMInst,
-        LLVMFloating,
-
+        // Logical operations
         False,
         True,
         Negation,
         Conjuction,
         Disjunction,
+
+        // Arithmetic operations
+        //Const,
+        Add,
 
         // Should work with normalized loop induction variables.
         AddRecExpr,
@@ -125,7 +129,12 @@
         // Affine expression: Requires ISL 
         ISLPwAff,
 
-        // mlir::AffineExpr
+        // LLVM operations
+        LLVMInst,
+        LLVMFloating,
+
+        // MLIR operations
+        MLIROperation,
         MLIRAff,
         MLIRFlatAff,
 
@@ -427,6 +436,8 @@
       static GOpExpr* createDisjunctionExpr(GExpr* LHS, GExpr* RHS) {
         return createOp(Operation(Operation::Disjunction, nullptr), {LHS,RHS});
       }
+
+    //  static GOpExpr* createConst(LoopContext& Ctx, int Val);
     };
 
 
@@ -495,9 +506,15 @@
       SmallVector<GExpr*, 8 > ChildConds;
       SmallVector<Green*, 8> Children;
 
+    private:
+      /// Counter always rises from 0 step 1 with an unsigned integer of undefined width (infinite, but will eventually be truncated).
+      GSymbol* CanonicalCounter;
+    public:
+      GSymbol* getCanonicalCounter() const { return CanonicalCounter; }
 
     private:
-      Green(GExpr *ExecCond, ArrayRef<Green*> Children ,   ArrayRef<GExpr*> Conds ,  bool IsLooping,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, Optional< ArrayRef<GSymbol*>> ScalarReads,  Optional< ArrayRef<GSymbol*>> ScalarKills, Optional< ArrayRef<GSymbol*>> ScalarWrites) : ExecCond(ExecCond), Children(Children.begin(), Children.end()), ChildConds(Conds.begin(), Conds.end()),  IsLoop(IsLooping) , OrigBegin(OrigBegin), OrigEnd(OrigEnd) {
+      Green(GExpr *ExecCond, ArrayRef<Green*> Children ,   ArrayRef<GExpr*> Conds ,  bool IsLooping,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, Optional< ArrayRef<GSymbol*>> ScalarReads,  Optional< ArrayRef<GSymbol*>> ScalarKills, Optional< ArrayRef<GSymbol*>> ScalarWrites, GSymbol * CanonicalCounter) : 
+          ExecCond(ExecCond), Children(Children.begin(), Children.end()), ChildConds(Conds.begin(), Conds.end()),  IsLoop(IsLooping) , OrigBegin(OrigBegin), OrigEnd(OrigEnd) , CanonicalCounter(CanonicalCounter) {
         if (ScalarReads.hasValue()) {
           this->  ScalarReads.emplace( ScalarReads.getValue().begin() , ScalarReads.getValue().end());
         }
@@ -507,6 +524,8 @@
         if (ScalarWrites.hasValue()) {
           this->  ScalarWrites.emplace( ScalarWrites.getValue().begin() , ScalarWrites.getValue().end());
         }
+
+        assertOK();
       }
 
 
@@ -550,6 +569,10 @@
 
 
       void assertOK() const {
+        if (IsLoop) {
+          assert(CanonicalCounter);
+        }
+
 #if 0
         if (Staging)
           return;
@@ -600,6 +623,9 @@ public:
        ArrayRef<Green*> getChildren() const {
          return Children;
        }
+       Green* getChild(int i) const { return Children[i]; }
+       GExpr* getChildCond(int i) const { return ChildConds[i]; }
+
      auto children() const {
       // return make_range( green_child_iterator(this, 0), green_child_iterator(this, Children.size())  );
        return getChildren();
