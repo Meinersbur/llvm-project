@@ -34,8 +34,7 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
       else if (auto LLVMVal = dyn_cast<Instruction>(Read->getLLVMValue())) {
         if (L) {
           DefinedOutside = !L->contains(LLVMVal);
-        }
-        else {
+        } else {
           // TODO: Use DominatorTree to find whether defined before Entry. Currently this assumes that it's the entire function:
           DefinedOutside = false;
         }
@@ -96,19 +95,19 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
     BasicBlock* Entering = nullptr;
     for (auto Pred : predecessors(BB)) {
       if (InLoop->contains(Pred)) {
-                assert(!Latch && "Requiring simplified loops for now");
+        assert(!Latch && "Requiring simplified loops for now");
         Latch = Pred;
       } else {
         assert(!Entering && "requiring a preheader for now");
         Entering = Pred;
       }
     }
-    assert(Latch );
+    assert(Latch);
     assert(Entering);
 
-    for (auto &PHI :  BB->phis() ) {
-      auto IncomingVal = getOrCreateRefExpr(  PHI.getIncomingValueForBlock( Entering ));
-      auto PHISum = getOrCreateSym(&PHI ); 
+    for (auto &PHI :  BB->phis()) {
+      auto IncomingVal = getOrCreateRefExpr(PHI.getIncomingValueForBlock( Entering ));
+      auto PHISum = getOrCreateSym(&PHI); 
       Builder.addInstruction(BBCond, Operation(Operation::Nop, nullptr), { IncomingVal }, { PHISum }, &PHI );
     }
 
@@ -171,10 +170,15 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
         OperandVals[OpIdx] = getOrCreateRefExpr(Def);
       }
 
-
-      auto ResultVal = GSymbol::createLLVM(&Inst);
-      auto Stmt = Builder.addInstruction(BBCond,  Operation(Operation::LLVMInst, &Inst), OperandVals , {ResultVal}, &Inst );
-      InputsVals[&Inst] = ResultVal;
+      Green* Stmt;
+      if (Inst.getType()->isVoidTy()) {
+        Stmt = Builder.addInstruction(BBCond, Operation(Operation::LLVMInst, &Inst), OperandVals, {}, &Inst);
+      } else {
+        auto ResultVal = GSymbol::createLLVM(&Inst);
+         Stmt = Builder.addInstruction(BBCond, Operation(Operation::LLVMInst, &Inst), OperandVals, { ResultVal }, &Inst);
+         InputsVals[&Inst] = ResultVal;
+      }
+     
       ReadsKillsWrites(Stmt);
     }
 
@@ -214,8 +218,8 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
 
     if (L) {
     //return Green::createLoop(InputDeps.size(), InputDeps, NumIntermediates, NumOutputs, LvlInsts);
-    return Builder.createLoop(LoopCond,&*Entry->begin(), OrigEnd , nullptr);
+    return Builder.createLoop(LoopCond, &*Entry->begin(), OrigEnd, nullptr);
   }
   //  return Green::createFunc(InputDeps.size(), InputDeps, NumIntermediates, NumOutputs,  LvlInsts);
-  return Builder.createStmt(&*Entry->begin(),OrigEnd);
+  return Builder.createStmt(&*Entry->begin(), OrigEnd);
 }

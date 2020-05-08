@@ -5,6 +5,7 @@ add_llvm_library(LLVMLOF
   Green.cpp
   GreenBuilder.cpp
   Red.cpp
+  RedRef.cpp
   LoopTreeConverter.cpp
   LoopTreeCodegen.cpp
   LOFUtils.cpp
@@ -13,6 +14,7 @@ add_llvm_library(LLVMLOF
   Affine.cpp
   LoopTransform.cpp
   LoopContext.cpp
+  LoopTreeTransform.cpp
 
   ADDITIONAL_HEADER_DIRS
     ${LLVM_MAIN_INCLUDE_DIR}/llvm/LOF

@@ -1,41 +1,57 @@
 #ifndef LLVM_LOF_GREEN_H
 #define LLVM_LOF_GREEN_H
 
-#include "llvm/IR/Instruction.h"
-#include "llvm/IR/Operator.h"
-#include "llvm/Analysis/ValueTracking.h"
+#include "LLVM.h"
+#include "LOFUtils.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/BreadthFirstIterator.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/SetVector.h"
-#include "LOFUtils.h"
-//#include "Dep.h"
+#include "llvm/Support/Format.h"
+
+// TODO: Should be at most included in the .cpp
+#include "llvm/IR/Operator.h"
+#include "llvm/IR/BasicBlock.h"
 
 
 
 
-  namespace lof {
-    class Green;
-    class GSymbol;
-    class GExpr;
-    class GOpExpr;
-    class GCommon;
-    class Dep;
-    class LoopContext;
 
-    class Red;
-  } // namespace lof
+namespace lof {
+  class Green;
+  class GSymbol;
+  class GExpr;
+  class GOpExpr;
+  class GCommon;
+  class Dep;
+  class LoopContext;
 
-
-  namespace llvm {
-    template<>
-    struct GraphTraits<lof::Green*>;
-  } // namespace llvm
+  class Red;
+} // namespace lof
 
 
-  namespace lof {
+namespace llvm {
+  template<> struct GraphTraits<lof::Green*>;
+  class Loop;
+  class Value;
+  class Inst;
+  class Constant;
+  class Operator;
+} // namespace llvm
 
+
+namespace lof {
+
+    class  green_child_iterator :public map_index_iterator< green_child_iterator, GCommon*, GCommon*, std::ptrdiff_t, GCommon**, GCommon* > {
+    public:
+      green_child_iterator(GCommon* Parent, size_t Idx) : map_index_iterator(Parent, Idx) {}
+
+    public:
+      GCommon* operator*() const;
+    }; // class green_child_iterator
+       
+#if 0
     // We define our manual iterator to make it available for GraphTraits<lof:: Green *>::ChildIteratorType
     class  green_child_iterator :public llvm:: iterator_facade_base<green_child_iterator, std::random_access_iterator_tag, GCommon*, ptrdiff_t,GCommon**,GCommon* /* operator* returns RValue */ >
     {
@@ -76,8 +92,9 @@
         return Idx < That.Idx;
       }
     };
-
+#endif
   } // namespace lof
+
 
   namespace llvm {
 
@@ -149,58 +166,7 @@
 
 
 
-      void assertOK() const {
-        switch (K) {
-        case Operation::Unknown:
-          assert(Inst==nullptr);
-          return;
-        case Operation::Nop:
-          assert(Inst==nullptr); // There is no "nop" LLVM instruction
-          break;
-        case Operation::LLVMFloating:
-        case Operation::LLVMInst:
-          assert(Inst);
-          assert(llvm::PointerType::isValidElementType( Inst->getType()) && "Must be allocatable");
-          assert(!isa<llvm::PHINode>(Inst )&& "PHIs are not regular operation");
-          if (auto I = dyn_cast <llvm::Instruction>(Inst)) {
-            assert( !cast<llvm::Instruction>(I)->isTerminator() && "Operations don't cover control-flow");
-          }
-          break;
-        case Operation::True:
-          if (Inst) {
-            auto C = cast<llvm::ConstantInt>(Inst);
-            assert(C->getType()->isIntegerTy(1));
-            assert(C->isOne());
-          }
-            break;
-        case Operation::False:
-          if (Inst) {
-            auto C = cast<llvm::ConstantInt>(Inst);
-            assert(C->getType()->isIntegerTy(1));
-            assert(C->isZero());
-          }
-          break;
-        case Operation::Negation:
-          assert(!Inst);
-          break;
-        case Operation::Conjuction:
-          if (Inst) {
-            auto O = cast<llvm::BinaryOperator >(Inst);
-            assert(O->getType()->isIntegerTy(1));
-            assert(O->getOpcode() == llvm::Instruction::And );
-          }
-          break;
-        case Operation::Disjunction:
-          if (Inst) {
-            auto O = cast<llvm::BinaryOperator >(Inst);
-            assert(O->getType()->isIntegerTy(1));
-            assert(O->getOpcode() == llvm::Instruction::Or );
-          }
-          break;
-          default:
-            llvm_unreachable("Not supported kind?!?");
-        }
-      }
+      void assertOK() const;
 
 
     public:
@@ -241,6 +207,8 @@
         case Conjuction:
         case Disjunction:
           return 2;
+        case Add:
+          return 2;
         default:
           llvm_unreachable("Don't know this operation");
         }
@@ -262,11 +230,58 @@
         case Conjuction:
         case Disjunction:
           return 1;
+        case Add:
+          return 1;
         default:
           llvm_unreachable("Don't know this operation");
         }
         llvm_unreachable("Not implemented kind");
       }
+
+      public:
+        void printLine(llvm::raw_ostream& OS) const {
+          switch (K)          {
+          case lof::Operation::Unknown:
+            OS << "???";
+            break;
+          case lof::Operation::Nop:
+            OS << "nop";
+            break;
+          case lof::Operation::False:
+            OS << "false";
+            break;
+          case lof::Operation::True:
+            OS << "true";
+            break;
+          case lof::Operation::Negation:
+            OS << "not";
+            break;
+          case lof::Operation::Conjuction:
+            OS << "and";
+            break;
+          case lof::Operation::Disjunction:
+            OS << "or";
+            break;
+          case lof::Operation::Add:
+            OS << "+";
+            break;
+          case lof::Operation::LLVMInst:
+            if (Inst)
+              Inst->print(OS);
+            else
+              OS << "llvm::Inst";
+            break;
+          case lof::Operation::LLVMFloating:
+            if (Inst) {     
+              OS << "(Speculable) ";
+              Inst->print(OS);
+            }            else
+              OS << "llvm::Value";
+            break;
+          default:
+            OS << "Kind=" << K;
+          }
+        }
 
     }; // class Operation
 
@@ -295,13 +310,17 @@
       virtual bool isLoop() const { return false;  }
 
     public:
+      /// In case we add support to modify after node creation, set staging to false to avoid further modification after the object might also refenced that assumes the object's immutability.
       bool isStaging() const { return false; }
 
     public:
       virtual size_t getNumChildren() const { return 0; }
+      virtual  GCommon* getChild(int i) const { llvm_unreachable("No children"); }
        auto children() {
          return make_range(green_child_iterator(this, 0), green_child_iterator(this, getNumChildren()) );
       }
+
+
 
     public:
       // TODO: whether something is read, killed or written depends on conditions; Current idea: DenseMap to conditions/GreenNode when this happens 
@@ -322,6 +341,14 @@
 
     public:
       Red* asRedRoot() ;
+
+
+    public:
+      virtual void printLine(llvm::raw_ostream& OS) const = 0;
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+      LLVM_DUMP_METHOD void dump() const;
+#endif
     };
 
 
@@ -364,22 +391,46 @@
       std::string Name;
     public:
       StringRef getName() const { return Name; }
+      void printReprName(llvm::raw_ostream &OS) const {
+        if (!Name.empty()) {
+          OS << Name;
+          return;
+        }
+        OS << llvm::format_hex((uintptr_t)this, 0, true);
+      }
+
 
     private:
       llvm:: Type* Ty;
     public:
       llvm::  Type* getType() const { return Ty; }
 
+    private:
+    void  assertOK() const {
+        // Ty == nullptr means arbitrary integer width. To be validated at codegen.
+        assert(!Ty || llvm::PointerType::isValidElementType(Ty) );
+      }
 
     private:
       GSymbol(StringRef Name ,llvm:: Value* LLVMName,llvm:: Type *Ty): Name(Name), LLVMName(LLVMName) , Ty(Ty) {
-        assert(Ty);
-        assert(llvm::PointerType::isValidElementType(Ty) );
+        assertOK();
       }
     public:
       static GSymbol* createLLVM(llvm::Value* LLVMName) { return new GSymbol(LLVMName->getName(), LLVMName, LLVMName->getType() ); }
       static GSymbol* createFromScratch(StringRef  Name, llvm::Type *Ty) { return new GSymbol(Name, nullptr, Ty); }
-    };
+
+    public:
+      void printLine(llvm::raw_ostream& OS) const override {
+        OS << "GRefExpr";
+        if (Ty) {
+          OS << ' ';
+          Ty->print(OS);
+        }
+        if (!Name.empty())
+          OS << ' ' << Name;
+      }
+
+    }; // class GSymbol
     using GRefExpr = GSymbol;
 
 
@@ -391,11 +442,12 @@
 
     public:
       const Operation& getOperation() const { return Op; }
-      const auto &args() const { return Args; }
-      const auto &getArguments() const { return Args; }
+      ArrayRef<GExpr*> args() const { return Args; }
+       ArrayRef<GExpr*> getArguments() const { return Args; }
 
     public:
       size_t getNumChildren() const override  { return Args.size(); }
+      GCommon* getChild(int i) const override { return Args[i]; }
 
     private:
       GOpExpr(Operation Op, ArrayRef<GExpr*> Args) : Op(Op), Args(Args.begin(), Args.end()) {}
@@ -438,16 +490,13 @@
       }
 
     //  static GOpExpr* createConst(LoopContext& Ctx, int Val);
+
+    public:
+      void printLine(llvm::raw_ostream& OS) const override {
+        OS << "GOpExpr";
+        Op.printLine(OS);
+      }
     };
-
-
-
-
-
-
-
-
-
 
 
 
@@ -495,9 +544,9 @@
       Optional< SmallSetVector<GSymbol*, 4>> ScalarKills;
       Optional< SmallSetVector<GSymbol*, 4>> ScalarWrites;
     public:
-      const auto& getScalarReads() const { return ScalarReads.getValue(); }
-      const auto& getScalarKills() const { return ScalarKills.getValue() ;  }
-      const auto& getScalarWrites() const { return ScalarWrites.getValue() ;   }
+       ArrayRef<GSymbol*>  getScalarReads() const { return ScalarReads.getValue() .getArrayRef() ; }
+       ArrayRef<GSymbol*>  getScalarKills() const { return ScalarKills.getValue() .getArrayRef() ;  }
+       ArrayRef<GSymbol*> getScalarWrites() const { return ScalarWrites.getValue() .getArrayRef() ;   }
       bool hasComputedScalars() const {
         return ScalarReads.hasValue() && ScalarKills.hasValue() && ScalarWrites.hasValue();
       }
@@ -535,8 +584,8 @@
       SmallVector <GSymbol*, 1> Assignments;
      
     public:
-      auto getArguments() const { return Arguments; }
-      auto getAssignments() const { return Assignments; }
+      ArrayRef<GExpr*> getArguments() const { return Arguments; }
+      ArrayRef<GSymbol*> getAssignments() const { return Assignments; }
 
 
     private:
@@ -546,7 +595,10 @@
 
     public:
      static  Green* createInstruction(Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments,llvm::Instruction *OrigInst) {
-        return new Green(Op, Arguments, Assignments,OrigInst,OrigInst->getNextNode(),nullptr);
+       llvm::Instruction* OrigEnd = nullptr;
+       if (OrigInst)
+         OrigEnd = OrigInst->getNextNode();
+        return new Green(Op, Arguments, Assignments,OrigInst,OrigEnd,nullptr);
       }
       bool isInstruction() const override  { return Op.isValid(); }
 
@@ -639,15 +691,121 @@ public:
         return llvm:: breadth_first(this);
       }
 
-      LLVM_DUMP_METHOD void dump() const;
-      void print(raw_ostream& OS) const;
+      //LLVM_DUMP_METHOD void dump() const;
+     // void print(raw_ostream& OS) const;
 
 
     public:
-    
       std::vector<Dep*> getAllDependencies() ;
 
+          public:
+            void printLine(llvm::raw_ostream& OS) const override {
+              if (isLoop()) {
+                OS << "Loop";
+              } else if (isInstruction()) {
+                OS << "Inst ";
+                Op.printLine(OS);
+              } else if (isStmt()) {
+                OS << "Sequence";
+              }              else {
+                OS << "???";
+              }
+
+              auto PrintSymbolList = [&OS](auto Name, auto X) {
+                if (X) {
+                  OS << " " << Name << "=[";
+                  for (auto A : llvm::enumerate(X.getValue())) {
+                    if (A.index() > 0)
+                      OS << ", ";
+                    A.value()->printReprName(OS);
+                  }
+                  OS << "]";
+                }
+              };
+
+              PrintSymbolList("ScalarReads", ScalarReads);
+              PrintSymbolList("ScalarKills", ScalarKills);
+              PrintSymbolList("ScalarWrites", ScalarWrites);
+            }
+
     }; // class Green
+
+
+
+
+
+
+
+    class GreenDumper {
+    private:
+      llvm::raw_ostream &OS;
+      bool OnlyStmts;
+
+      int Indent = 0;
+
+      void dumpNode(GCommon *Node, StringRef Role) {
+        OS.indent(Indent*2);
+        if (!Role.empty())
+          OS << Role << ": ";
+        Node->printLine(OS);
+        OS << '\n';
+        Indent += 1;
+        if (Node->isContainer()) {
+          auto G = cast<Green>(Node);
+          auto NumChildren = G->getNumChildren();
+          for (int i = 0; i < NumChildren; i += 1) {
+            auto Cond = G->getChildCond(i);
+            auto Child = G->getChild(i);
+            if (OnlyStmts ||( isa<GOpExpr>(Cond) && cast<GOpExpr>(Cond)->getOperation().getKind() == Operation::True)) {
+              dumpNode(Child, StringRef());
+            } else {
+              dumpNode(Cond, "Cond");
+              Indent += 1;
+              dumpNode(Child, StringRef());
+              Indent -= 1;
+            }
+          }
+        } else if (Node->isInstruction()) {
+          if (!OnlyStmts) {
+            auto G = cast<Green>(Node);
+            for (auto Dst : G->getAssignments()) {
+              dumpNode(Dst, "Assign");
+            }
+            for (auto Arg : G->getArguments()) {
+              dumpNode(Arg, "Arg");
+            }
+          }
+        } else if (isa<GOpExpr>(Node)) {
+          if (!OnlyStmts) {
+            auto Expr = cast<GOpExpr>(Node);
+            for (auto Arg : Expr->getArguments()) {
+              dumpNode(Arg, "Arg");
+            }
+          }
+        }
+        
+        for (auto Child : Node->children()) {
+          if (OnlyStmts && !Child->isStmt())
+            continue;
+          dumpNode(Child, StringRef());
+        }
+        Indent -= 1;
+      }
+
+    public:
+      GreenDumper(llvm::raw_ostream& OS, bool OnlyStmts =false) : OS(OS) , OnlyStmts(OnlyStmts) {}
+
+      void dump(GCommon *Node) {
+        dumpNode(Node, StringRef());
+      }
+
+    };
+
+
+
+
+
+
   } // namespace lof
 
 
@@ -672,14 +830,15 @@ public:
 #endif
 
 
-  namespace llvm {
-
+namespace llvm {
   GraphTraits<lof:: Green *>::ChildIteratorType GraphTraits<lof:: Green *>::child_begin(NodeRef N) { return N->children ().begin(); }
   GraphTraits<lof:: Green *>::ChildIteratorType GraphTraits<lof:: Green *>::child_end(NodeRef N)   { return N->children ().end(); }
 
-
   GraphTraits<lof:: Green *>:: nodes_iterator GraphTraits<lof:: Green *>:: nodes_begin(lof:: Green* RI) { return nodes_iterator::begin(getEntryNode(RI));  }
   GraphTraits<lof:: Green *>:: nodes_iterator GraphTraits<lof:: Green *>:: nodes_end  (lof:: Green *RI) { return nodes_iterator::end(getEntryNode(RI));    }
-
 } // namespace llvm
+
+
+
+
 #endif /* LLVM_LOF_GREEN_H */

@@ -72,7 +72,7 @@ namespace {
      Green* unroll(Green *G) {
        GreenBuilder Builder(Ctx);
 
-       OrigCounter = G->getCanonicalCounter();
+       OrigCounter = G->getCanonicalCounter(); assert(OrigCounter);
        auto NewCnt = Builder.createSymbolFromScratch("unroll.cnt", nullptr);
 
 
@@ -84,7 +84,6 @@ namespace {
 
       
        jamBuilder(G, Builder);
-
        return Builder.createLoop(Builder.getTrue(), G->getOrigRange().first, G->getOrigRange().second, NewCnt);
      }
 

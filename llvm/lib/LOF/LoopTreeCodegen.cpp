@@ -14,7 +14,6 @@ void GreenCodeGen:: replaceOrig(Green *Orig) {
   auto UseArgs = std::get<1>(P);
   auto DefArgs = std::get<2>(P);
 
-
   Function* OldFunc = nullptr;
   BasicBlock* ReplBB;
   BasicBlock* ContBB;
@@ -70,7 +69,7 @@ void GreenCodeGen:: replaceOrig(Green *Orig) {
   }
 #endif
 
-  Builder.CreateCall( NewFunc, Args );
+  Builder.CreateCall(NewFunc, Args);
 
   for (auto P : llvm::enumerate(DefArgs)) {
     auto i = P.index() + UseArgs.size();
@@ -90,7 +89,7 @@ void GreenCodeGen:: replaceOrig(Green *Orig) {
   }
 #endif
 
-  Builder.CreateBr (ContBB);
+  Builder.CreateBr(ContBB);
 
   if (verifyFunction(*OldFunc, &errs() )) {
     llvm_unreachable("Something's wrong!");
@@ -99,7 +98,7 @@ void GreenCodeGen:: replaceOrig(Green *Orig) {
 
 
 
-std::tuple< Function*, std::vector<GSymbol*>, std::vector<GSymbol*> >   GreenCodeGen:: emitAsFunction() {
+std::tuple<Function*, std::vector<GSymbol*>, std::vector<GSymbol*>> GreenCodeGen::emitAsFunction() {
   DenseSet<GSymbol*> Reads;
   DenseSet<GSymbol*> Kills;
   DenseSet<GSymbol*> Writes;
@@ -108,8 +107,6 @@ std::tuple< Function*, std::vector<GSymbol*>, std::vector<GSymbol*> >   GreenCod
   for (auto R : Reads) {
     assert(!Writes.count(R) && "Requiring SSA");
   }
-
-
 
   DenseSet<GSymbol*> Outside;
   Outside.insert(Reads.begin(), Reads.end() );
@@ -146,7 +143,7 @@ std::tuple< Function*, std::vector<GSymbol*>, std::vector<GSymbol*> >   GreenCod
 
 
   Func = Function::Create(FunctionType::get( Type::getVoidTy(LLVMCtx), ParamsTypes, false ), GlobalValue::InternalLinkage  , "", M);
-
+  Func->addFnAttr("lof-generated");
 
 
   for (auto A : llvm::zip_first( DefArgs,  drop_begin( Func->args(), UseArgs.size()) )) {
@@ -255,7 +252,13 @@ void GreenCodeGen:: emitSequence(Green*G, BuilderTy& Builder) {
 Value* GreenCodeGen:: getPtr(GSymbol *Sym) {
    auto &Ptr= SymbolPtrs[Sym];
    if (!Ptr) {
-     Ptr = AllocaBuilder.CreateAlloca(Sym->getType(), nullptr, Twine( Sym->getName()) + ".ptr");
+     auto Ty = Sym->getType();
+     if (!Ty) {
+       // Generic integer type
+       // TODO: need a more systematic approach to integer sizes
+       Ty = IntegerType::get(LLVMCtx, 64);
+     }
+     Ptr = AllocaBuilder.CreateAlloca(Ty, nullptr, Twine( Sym->getName()) + ".ptr");
    }
    return Ptr;
 }
@@ -324,15 +327,33 @@ Value* GreenCodeGen:: emitOperation(const  Operation& Op, ArrayRef<GExpr*> Argum
     assert( Arguments.size()==1 );
     return Builder.CreateNot( emitExpr(Arguments[0], Builder) );
   case Operation::Conjuction: {
-    auto Result =   emitExpr(Arguments[0], Builder);
+    auto Result = emitExpr(Arguments[0], Builder);
     for (auto V : drop_begin(Arguments, 1))
       Result = Builder.CreateAnd (Result, emitExpr(V,Builder ) );
     return Result;
   }
   case Operation::Disjunction: {
-    auto Result =   emitExpr(Arguments[0], Builder);
+    auto Result = emitExpr(Arguments[0], Builder);
     for (auto V : drop_begin(Arguments, 1))
       Result = Builder.CreateOr (Result, emitExpr(V,Builder ) );
+    return Result;
+  }
+  case Operation::Add: {
+    auto Result = emitExpr(Arguments[0], Builder);
+    for (auto V : drop_begin(Arguments, 1)) {
+      auto Last = Result;
+      auto LastTy = Result->getType();
+      auto New = emitExpr(V, Builder);
+      auto NewTy = New->getType();
+      if (LastTy != NewTy) {
+        auto LastWidth = cast<IntegerType>(LastTy)->getBitWidth();
+        auto NewWidth = cast<IntegerType>(NewTy)->getBitWidth();
+        auto CommonTy = IntegerType::get(LLVMCtx, std::max(LastWidth, NewWidth)); // TODO: One more than larger size in case of overflow?
+        Last = Builder.CreateSExt(Last, CommonTy);
+        New = Builder.CreateSExt(New, CommonTy);
+      }
+      Result = Builder.CreateAdd(Last, New);
+    }
     return Result;
   }
   case Operation::Nop:

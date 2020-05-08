@@ -1,10 +1,66 @@
 #include "Green.h"
 #include "Red.h"
 #include "LoopContext.h"
-
+#include "llvm/Analysis/ValueTracking.h"
 
 using namespace lof;
 
+void Operation:: assertOK() const {
+  switch (K) {
+  case Operation::Unknown:
+    assert(Inst==nullptr);
+    return;
+  case Operation::Nop:
+    assert(Inst==nullptr); // There is no "nop" LLVM instruction
+    break;
+  case Operation::LLVMFloating:
+  case Operation::LLVMInst:
+    assert(Inst);
+    if (!Inst->getType()->isVoidTy()) {
+      assert(llvm::PointerType::isValidElementType(Inst->getType()) && "Must be allocatable");
+    }
+    assert(!isa<llvm::PHINode>(Inst)&& "PHIs are not regular operation");
+    if (auto I = dyn_cast <llvm::Instruction>(Inst)) {
+      assert( !cast<llvm::Instruction>(I)->isTerminator() && "Operations don't cover control-flow");
+    }
+    break;
+  case Operation::True:
+    if (Inst) {
+      auto C = cast<llvm::ConstantInt>(Inst);
+      assert(C->getType()->isIntegerTy(1));
+      assert(C->isOne());
+    }
+    break;
+  case Operation::False:
+    if (Inst) {
+      auto C = cast<llvm::ConstantInt>(Inst);
+      assert(C->getType()->isIntegerTy(1));
+      assert(C->isZero());
+    }
+    break;
+  case Operation::Negation:
+    assert(!Inst);
+    break;
+  case Operation::Conjuction:
+    if (Inst) {
+      auto O = cast<llvm::BinaryOperator >(Inst);
+      assert(O->getType()->isIntegerTy(1));
+      assert(O->getOpcode() == llvm::Instruction::And );
+    }
+    break;
+  case Operation::Disjunction:
+    if (Inst) {
+      auto O = cast<llvm::BinaryOperator >(Inst);
+      assert(O->getType()->isIntegerTy(1));
+      assert(O->getOpcode() == llvm::Instruction::Or );
+    }
+    break;
+  case Operation::Add:
+    break;
+  default:
+    llvm_unreachable("Not supported kind?!?");
+  }
+}
 
 GOpExpr* GExpr:: createOp(Operation Op, ArrayRef<GExpr*> Args) { 
   return GOpExpr::create(Op,Args);
@@ -27,13 +83,13 @@ static void visitDetermineScalar(GCommon* G, DenseSet<GSymbol*>& Reads, DenseSet
   auto Stmt = cast<Green>(G);
 
   if (Stmt->hasComputedScalars()) {
-    auto &StmtReads = Stmt->getScalarReads();
+    auto StmtReads = Stmt->getScalarReads();
     Reads.insert(StmtReads.begin(), StmtReads.end());
 
-    auto &StmtKills = Stmt->getScalarKills();
+    auto StmtKills = Stmt->getScalarKills();
     Kills.insert(StmtKills.begin(), StmtKills.end());
 
-    auto &StmtWrites = Stmt->getScalarWrites();
+    auto StmtWrites = Stmt->getScalarWrites();
     Writes.insert(StmtWrites.begin(), StmtWrites.end());
 
     // TODO: Still need AllReferences?
@@ -100,6 +156,7 @@ void GCommon:: determineScalars(DenseSet<GSymbol*>& Reads, DenseSet<GSymbol*>& K
 #endif
 
 
+#if 0
 LLVM_DUMP_METHOD void Green::dump() const {
   print(llvm::errs());
 }
@@ -108,15 +165,14 @@ LLVM_DUMP_METHOD void Green::dump() const {
 void  Green::print(raw_ostream &OS) const  { 
   OS << "Green"; 
 }
-
-
+#endif
 
 
  GCommon*  lof:: green_child_iterator ::operator*() const {
-  if (auto Stmt = dyn_cast<Green>(Parent)) {
+  if (auto Stmt = dyn_cast<Green>(Container)) {
     return Stmt->getChildren()[Idx];
   }
-  if (auto Expr = dyn_cast<GOpExpr>(Parent)) {
+  if (auto Expr = dyn_cast<GOpExpr>(Container)) {
     return Expr->getArguments()[Idx];
   }
   llvm_unreachable("unknown type or has no children");
@@ -180,3 +236,10 @@ void  Green::print(raw_ostream &OS) const  {
 
    return Result;
  }
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+ void GCommon::dump() const {
+   GreenDumper Dumper(llvm::errs());
+   Dumper.dump(const_cast<GCommon*>( this));
+ }
+#endif

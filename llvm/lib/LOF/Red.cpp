@@ -8,8 +8,11 @@ ArrayRef<Red*> Red:: getChildren() {
     return {};
   if (!Children) {
     Children.reset(new Red*[NumChildren]);
-    for (auto P : llvm::enumerate(G->children()  )  )
-      Children.get()[P.index()] = new Red( P.value(), this, P.index());
+    for (auto P : llvm::enumerate(G->children())) {
+      P.value();
+      auto New = new Red(P.value(), this, P.index());
+      Children.get()[P.index()] = New;
+    }
   }
   return ArrayRef<Red*>(&Children[0], NumChildren);
 }

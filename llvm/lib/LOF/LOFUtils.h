@@ -18,8 +18,72 @@ namespace lof {
   }
 
 
+  template <typename DerivedT, typename ContainerT, typename T, typename DifferenceTypeT = std::ptrdiff_t, typename PointerT = T *, typename ReferenceT = T &>
+  class map_index_iterator : public llvm:: iterator_facade_base< DerivedT, std::random_access_iterator_tag, T, DifferenceTypeT,PointerT,ReferenceT>
+  {
+    protected:
+    DerivedT& getDerived() { return *static_cast<DerivedT*>(this); }
+    const DerivedT& getDerived() const  { return *static_cast<const DerivedT*>(this); }
+
+
+ 
+    ContainerT Container;
+    size_t Idx;
+    
+    map_index_iterator(  ContainerT Container,size_t Idx ) : Container(Container), Idx(Idx){ }
+
+
+#if 0
+    map_index_iterator() {}
+  
+
+  public:
+    map_index_iterator(const map_index_iterator& That) :  Container(That.Container),  Idx(That.Idx) {}
+    map_index_iterator( map_index_iterator&& That) :  Container(That.Container),  Idx(That.Idx) {}
+
+    red_child_iterator& operator=(const red_child_iterator& That) {
+      this->Cur = That.Cur;
+      return *this;
+    }
+
+    red_child_iterator& operator=( red_child_iterator&& That) {
+      this->Cur = std::move(That.Cur);
+      return *this;
+    }
+#endif
+
+#if 0
+    const  RedRef& operator*() const { return Cur; }
+#endif
+
+  public:
+    bool operator==(const DerivedT& That) const {
+      return  Idx == That.Idx;
+    }
+
+    DerivedT& operator+=(std::ptrdiff_t N) {
+      Idx += N;
+      return getDerived();
+    }
+
+    DerivedT& operator-=(std::ptrdiff_t N) {
+      Idx -= N;
+      return getDerived();
+    }
+
+    std::ptrdiff_t operator-(const DerivedT& That) const {
+      return  Idx - That.Idx;
+    }
+
+    bool operator<(const DerivedT& That) const {
+      return  Idx <That.Idx;
+    }
+  }; // class map_index_iterator
+
+
+
   template< typename T1, typename T2, typename IteratorCategoryT, typename T>
-  class  iterator_union : public llvm::iterator_facade_base<iterator_union<T1,T2,IteratorCategoryT,T> , IteratorCategoryT, T>
+  class iterator_union : public llvm::iterator_facade_base<iterator_union<T1,T2,IteratorCategoryT,T> , IteratorCategoryT, T>
   {
     // TODO: make a proper union like PointerUnion
     int Discriminator;
@@ -101,6 +165,11 @@ namespace lof {
       }
     }
   }; // class iterator_union
+
+
+
+
+
 
 } // namespace lof
 #endif /* LLVM_LOF_LOFUTILS_H */

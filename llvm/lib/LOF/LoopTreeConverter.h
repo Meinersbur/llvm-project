@@ -6,7 +6,8 @@
 #include "llvm/Analysis/LoopInfo.h"
 
 
-  namespace lof {
+namespace lof {
+
     class GreenConverter {
       DenseMap <llvm::Value*, GSymbol*> InputsVals;
       llvm::  Function* Func;

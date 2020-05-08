@@ -193,7 +193,7 @@
       }
 
 
-      Green* addAssignment(GExpr* Cond, GSymbol* Target, GExpr*Val ){
+      Green* addAssignment(GExpr* Cond, GSymbol* Target, GExpr*Val ) {
         return addInstruction(Cond, Operation(Operation::Nop, nullptr), { Val }, {Target}, nullptr);
     }
 
@@ -204,9 +204,8 @@
       }
 #endif
 
-
       Green* createStmt(llvm::Instruction *OrigBegin,llvm:: Instruction *OrigEnd) {
-        return finish( GOpExpr::createTrueExpr() , false, OrigBegin,OrigEnd,nullptr);
+        return finish(GOpExpr::createTrueExpr() , false, OrigBegin,OrigEnd,nullptr);
       }
 
 

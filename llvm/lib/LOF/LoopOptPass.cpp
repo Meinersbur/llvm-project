@@ -58,7 +58,7 @@ public:
 
   bool runOnFunction(Function &F) override {
     // Do not re-optimize our own output.
-    if (F.hasFnAttribute("lof-output"))
+    if (F.hasFnAttribute("lof-generated"))
       return false;
 
     auto LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
