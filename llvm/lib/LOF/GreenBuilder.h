@@ -187,7 +187,7 @@
 
 
       Green* addInstruction(GExpr* Cond, Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments, llvm::Instruction* OrigInst) {
-        auto Result = Green::createInstruction(Op, Arguments, Assignments, OrigInst);
+        auto Result = Green::createInstruction(Op, Arguments, Assignments, OrigInst, nullptr);
         addStmt(Cond, Result);
         return Result;
       }
@@ -240,13 +240,21 @@
           }
 
 
+          private:
+            Green* TransformationOf = nullptr;
+          public:
+            void setTransformationOf( Green* Base) {
+              TransformationOf = Base;
+            }
+
+
       private:
         Green* finish(GExpr *ExecCond, bool IsLooping, llvm::Instruction *OrigBegin, llvm::Instruction *OrigEnd, GSymbol* CanonicalCounter) {
          
          return new Green(ExecCond, Children, Conds, IsLooping, OrigBegin, OrigEnd, 
            make_optional_ArrayRef<GSymbol*>(ScalarReads),
            make_optional_ArrayRef<GSymbol*>(ScalarKills),
-           make_optional_ArrayRef<GSymbol*>(ScalarKills), CanonicalCounter);
+           make_optional_ArrayRef<GSymbol*>(ScalarKills), CanonicalCounter, TransformationOf);
         }
     };
 

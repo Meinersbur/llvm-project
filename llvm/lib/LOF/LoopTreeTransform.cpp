@@ -34,6 +34,7 @@ Green* GreenTreeTransform::transfromStmtOrLoop(Green* Node, bool IsLoop) {
     return Node;
 
   GreenBuilder Builder(Ctx);
+  Builder.setTransformationOf(Node);
 
   for (int i = 0; i < NumChildren; i += 1) {
     Builder.addStmt(RecreatedConds[i], RecreatedChildren[i] );

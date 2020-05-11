@@ -16,8 +16,6 @@
 
 
 
-
-
 namespace lof {
   class Green;
   class GSymbol;
@@ -298,13 +296,13 @@ namespace lof {
       virtual ~GCommon() {  }
 
     public:
-      enum Kind { Unknown, RefExpr, OpExpr, Stmt };
+      enum Kind { Unknown, RefExpr, OpExpr, Cond, Stmt };
       virtual Kind getKind() const = 0;
       static bool classof(const GCommon *) { return true; }
 
     public:
       bool isExpr() const { return isa<GExpr>(this); }
-      bool isStmt() const { return getKind() == Stmt; }
+      bool isStmt() const { return getKind() == Stmt || getKind()==Cond; }
       virtual bool isInstruction() const { return false; }
       virtual bool isContainer() const { return false;  }
       virtual bool isLoop() const { return false;  }
@@ -339,6 +337,8 @@ namespace lof {
       DenseSet<GSymbol*> writes() {}
 #endif
 
+    private:
+      Red* RedRoot = nullptr;
     public:
       Red* asRedRoot() ;
 
@@ -500,6 +500,27 @@ namespace lof {
 
 
 
+    class GCond : public GCommon {
+    private:
+      GExpr* Cond;
+      GCommon* Child;
+    public:
+       Kind getKind() const override { return GCommon::Cond; }
+
+      size_t getNumChildren() const override { return 2; }
+      GCommon* getChild(int i) const {
+        switch (i) {
+        case 0:
+          return Cond;
+        case 1:
+          return Child;
+        default:
+          llvm_unreachable("out of range");
+        }
+      }
+    }; // class GCond
+
+
     // TODO: rename Green to GStmt; rename GCommon to Green
     class Green : public GCommon {
     public:
@@ -562,8 +583,17 @@ namespace lof {
       GSymbol* getCanonicalCounter() const { return CanonicalCounter; }
 
     private:
-      Green(GExpr *ExecCond, ArrayRef<Green*> Children ,   ArrayRef<GExpr*> Conds ,  bool IsLooping,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, Optional< ArrayRef<GSymbol*>> ScalarReads,  Optional< ArrayRef<GSymbol*>> ScalarKills, Optional< ArrayRef<GSymbol*>> ScalarWrites, GSymbol * CanonicalCounter) : 
-          ExecCond(ExecCond), Children(Children.begin(), Children.end()), ChildConds(Conds.begin(), Conds.end()),  IsLoop(IsLooping) , OrigBegin(OrigBegin), OrigEnd(OrigEnd) , CanonicalCounter(CanonicalCounter) {
+       Green* TransformationOf = nullptr;
+       DenseMap<GSymbol*, GExpr*> WhereMapping;
+       mutable bool ConfirmedSemanticallyEquivalent = false;
+       bool SemanticallyEquivalentIfChildrenAre = false;
+
+    public:
+      Green* getTransformationOf() const { return TransformationOf; }
+
+    private:
+      Green(GExpr *ExecCond, ArrayRef<Green*> Children ,   ArrayRef<GExpr*> Conds ,  bool IsLooping,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, Optional< ArrayRef<GSymbol*>> ScalarReads,  Optional< ArrayRef<GSymbol*>> ScalarKills, Optional< ArrayRef<GSymbol*>> ScalarWrites, GSymbol * CanonicalCounter, Green*TransformationOf) : 
+          ExecCond(ExecCond), Children(Children.begin(), Children.end()), ChildConds(Conds.begin(), Conds.end()),  IsLoop(IsLooping) , OrigBegin(OrigBegin), OrigEnd(OrigEnd) , CanonicalCounter(CanonicalCounter), TransformationOf(TransformationOf) {
         if (ScalarReads.hasValue()) {
           this->  ScalarReads.emplace( ScalarReads.getValue().begin() , ScalarReads.getValue().end());
         }
@@ -573,6 +603,8 @@ namespace lof {
         if (ScalarWrites.hasValue()) {
           this->  ScalarWrites.emplace( ScalarWrites.getValue().begin() , ScalarWrites.getValue().end());
         }
+
+
 
         assertOK();
       }
@@ -589,16 +621,16 @@ namespace lof {
 
 
     private:
-      Green(Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments,llvm::Instruction *OrigBegin,llvm:: Instruction *OrigEnd, llvm::Loop *OrigLoop): Op(Op) , Arguments(Arguments.begin(), Arguments.end()), Assignments(Assignments.begin(), Assignments.end()), OrigBegin(OrigBegin), OrigEnd(OrigEnd), OrigLoop(OrigLoop) {
+      Green(Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments,llvm::Instruction *OrigBegin,llvm:: Instruction *OrigEnd, llvm::Loop *OrigLoop,  Green *TransformationOf): Op(Op) , Arguments(Arguments.begin(), Arguments.end()), Assignments(Assignments.begin(), Assignments.end()), OrigBegin(OrigBegin), OrigEnd(OrigEnd), OrigLoop(OrigLoop), TransformationOf(TransformationOf) {
         assertOK();
       }
 
     public:
-     static  Green* createInstruction(Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments,llvm::Instruction *OrigInst) {
+     static  Green* createInstruction(Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments, llvm::Instruction *OrigInst,  Green *TransformationOf) {
        llvm::Instruction* OrigEnd = nullptr;
        if (OrigInst)
          OrigEnd = OrigInst->getNextNode();
-        return new Green(Op, Arguments, Assignments,OrigInst,OrigEnd,nullptr);
+        return new Green(Op, Arguments, Assignments,OrigInst,OrigEnd,nullptr, TransformationOf);
       }
       bool isInstruction() const override  { return Op.isValid(); }
 
@@ -696,7 +728,6 @@ public:
 
 
     public:
-      std::vector<Dep*> getAllDependencies() ;
 
           public:
             void printLine(llvm::raw_ostream& OS) const override {

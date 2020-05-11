@@ -168,6 +168,7 @@ void  Green::print(raw_ostream &OS) const  {
 #endif
 
 
+
  GCommon*  lof:: green_child_iterator ::operator*() const {
   if (auto Stmt = dyn_cast<Green>(Container)) {
     return Stmt->getChildren()[Idx];
@@ -181,61 +182,16 @@ void  Green::print(raw_ostream &OS) const  {
 
 
  Red* GCommon:: asRedRoot()  {
-  return Red::createRoot( this);
+   if (!RedRoot) 
+     RedRoot = Red::createRoot(this);
+   return RedRoot;
  }
 
 
- static void collectRedInstructions(Red* R, std::vector<Red*>&Result) {
-   auto G = R->getGreen();
-   if (G->isInstruction()) {
-     Result.push_back(R);
-     return;
-   }
-
-      
-   for (auto C : R->getChildren()) {
-     collectRedInstructions(C, Result);
-   }
- }
-
-
- /// Collect all red instructions
- static std::vector<Red*> getAllRedInstructions(GCommon* G) {
-   std::vector<Red*> Result;
-   collectRedInstructions(G->asRedRoot(), Result);
-  return Result;
-}
 
 
 
 
-
- std::vector<Dep*> Green::getAllDependencies()  {
-   std::vector<Dep*> Result;
-   std::vector<Red*> Reds = getAllRedInstructions(this);
-   auto N = Reds.size();
-
-   for (int i = 0; i < N; i++) {
-     auto Src = Reds[i];
-     auto GSrc =  cast<Green>( Src->getGreen());
-     for (int j = 0; j < i; j++) {
-       auto Dst = Reds[j];
-       auto GDst = cast<Green>( Dst->getGreen());
-
-       auto SrcWrites = GSrc->getScalarWrites();
-       auto DstReads = GDst->getScalarReads();
-       auto DstWrites = GDst->getScalarWrites();
-
-       for (auto Def : SrcWrites) {
-         
-       }
-
-
-     }
-   }
-
-   return Result;
- }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
  void GCommon::dump() const {

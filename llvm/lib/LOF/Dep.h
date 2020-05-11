@@ -2,9 +2,10 @@
 #define LLVM_LOF_DEP_H
 
 #include "llvm/ADT/ArrayRef.h"
+#include "Green.h"
 
 
-  namespace lof {
+namespace lof {
 
     enum class DepKind {
       Unknown = 0,
@@ -31,7 +32,6 @@
     }; // enum class DepKind
 
 
-
     class Dep {
     private:
     public:
@@ -39,6 +39,10 @@
 
       virtual bool isScalar() const = 0;
     }; // class Dep
+
+
+    std::vector<Dep*> getAllDependencies(Green *Root);
+    bool checkDependencies(Green* NewRoot, ArrayRef<Dep*> Deps);
 
   } // namespace lof
 #endif /* LLVM_LOF_DEP_H */

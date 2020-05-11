@@ -1,5 +1,3 @@
-
-
 #include "LoopOpt.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "Green.h"
@@ -20,27 +18,30 @@
 #include "LoopTransform.h"
 #include "RedRef.h"
 #include "LoopTreeTransform.h"
+#include "Dep.h"
 
 using namespace llvm;
 using namespace lof;
+
+#define DEBUG_TYPE "lof-loopopt"
 
 namespace {
 
 
   class UnrollAllOutermostLoops final : public GreenTreeTransform  {
+  private:
+    int Factor;
   public:
-    UnrollAllOutermostLoops(LoopContext& Ctx) : GreenTreeTransform(Ctx) {}
+    UnrollAllOutermostLoops(LoopContext& Ctx, int Factor) : GreenTreeTransform(Ctx), Factor(Factor) {}
 
-    static GCommon * run(LoopContext& Ctx, GCommon *Root) {
-      UnrollAllOutermostLoops Transformer(Ctx);
+    static GCommon * run(LoopContext& Ctx, GCommon *Root, int Factor) {
+      UnrollAllOutermostLoops Transformer(Ctx,Factor);
       return Transformer.visit(Root);
     }
 
     Green *transformLoop(Green* Loop) override {
-      return applyUnrollAndJam(Ctx,Loop, 4 );
+      return applyUnrollAndJam(Ctx,Loop, 2);
     }
-
-
   }; // class UnrollAllOutermostLoops
 
 
@@ -53,17 +54,12 @@ private:
   LoopInfo *LI;
   ScalarEvolution *SE;
 
-  Green *createInst(Value *I);
-
-  
-
 public:
   LoopOptimizerImpl(Function *Func, LoopInfo *LI, ScalarEvolution *SE)
       : Func(Func), LI(LI), SE(SE) {
   
     Ctx = new LoopContext( Func->getContext() );
   }
-
 
 
   Green* buildOriginalLoopTree() {
@@ -76,13 +72,17 @@ public:
     auto OrigTree = buildOriginalLoopTree();
     OrigTree->dump();
 
-   auto NewTree = cast<Green>( UnrollAllOutermostLoops::run(*Ctx, OrigTree));
+    auto OrigDeps = getAllDependencies(OrigTree);
+
+   auto NewTree = cast<Green>( UnrollAllOutermostLoops::run(*Ctx, OrigTree, 2));
    NewTree->dump();
+
+
+   auto NewTree2 = cast<Green>( UnrollAllOutermostLoops::run(*Ctx, NewTree, 2));
+   NewTree2->dump();
 
 #if 0
     // Try to unroll ever top-level loop
-
-   
   auto  NewTreeBuilder = RedRef::createRoot(OrigTree).dfs<GreenBuilder>(
       [](const RedRef& R, GreenBuilder& ParentResult, bool& ContinueChildren, bool& ContinueSiblings, bool& ContinueTree) -> GreenBuilder {},
       [](const RedRef& R, GreenBuilder& ParentResult, GreenBuilder&& Result, bool& ContinueSiblings, bool& ContinueTree) {}
@@ -92,7 +92,13 @@ public:
   auto NewTree = NewTreeBuilder.createStmt( OrigTree->getOrigRange().first, OrigTree->getOrigRange().second );
 #endif
 
-    GreenCodeGen CG(NewTree,Func->getParent(), Func->getContext());
+   // Confirm that all dependencies in OrigDeps are honored in NewTree.
+  if (!checkDependencies(NewTree2, OrigDeps)) {
+    LLVM_DEBUG(dbgs() << "Not passing dependency check\n");
+    return false;
+  }
+
+    GreenCodeGen CG(NewTree2, Func->getParent(), Func->getContext());
     CG.replaceOrig(OrigTree);
 
     return true;

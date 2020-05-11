@@ -15,7 +15,7 @@ namespace lof {
 
   protected:
     ResultT Visit(GCommon* Node) {
-      return Visit( RedRef::createRoot(Node))
+      return Visit(RedRef::createRoot(Node))
     }
 
 
@@ -23,6 +23,128 @@ namespace lof {
       
     }
   }; // class GreenRecursiveVisitor
+
+
+
+#if 0
+  template<typename ResultT>
+  struct RedRefVisitorData {
+    const RedRef  Node;
+    ResultT Data;
+    RedRefVisitorData<ResultT>* ParentData;
+  }; // struct RedRefVisitorData
+
+  template<typename ResultT>
+  class RedRefRecursiveVisitor {
+    private:
+      using DerivedT = GreenRecursiveVisitor;
+      DerivedT& getDerived() { return *static_cast<DerivedT*>(this); }
+      const DerivedT& getDerived() const  { return *static_cast<const DerivedT*>(this); }
+
+    protected:
+      ResultT visit() {
+        RedRefVisitorData<ResultT> RootData;
+
+      }
+
+      ResultT visit(const RedRef& Node, RedRefVisitorData &ParentData) {
+      }
+
+  };  // class RedRefRecursiveVisitor
+#endif
+
+
+
+  //template<typename DerivedT, typename ResultT, typename ParentT>
+  template<typename ResultT, typename ParentT>
+  class RedRecursiveVisitor {
+  private:
+    using DerivedT = RedRecursiveVisitor;
+    DerivedT& getDerived() { return *static_cast<DerivedT*>(this); }
+    const DerivedT& getDerived() const  { return *static_cast<const DerivedT*>(this); }
+
+  private:
+    bool Aborted = false;
+  public:
+    void abortTraversal() { Aborted = true; }
+
+  protected:
+    virtual ParentT previsitRoot(Red* Node, ParentT& NodeParentData) { return ParentT(); }
+    virtual ResultT postvisitRoot(Red* Node, ParentT& ParentData) { return ResultT();  }
+
+  public:
+    ResultT visitRoot(GCommon* Node) {
+      return visitRoot(Node->asRedRoot());
+    }
+
+   virtual ResultT visitRoot(Red* Node) {
+      ParentT RootParentData = previsitRoot(Node);
+      getDerived().visit(Node, RootParentData);
+      return postvisitRoot(Node, RootParentData);
+    }
+
+   protected:
+    virtual ResultT visit(Red * Node, ParentT &ParentData) {
+      if (Node->isContainer()) 
+        return getDerived().visitContainer(Node, ParentData);
+      if (Node->isInstruction())
+        return getDerived().visitInstruction(Node, ParentData);
+      if (Node->isExpr()) 
+        return getDerived().visitExpr(Node, ParentData);
+      llvm_unreachable("unhandled case");
+    }
+
+
+
+#if 0
+    virtual void recurseArguments(Red *Node, ParentT &ParentData) {
+      auto Green = Node->getGreen();
+      ArrayRef<GExpr*> Arguments = isa<GOpExpr>(Green) ? cast<GOpExpr>(Green)->getArguments() : cast<Green>(Node)->getArguments();
+      for (auto Arg : Arguments) 
+        getDerived().visit(Arg, ParentData);
+    }
+#endif
+
+    virtual void recurseChildren(Red *Node,  ParentT &ParentData) {
+      for (auto Child : Node->children()) {
+        if (Aborted)
+          return;
+        getDerived().visit(Child, ParentData);
+      }
+    }
+    
+    virtual ParentT previsit(Red* Node, ParentT& NodeParentData) { return ParentT(); }
+    virtual ResultT postvisit(Red* Node, ParentT& ParentData) { return ResultT();  }
+
+    virtual ParentT previsitContainer(Red* Node, ParentT& NodeParentData) { return previsit(Node,NodeParentData); }
+    virtual ResultT postvisitContainer(Red* Node, ParentT& ParentData) { return postvisit(Node, ParentData); }
+
+    virtual ResultT visitContainer(Red* Node, ParentT &ParentData) {
+      ParentT MyData =  previsitContainer(Node, ParentData);
+      recurseChildren(Node, ParentData);
+      return postvisitContainer(Node, MyData);
+    }
+
+    virtual ParentT previsitInstruction(Red* Node, ParentT& NodeParentData) { return previsit(Node,NodeParentData); }
+    virtual ResultT postvisitInstruction(Red* Node, ParentT& ParentData) { return postvisit(Node, ParentData); }
+
+   virtual  ResultT visitInstruction(Red* Node, ParentT &ParentData) {
+      ParentT MyData =  previsitInstruction(Node, ParentData);
+      recurseChildren(Node, MyData);
+      return postvisitInstruction(Node, MyData);
+    }
+
+    virtual ParentT previsitExpr(Red* Node, ParentT& NodeParentData) { return previsit(Node, NodeParentData); }
+    virtual ResultT postvisitExpr(Red* Node, ParentT& ParentData) { return postvisit(Node, ParentData); }
+
+    virtual ResultT visitExpr(Red* Node, ParentT &ParentData) {
+      ParentT MyData =  previsitExpr(Node);
+      recurseChildren(Node, MyData);
+      return postvisitExpr(Node, MyData);
+    }
+
+  }; // class RedRecursiveVisitor
+
 
 
 
@@ -41,6 +163,7 @@ namespace lof {
   public:
     GreenTreeTransform(LoopContext& Ctx) : Ctx(Ctx) {}
 
+
     GCommon* visit(GCommon* Node) {
       assert((!Replacement.count(Node) || Replacement.lookup(Node))  && "Loop in tree??");
       auto& Result = Replacement[Node];
@@ -49,6 +172,7 @@ namespace lof {
       }
       return Result;
     }
+
 
      GCommon* transform(GCommon* Node) {
       if (Node->isLoop())
@@ -64,15 +188,19 @@ namespace lof {
       llvm_unreachable("unhandled case");
     }
 
+
     virtual Green* transformStmt(Green* Node) {
       return getDerived().transfromStmtOrLoop(Node, false);
     }
+
 
      virtual Green* transformLoop(Green* Node) {
       return getDerived().transfromStmtOrLoop(Node, false);
     }
 
+
      Green* transfromStmtOrLoop(Green* Node, bool IsLoop);
+
 
     void transformArguments(GCommon *Node, SmallVectorImpl<GExpr*> &RecreatedArgs, bool &Changed) {
       ArrayRef<GExpr*> Arguments = isa<GOpExpr>(Node) ? cast<GOpExpr>(Node)->getArguments() : cast<Green>(Node)->getArguments();
@@ -86,24 +214,26 @@ namespace lof {
       }
     }
 
+
     virtual Green* transformInstruction(Green* Node) {
       assert(Node->isInstruction());
       bool Changed = false;
 
       SmallVector<GExpr*, 8> RecreatedArgs;
-      transformArguments(Node,RecreatedArgs, Changed );
+      transformArguments(Node,RecreatedArgs, Changed);
 
       auto Op = Node->getOperation();
 
       if (!Changed)
         return Node;
-    return Green::createInstruction(Op, RecreatedArgs, Node->getAssignments(), Node->getOrigRange().first);
+      return Green::createInstruction(Op, RecreatedArgs, Node->getAssignments(), Node->getOrigRange().first, Node);
     }
 
-    virtual    GOpExpr* transformExpr(GOpExpr* Node) {
+
+    virtual GOpExpr* transformExpr(GOpExpr* Node) {
       bool Changed = false;
       SmallVector<GExpr*, 8> RecreatedArgs;
-      transformArguments(Node,RecreatedArgs, Changed );
+      transformArguments(Node,RecreatedArgs, Changed);
 
       if (!Changed)
         return Node;
