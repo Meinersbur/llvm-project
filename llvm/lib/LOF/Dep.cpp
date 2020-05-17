@@ -2,65 +2,167 @@
 #include "Red.h"
 #include "LoopTreeTransform.h"
 
+#define DEBUG_TYPE "lof-dep"
+
 using namespace lof;
 
 
-class JohnnyDep : public Dep {
-private:
-  bool IsScalar = true;
-
-  Red* Src;
-  Red* Dst;
-
-public:
-  JohnnyDep(Red* Src, Red* Dst) : Src(Src), Dst(Dst) {}
 
 
-  bool isScalar() const override { return IsScalar; }
+namespace {
 
-  Red* getSrc() const { return Src; }
-  Red* getDst() const { return Dst; }
+  struct DataFlowAnalysisForReachableDefs {
+    using DefMapTy = DenseMap<GSymbol*, SmallVector<std::pair<Red*, int>, 4>>;
+    DefMapTy ValidDefs;
 
-}; // class JohnnyDep
+    //DenseSet<GSymbol*> KilledSinceTop;
+   
+
+    void visitRoot(Red* Node) {
+      visit(Node);
+    }
 
 
-static void collectRedInstructions(Red* R, std::vector<Red*>&Result) {
-  auto G = R->getGreen();
-  if (G->isInstruction()) {
-    Result.push_back(R);
-    return;
-  }
 
-  for (auto C : R->getChildren()) {
-    collectRedInstructions(C, Result);
-  }
+    // TODO: Honor kills
+    // TODO: Honor computed scalars
+    void visit(Red* Node) {
+      if (Node->isRefExpr()) {
+        auto Sym = cast<GRefExpr>(Node->getGreen());
+        auto& ReachableDefs = ValidDefs[Sym];
+        auto TopIsReachable = true; //!KilledSinceTop.count(Sym);
+        //Node->dump();
+        Node->internal_setReachableDefs(ReachableDefs, TopIsReachable);
+
+        for (auto ReachDef : ReachableDefs) {
+          ReachDef.first->internal_addPossibleUse(ReachDef.second, Node);
+        }
+      }
+
+#if 0
+      if (Node->isStmt() && cast<Green>(Node->getGreen())->hasComputedScalars()) {
+        auto G = cast<Green>(Node->getGreen());
+        for (auto Killed : G->getScalarKills()) {
+          KilledSinceTop.insert(Killed);
+        }
+      }
+#endif
+
+
+
+      for (auto Child : Node->children()) {
+        visit(Child);
+      }
+
+      if (Node->isInstruction()) {
+        auto Inst = cast<Green>(Node->getGreen());
+        for (auto p : llvm::enumerate(Inst->getAssignments())) {
+          auto Sym = p.value();
+          ValidDefs[Sym].push_back({ Node, p.index() });
+        }
+      }
+
+    }
+
+
+  }; // class DataFlowAnalysisForReachableDefs
+} // anon namespace
+
+
+
+
+
+void lof::computeReachableDefs(Red* Root) {
+  DataFlowAnalysisForReachableDefs ReachDefAnalyzer;
+  ReachDefAnalyzer.visit(Root);
 }
 
 
 
 
-/// Collect all red instructions
-static std::vector<Red*> getAllRedInstructions(GCommon* G) {
-  std::vector<Red*> Result;
-  collectRedInstructions(G->asRedRoot(), Result);
-  return Result;
-}
+
+namespace {
+  // TODO: Make part of ReachableDefs of the Red tree to not have instantiate it 
+  class JohnnyDep : public Dep {
+  public:
+    Kind getKind() const override { return Dep::JohnnyDep; }
+    static bool classof(const Dep* Obj) { return Obj->getKind() == Dep::JohnnyDep; }
+    static bool classof(const JohnnyDep*) { return true; }
+  private:
+    bool IsScalar = true;
+
+    Red* Src;
+    Red* Dst;
+
+  public:
+    JohnnyDep(Red* Src, Red* Dst) : Src(Src), Dst(Dst) {
+      assert(Src->isInstruction());
+      assert(Dst->isInstruction());
+    }
 
 
+    bool isScalar() const override { return IsScalar; }
+
+    Red* getSrc() const { return Src; }
+    Red* getDst() const { return Dst; }
+
+  }; // class JohnnyDep
+
+
+  void collectRedInstructions(Red* R, std::vector<Red*>& Result) {
+    auto G = R->getGreen();
+    if (G->isInstruction()) {
+      Result.push_back(R);
+      return;
+    }
+
+    for (auto C : R->children()) {
+      collectRedInstructions(C, Result);
+    }
+  }
+
+
+
+
+  /// Collect all red instructions
+  std::vector<Red*> getAllRedInstructions(GCommon* G) {
+    std::vector<Red*> Result;
+    collectRedInstructions(G->asRedRoot(), Result);
+    return Result;
+  }
+} // anon namespace
+
+
+
+
+// TODO: algorithm should avoid O(n^2) be skipping over transitive dependencies
 std::vector<Dep*>lof:: getAllDependencies(Green *Root)  {
   std::vector<Dep*> Result;
   std::vector<Red*> Reds = getAllRedInstructions(Root);
   auto N = Reds.size();
 
+  // Make scalar dependencies
+  for (auto R : Reds) 
+    for (auto Use : R->collectRedExprs())
+    for (auto Def: Use->getReachablesDefs())
+      Result.push_back(new JohnnyDep(Def.first, R));
+  
+  return Result;
+
   DenseMap<GSymbol*, SmallVector<Red*, 2> > Reads;
   DenseMap<GSymbol*, SmallVector<Red*, 2> > Writes;
 
+
+
+
   for (int i = 0; i < N; i++) {
     auto Src = Reds[i];
-    auto GSrc =  cast<Green>( Src->getGreen());
+    auto GSrc =  cast<Green>(Src->getGreen());
     for (int j = 0; j < i; j++) {
       auto Dst = Reds[j];
       auto GDst = cast<Green>(Dst->getGreen());
+      assert(GSrc->hasComputedScalars());
+      assert(GDst->hasComputedScalars());
 
       auto SrcWrites = GSrc->getScalarWrites();
       auto SrcReads = GSrc->getScalarReads();
@@ -80,14 +182,10 @@ std::vector<Dep*>lof:: getAllDependencies(Green *Root)  {
 
 namespace {
 
-  struct DepEncounter {
-    bool EncounteredSrc = false;
-    bool EncounteredDst = false;
-    bool Violation = false;
-  };
+
 
   // TODO: Checks only a singled dependence; must be much more efficient
-  class CheckDepVisitor final : public RedRecursiveVisitor<bool, DepEncounter> {
+  class CheckDepVisitor final  {
   private:
     Red* Src;
     Red* Dst;
@@ -97,11 +195,11 @@ namespace {
     bool Passed = true;
 
   private:
-    bool isRepresenting(Red* Orig, Red* Derived) {
+    bool isRepresenting(Red* Orig, const RedRef& Derived) {
       auto RepresentingG = cast<Green>( Orig->getGreen());
       assert(!RepresentingG->getTransformationOf()  && "Assuming the dependency is from the original tree without reused nodes (i.e. a tree, not a DAG)");
 
-      auto DerivedG = cast<Green>(Derived);
+      auto DerivedG = cast<Green>(Derived.getGreen());
       while (DerivedG->getTransformationOf()) {
         DerivedG = DerivedG->getTransformationOf();
       }
@@ -116,32 +214,43 @@ namespace {
       assert(Dst->isInstruction());
     }
 
+    bool isPassed() const { return Passed; }
 
-    bool hasPassed() { return Passed; }
 
-    DepEncounter previsitInstruction(Red* Node, DepEncounter& NodeParentData) override { 
-        DepEncounter Result;
-        Result.EncounteredSrc = isRepresenting(Src, Node);
-        Result.EncounteredDst = isRepresenting(Dst, Node);
-        Result.Violation = false;
-        return Result;
+     void visit(const RedRef & Node) {
+      if (Node.isContainer()) 
+        return visitContainer(Node);
+      if (Node.isInstruction())
+        return visitInstruction(Node);
+      if (Node.isExpr()) 
+        return visitExpr(Node);
+      llvm_unreachable("unhandled case");
+    }
+
+
+     void visitContainer(const RedRef & Node) {
+       for (auto &X : Node.children()) {
+         visit(X);
+       }
      }
 
-
-
-
-    DepEncounter previsitContainer(Red* Node, DepEncounter& NodeParentData)  override {
-       if (Node->isLoop()) {
-         // ...
+     void visitInstruction(const RedRef & Node) {
+       if (isRepresenting(Src, Node))
+         EncounteredSrc = true;
+       if (isRepresenting(Dst, Node)) {
+         EncounteredDst = true;
+         if (EncounteredSrc) {
+           // Src before definition, i.e. dependency violation
+           Passed = false;
+         }
        }
 
-       DepEncounter Result;
-       Result.EncounteredSrc = false;
-       Result.EncounteredDst = false;
-       Result.Violation = false;
-       return Result;
      }
-   
+
+     void visitExpr(const RedRef & Node) {
+       return;
+     }
+
 
 
   }; // class CheckDepVisitor
@@ -156,9 +265,13 @@ bool lof::checkDependencies(Green* NewRoot, ArrayRef<Dep*> Deps) {
   for (auto D : Deps) {
     auto Dep = cast<JohnnyDep>(D);
     CheckDepVisitor Checker(Dep->getSrc(), Dep->getDst());
-
+    auto NewRedRoot = RedRef::createRoot(NewRoot);
+    Checker.visit(NewRedRoot  );
+    if (!Checker.isPassed()) {
+      LLVM_DEBUG(llvm::dbgs() << "Not preserved dependency\n");
+      return false;
+    }
   }
-
 
   return true;
 }

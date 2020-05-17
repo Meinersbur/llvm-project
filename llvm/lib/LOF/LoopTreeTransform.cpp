@@ -13,7 +13,7 @@ Green* GreenTreeTransform::transfromStmtOrLoop(Green* Node, bool IsLoop) {
   auto NumChildren = Node->getNumChildren();
   for (int i = 0; i < NumChildren;i+=1) {
     auto Child = Node->getChild(i);
-    auto Cond = Node->getChildCond(i);
+    auto Cond = Node->getSubCond(i);
     auto New = getDerived().visit(Child);
     RecreatedChildren.push_back(cast<Green>(New));
     auto NewCond = getDerived().visit(Cond);

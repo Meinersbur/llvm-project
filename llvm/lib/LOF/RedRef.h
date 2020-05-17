@@ -40,7 +40,7 @@ namespace lof {
       void operator =(const RedRef& That) = delete;
 
       /// Move ctor; don't move unless That is not yet fixed 
-      RedRef( RedRef&& That) :  RedRefImpl(That.G, That.Parent,That.ParentIdx)  {
+      RedRef(RedRef&& That) :  RedRefImpl(That.G, That.Parent,That.ParentIdx)  {
         assert(!That.Fix && "Must not move already referenced RedRef");
         That.G = nullptr;
       }
@@ -54,8 +54,10 @@ namespace lof {
       explicit RedRef(GCommon* Root): RedRefImpl(Root,nullptr,-1) {
         assert(Root);
       }
+
     public:
       static RedRef createRoot(GCommon *G) {
+        assert(G);
         return RedRef(G);
       }
 
@@ -63,11 +65,6 @@ namespace lof {
       /// Create a child
       /// Non-public: use parent methods
       RedRef(GCommon* G,const RedRef* Parent, size_t ParentIdx) : RedRefImpl(G,Parent,ParentIdx) {
-        assert(G);
-        assert(!G->isStaging());
-        assert(Parent);
-        assert(ParentIdx >= 0);
-
         /// We are referencing Parent so it must not be moved anymore.
         Parent->Fix = true;
       }
@@ -97,7 +94,7 @@ namespace lof {
 
       public:
         red_child_iterator(const red_child_iterator& That) :  Cur(That.Cur) {}
-        red_child_iterator( red_child_iterator&& That) :  Cur( std::move(That.Cur)) {}
+        red_child_iterator(red_child_iterator&& That) :  Cur( std::move(That.Cur)) {}
 
         red_child_iterator& operator=(const red_child_iterator& That) {
           this->Cur = That.Cur;
@@ -113,7 +110,7 @@ namespace lof {
         const  RedRef& operator*() const { return * static_cast<RedRef*>( const_cast<RedRefImpl*>(  &Cur)); }
 
         bool operator==(const red_child_iterator& That) const {
-          assert(this->Cur.G == That.Cur.G);
+          // Note that one of the iterators can also be the end() marker, with G being nullptr.
           assert(this->Cur.Parent == That.Cur.Parent);
           return  this->Cur.ParentIdx == That.Cur.ParentIdx;
         }
@@ -154,21 +151,26 @@ namespace lof {
       auto getGreen() const { return G; }
 
       auto getCondInParent() const {
-        return cast<Green>(Parent->getGreen())->getChildCond(ParentIdx);
+        return cast<Green>(Parent->getGreen())->getSubCond(ParentIdx);
       }
 
       auto getKind() const {
         return  G->getKind();
       }
 
-      bool isExpr() const {
-        return G->isExpr();
-      }
-      bool isStmt() const {
-        return G->isStmt();
+      bool isContainer() const {
+        return G->isContainer();
       }
       bool isInstruction() const {
         return G->isInstruction();
+      }
+      bool isExpr() const {
+        return G->isExpr();
+      }
+
+
+      bool isStmt() const {
+        return G->isStmt();
       }
       bool isLoop() const {
         return G->isLoop();
@@ -191,7 +193,7 @@ namespace lof {
 
         if (VisitChildren) {
           bool ContinueMySiblings = true;
-          for (auto Child : children()) {
+          for (auto &Child : children()) {
             dfs_internal(PreorderCallback, PostorderCallback, MyResult, ContinueMySiblings, ContinueTree  );
             if (!ContinueTree)
               return;

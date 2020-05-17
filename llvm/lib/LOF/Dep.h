@@ -7,6 +7,8 @@
 
 namespace lof {
 
+  void computeReachableDefs(Red* Root);
+
     enum class DepKind {
       Unknown = 0,
 
@@ -33,7 +35,18 @@ namespace lof {
 
 
     class Dep {
-    private:
+    public:
+      enum Kind {
+        Unknown,
+
+        JohnnyDep,
+
+        LastKind = JohnnyDep
+      };
+
+     virtual Kind getKind() const = 0;
+      static bool classof(const Dep *) { return true; }
+
     public:
       virtual ~Dep() { }
 

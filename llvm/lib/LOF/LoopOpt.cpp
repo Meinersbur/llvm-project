@@ -17,6 +17,7 @@
 #include "llvm/IR/IRBuilder.h"
 #include "LoopTransform.h"
 #include "RedRef.h"
+#include "Red.h"
 #include "LoopTreeTransform.h"
 #include "Dep.h"
 
@@ -71,8 +72,16 @@ public:
   bool optimize() override {
     auto OrigTree = buildOriginalLoopTree();
     OrigTree->dump();
+    OrigTree->asRedRoot()->dump();
+
+    computeReachableDefs(OrigTree->asRedRoot());
 
     auto OrigDeps = getAllDependencies(OrigTree);
+
+    if (!checkDependencies(OrigTree, OrigDeps)) {
+      LLVM_DEBUG(dbgs() << "Unmodified tree does not preserve dependencies???\n");
+      return false;
+    }
 
    auto NewTree = cast<Green>( UnrollAllOutermostLoops::run(*Ctx, OrigTree, 2));
    NewTree->dump();
@@ -107,7 +116,7 @@ public:
 
 
   void view( Green* Root) {
-    ViewGraph< Green *>(Root, "lof", false, "Loop Hierarchy Graph");
+    ViewGraph< GCommon *>(Root, "lof", false, "Loop Hierarchy Graph");
   }
 
 

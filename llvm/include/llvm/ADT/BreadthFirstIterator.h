@@ -45,9 +45,9 @@ template <class GraphT,
               bf_iterator_default_set<typename GraphTraits<GraphT>::NodeRef>,
           class GT = GraphTraits<GraphT>>
 class bf_iterator
-    : public std::iterator<std::forward_iterator_tag, typename GT::NodeRef>,
+    : public std::iterator<std::forward_iterator_tag, typename GT::NodeRef, typename std::iterator_traits<typename GT::ChildIteratorType>::difference_type, typename std::iterator_traits<typename GT::ChildIteratorType>::pointer, typename  std::iterator_traits<typename  GT::ChildIteratorType>::reference>,
       public bf_iterator_storage<SetType> {
-  using super = std::iterator<std::forward_iterator_tag, typename GT::NodeRef>;
+  using super = std::iterator<std::forward_iterator_tag, typename GT::NodeRef, typename std::iterator_traits<typename GT::ChildIteratorType>::difference_type, typename std::iterator_traits<typename GT::ChildIteratorType>::pointer, typename  std::iterator_traits<typename  GT::ChildIteratorType>::reference>;
 
   using NodeRef = typename GT::NodeRef;
   using ChildItTy = typename GT::ChildIteratorType;

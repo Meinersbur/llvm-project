@@ -41,8 +41,8 @@ namespace {
       auto NumChildren = G->getNumChildren();
 
       for (int i = 0; i < NumChildren; i += 1) {
-        auto C = G->getChild(i);
-        auto Cond = G->getChildCond(i);
+        auto C = G->getSubStmt(i);
+        auto Cond = G->getSubCond(i);
 
         if (!C->isLoop()) {
           assert(C->isInstruction());

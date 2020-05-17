@@ -19,7 +19,7 @@ namespace lof {
 
 
   template <typename DerivedT, typename ContainerT, typename T, typename DifferenceTypeT = std::ptrdiff_t, typename PointerT = T *, typename ReferenceT = T &>
-  class map_index_iterator : public llvm:: iterator_facade_base< DerivedT, std::random_access_iterator_tag, T, DifferenceTypeT,PointerT,ReferenceT>
+  class map_index_iterator : public llvm:: iterator_facade_base<DerivedT, std::random_access_iterator_tag, T, DifferenceTypeT,PointerT,ReferenceT>
   {
     protected:
     DerivedT& getDerived() { return *static_cast<DerivedT*>(this); }
@@ -30,7 +30,11 @@ namespace lof {
     ContainerT Container;
     size_t Idx;
     
-    map_index_iterator(  ContainerT Container,size_t Idx ) : Container(Container), Idx(Idx){ }
+    map_index_iterator(  ContainerT Container,size_t Idx ) : Container(Container), Idx(Idx){
+//      static_assert(std::is_same<ReferenceT, decltype( ((DerivedT)nullptr)->operator*() )>::value, "operator*() must return a ReferenceT" );
+      static_assert(std::is_same<ReferenceT, decltype(static_cast<DerivedT*>(this)->operator*())>::value, "operator*() must return ReferenceT" );
+      static_assert(std::is_same<ReferenceT, decltype(static_cast<const DerivedT*>(this)->operator*())>::value, "operator*() must return ReferenceT" );
+    }
 
 
 #if 0
@@ -78,6 +82,8 @@ namespace lof {
     bool operator<(const DerivedT& That) const {
       return  Idx <That.Idx;
     }
+
+
   }; // class map_index_iterator
 
 

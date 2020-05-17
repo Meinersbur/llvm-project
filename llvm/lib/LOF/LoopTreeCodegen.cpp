@@ -300,7 +300,7 @@ Value* GreenCodeGen:: emitOperation(const  Operation& Op, ArrayRef<GExpr*> Argum
   switch (Op.getKind()) {
   case Operation::LLVMInst:
     assert(!IsExpr);
-    LLVM_FALLTHROUGH
+    LLVM_FALLTHROUGH;
   case Operation::LLVMFloating:{
       auto I = Op.getLLVMInst();
       if (auto C = dyn_cast<Constant>(I)) {

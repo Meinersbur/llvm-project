@@ -15,7 +15,7 @@ namespace lof {
 
   protected:
     ResultT Visit(GCommon* Node) {
-      return Visit(RedRef::createRoot(Node))
+      return Visit(RedRef::createRoot(Node));
     }
 
 
@@ -264,7 +264,7 @@ namespace lof {
     RedTreeTransform(LoopContext& LoopCtx) : LoopCtx(LoopCtx) {}
 
     GCommon* Visit(GCommon* Node) {
-      return Visit(RedRef::createRoot(Node))
+      return Visit(RedRef::createRoot(Node));
     }
 
 
@@ -275,6 +275,10 @@ namespace lof {
         return VisitInstruction(Node);
     }
 
+
+    GCommon* VisitInstruction(const RedRef &Node) {
+
+    }
 
     GCommon* VisitLoop(const RedRef &Node) {
 

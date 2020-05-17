@@ -30,7 +30,7 @@ namespace lof {
 
 
 namespace llvm {
-  template<> struct GraphTraits<lof::Green*>;
+  template<> struct GraphTraits<lof::GCommon*>;
   class Loop;
   class Value;
   class Inst;
@@ -95,25 +95,23 @@ namespace lof {
 
 
   namespace llvm {
-
     template <>
-    struct GraphTraits<lof::Green*> {
-      using GraphRef = lof::Green*;
-      using NodeRef = lof::Green*;
-
+    struct GraphTraits<lof::GCommon*> {
       // Green as graph node; enumerate children
-      //using  ChildIteratorType =lof:: green_child_iterator;
-      using  ChildIteratorType = ArrayRef<NodeRef>::iterator;
+      using NodeRef = lof::GCommon*;
+      using  ChildIteratorType =lof:: green_child_iterator;
       static inline ChildIteratorType child_begin(NodeRef N);
       static inline ChildIteratorType child_end(NodeRef N);
 
       // Green as graph representing its subtree; enumerate all nodes in subtree
+      using GraphRef = lof::GCommon*;
       using  nodes_iterator = df_iterator<NodeRef, df_iterator_default_set<NodeRef>, false, GraphTraits<NodeRef>>;
-      static inline nodes_iterator nodes_begin(lof::Green* RI);
-      static inline nodes_iterator nodes_end(lof::Green* RI);
-      static NodeRef getEntryNode(lof::Green* G) { return G; }
-    };
+      static inline nodes_iterator nodes_begin(lof::GCommon* G);
+      static inline nodes_iterator nodes_end(lof::GCommon* G);
+      static NodeRef getEntryNode(lof::GCommon* G) { return G; }
+    }; // template specialization GraphTraits<lof::GCommon*>
   } // namespace llvm
+
 
   namespace lof {
     class Green;
@@ -306,6 +304,11 @@ namespace lof {
       virtual bool isInstruction() const { return false; }
       virtual bool isContainer() const { return false;  }
       virtual bool isLoop() const { return false;  }
+
+      /// A node that is unit is supposed to be treated as an atomic unit an can only be rearranged as a whole in loop optimizations.
+      /// It can still however be modified for normalization/canonicalization/low-lever analysis and optimzation.
+      /// The outermost node that is a unit would be equivalent to a statement in polyhedral compilation.
+      virtual bool isUnit() const { return true; }
 
     public:
       /// In case we add support to modify after node creation, set staging to false to avoid further modification after the object might also refenced that assumes the object's immutability.
@@ -574,7 +577,7 @@ namespace lof {
 
     private:
       SmallVector<GExpr*, 8 > ChildConds;
-      SmallVector<Green*, 8> Children;
+      SmallVector<Green*, 8> SubStmts;
 
     private:
       /// Counter always rises from 0 step 1 with an unsigned integer of undefined width (infinite, but will eventually be truncated).
@@ -592,8 +595,8 @@ namespace lof {
       Green* getTransformationOf() const { return TransformationOf; }
 
     private:
-      Green(GExpr *ExecCond, ArrayRef<Green*> Children ,   ArrayRef<GExpr*> Conds ,  bool IsLooping,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, Optional< ArrayRef<GSymbol*>> ScalarReads,  Optional< ArrayRef<GSymbol*>> ScalarKills, Optional< ArrayRef<GSymbol*>> ScalarWrites, GSymbol * CanonicalCounter, Green*TransformationOf) : 
-          ExecCond(ExecCond), Children(Children.begin(), Children.end()), ChildConds(Conds.begin(), Conds.end()),  IsLoop(IsLooping) , OrigBegin(OrigBegin), OrigEnd(OrigEnd) , CanonicalCounter(CanonicalCounter), TransformationOf(TransformationOf) {
+      Green(GExpr *ExecCond, ArrayRef<Green*> SubStmts ,   ArrayRef<GExpr*> Conds ,  bool IsLooping,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, Optional< ArrayRef<GSymbol*>> ScalarReads,  Optional< ArrayRef<GSymbol*>> ScalarKills, Optional< ArrayRef<GSymbol*>> ScalarWrites, GSymbol * CanonicalCounter, Green*TransformationOf) : 
+          ExecCond(ExecCond), SubStmts(SubStmts.begin(), SubStmts.end()), ChildConds(Conds.begin(), Conds.end()),  IsLoop(IsLooping) , OrigBegin(OrigBegin), OrigEnd(OrigEnd) , CanonicalCounter(CanonicalCounter), TransformationOf(TransformationOf) {
         if (ScalarReads.hasValue()) {
           this->  ScalarReads.emplace( ScalarReads.getValue().begin() , ScalarReads.getValue().end());
         }
@@ -616,8 +619,11 @@ namespace lof {
       SmallVector <GSymbol*, 1> Assignments;
      
     public:
-      ArrayRef<GExpr*> getArguments() const { return Arguments; }
-      ArrayRef<GSymbol*> getAssignments() const { return Assignments; }
+      size_t getNumArguments() const { assert(isInstruction()); return Arguments.size(); }
+      ArrayRef<GExpr*> getArguments() const { assert(isInstruction());return Arguments; }
+
+      size_t getNumAssignments() const { assert(isInstruction());return Assignments.size(); }
+      ArrayRef<GSymbol*> getAssignments() const {assert(isInstruction()); return Assignments; }
 
 
     private:
@@ -626,7 +632,7 @@ namespace lof {
       }
 
     public:
-     static  Green* createInstruction(Operation Op,  ArrayRef<GExpr*> Arguments,  ArrayRef<GSymbol*> Assignments, llvm::Instruction *OrigInst,  Green *TransformationOf) {
+     static  Green* createInstruction(Operation Op,  ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments, llvm::Instruction *OrigInst,  Green *TransformationOf) {
        llvm::Instruction* OrigEnd = nullptr;
        if (OrigInst)
          OrigEnd = OrigInst->getNextNode();
@@ -635,12 +641,6 @@ namespace lof {
       bool isInstruction() const override  { return Op.isValid(); }
 
 
-
-
-
-  
-
-   
     public:
       Operation& getOperation() {
         return Op;
@@ -702,19 +702,41 @@ public:
       bool isLoop() const override { return IsLoop; }
       bool isContainer() const override { return ! Op.isValid(); }
 
+      /// TODO: Allow compiling instruction sequences into units.
+      bool isUnit() const override { return isInstruction(); }
 
-       size_t getNumChildren() const override  { return Children.size(); }
-       ArrayRef<Green*> getChildren() const {
-         return Children;
+
+      ArrayRef<Green*> getSubStmts() const {
+        return SubStmts;
+      } 
+      Green* getSubStmt(int i) const { return SubStmts[i]; }
+      GExpr* getSubCond(int i) const { return ChildConds[i]; }
+
+
+      size_t getNumChildren() const override  {
+        if (isInstruction()) {
+          assert(SubStmts.empty());
+          return Arguments.size();
+        }
+        assert(Arguments.empty());
+         return SubStmts.size(); 
        }
-       Green* getChild(int i) const { return Children[i]; }
-       GExpr* getChildCond(int i) const { return ChildConds[i]; }
+       ArrayRef<GCommon*> getChildren() const {
+         if (isInstruction()) {
+           return ArrayRef<GCommon*>(reinterpret_cast<GCommon*const*> (Arguments.data()), Arguments.size());
+         }
+
+         return ArrayRef<GCommon*>(reinterpret_cast<GCommon*const*> (SubStmts.data()), SubStmts.size());
+       }
+       GCommon* getChild(int i) const { return getChildren()[i]; }
+      
 
      auto children() const {
       // return make_range( green_child_iterator(this, 0), green_child_iterator(this, Children.size())  );
        return getChildren();
       }
 
+#if 0
       auto descententsDepthFirst() {
         return llvm::depth_first(this);
       }
@@ -722,6 +744,7 @@ public:
       auto descententsBreadtFirst() {
         return llvm:: breadth_first(this);
       }
+#endif 
 
       //LLVM_DUMP_METHOD void dump() const;
      // void print(raw_ostream& OS) const;
@@ -770,22 +793,69 @@ public:
     class GreenDumper {
     private:
       llvm::raw_ostream &OS;
+      GCommon* Highlight;
       bool OnlyStmts;
-
       int Indent = 0;
+      DenseMap<GCommon*, int> Multiplicity;
+      DenseSet<GCommon*> Visited;
+
+      void recursiveCount(GCommon* Node) {
+        auto &Count = Multiplicity[Node];
+        Count += 1;
+
+        // Already visited?
+        if (Count >= 2)
+          return;
+
+        for (auto C : Node->children())
+          recursiveCount(C);
+      }
 
       void dumpNode(GCommon *Node, StringRef Role) {
-        OS.indent(Indent*2);
-        if (!Role.empty())
-          OS << Role << ": ";
-        Node->printLine(OS);
-        OS << '\n';
+        if (Node == Highlight) {
+          OS << ">>";
+          if ((Indent * 2 -2) > 0)
+            OS.indent(Indent * 2 - 2);
+        } else {
+          OS.indent(Indent * 2);
+        }
+          if (!Role.empty())
+            OS << Role << ": ";
+
+          if (isa<GRefExpr>(Node)) {
+            Node->printLine(OS);
+          } else {
+            switch (Multiplicity.lookup(Node)) {
+            case 0:
+              llvm_unreachable("Should have been visited");
+            default: {
+              auto It = Visited.insert(Node);
+              if (It.second) {
+                OS << Node << '\n';
+                return;
+              }
+
+              Node->printLine(OS);
+              // print address
+              OS <<  Node << ' ';
+              Node->printLine(OS);
+
+            } break;
+            case 1:
+              Node->printLine(OS);
+              break;
+            }
+          }
+
+    
+          OS << '\n';
+        
         Indent += 1;
         if (Node->isContainer()) {
           auto G = cast<Green>(Node);
           auto NumChildren = G->getNumChildren();
           for (int i = 0; i < NumChildren; i += 1) {
-            auto Cond = G->getChildCond(i);
+            auto Cond = G->getSubCond(i);
             auto Child = G->getChild(i);
             if (OnlyStmts ||( isa<GOpExpr>(Cond) && cast<GOpExpr>(Cond)->getOperation().getKind() == Operation::True)) {
               dumpNode(Child, StringRef());
@@ -796,6 +866,7 @@ public:
               Indent -= 1;
             }
           }
+          return;
         } else if (Node->isInstruction()) {
           if (!OnlyStmts) {
             auto G = cast<Green>(Node);
@@ -806,6 +877,7 @@ public:
               dumpNode(Arg, "Arg");
             }
           }
+      
         } else if (isa<GOpExpr>(Node)) {
           if (!OnlyStmts) {
             auto Expr = cast<GOpExpr>(Node);
@@ -813,24 +885,30 @@ public:
               dumpNode(Arg, "Arg");
             }
           }
+
         }
-        
-        for (auto Child : Node->children()) {
-          if (OnlyStmts && !Child->isStmt())
-            continue;
-          dumpNode(Child, StringRef());
+        else {
+
+          for (auto Child : Node->children()) {
+            if (OnlyStmts && !Child->isStmt())
+              continue;
+            dumpNode(Child, StringRef());
+          }
         }
         Indent -= 1;
       }
 
     public:
-      GreenDumper(llvm::raw_ostream& OS, bool OnlyStmts =false) : OS(OS) , OnlyStmts(OnlyStmts) {}
+      GreenDumper(llvm::raw_ostream& OS, bool OnlyStmts =false, GCommon *Highlight = nullptr) : OS(OS) , Highlight(Highlight), OnlyStmts(OnlyStmts) {}
 
       void dump(GCommon *Node) {
+        Multiplicity.clear();
+        Visited.clear();
+        recursiveCount(Node);
         dumpNode(Node, StringRef());
       }
 
-    };
+    }; // class GreenDumper
 
 
 
@@ -862,11 +940,11 @@ public:
 
 
 namespace llvm {
-  GraphTraits<lof:: Green *>::ChildIteratorType GraphTraits<lof:: Green *>::child_begin(NodeRef N) { return N->children ().begin(); }
-  GraphTraits<lof:: Green *>::ChildIteratorType GraphTraits<lof:: Green *>::child_end(NodeRef N)   { return N->children ().end(); }
+  GraphTraits<lof:: GCommon *>::ChildIteratorType GraphTraits<lof:: GCommon *>::child_begin(NodeRef N) { return N->children().begin(); }
+  GraphTraits<lof:: GCommon *>::ChildIteratorType GraphTraits<lof:: GCommon *>::child_end(NodeRef N)   { return N->children().end(); }
 
-  GraphTraits<lof:: Green *>:: nodes_iterator GraphTraits<lof:: Green *>:: nodes_begin(lof:: Green* RI) { return nodes_iterator::begin(getEntryNode(RI));  }
-  GraphTraits<lof:: Green *>:: nodes_iterator GraphTraits<lof:: Green *>:: nodes_end  (lof:: Green *RI) { return nodes_iterator::end(getEntryNode(RI));    }
+  GraphTraits<lof:: GCommon *>:: nodes_iterator GraphTraits<lof:: GCommon *>:: nodes_begin(lof:: GCommon* G) { return nodes_iterator::begin(getEntryNode(G));  }
+  GraphTraits<lof:: GCommon *>:: nodes_iterator GraphTraits<lof:: GCommon *>:: nodes_end  (lof:: GCommon *G) { return nodes_iterator::end(getEntryNode(G));    }
 } // namespace llvm
 
 
