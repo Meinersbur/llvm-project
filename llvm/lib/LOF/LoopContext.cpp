@@ -31,6 +31,6 @@ LoopContext::LoopContext(llvm::LLVMContext &LLVMCtx) : LLVMCtx(LLVMCtx) {
 
 GOpExpr* LoopContext::getConst(int Val) {
   auto C = llvm::ConstantInt::get( LLVMCtx , llvm:: APInt( sizeof(Val)*CHAR_BIT, Val, true)   );
-  return  GOpExpr::createOp (Operation(Operation::LLVMFloating, C), {  });
+  return  GOpExpr::createOp (Operation(Operation::LLVMSpeculable, C), {  });
 }
 

@@ -40,6 +40,10 @@ namespace llvm {
       LoopContext(llvm::LLVMContext& LLVMCtx);
 
       llvm::LLVMContext& getLLVMContext() const { return LLVMCtx; }
+      llvm::Type* getBoolType() const { return llvm::Type::getInt1Ty(LLVMCtx); }
+      llvm::Type* getGenericIntType() const { return nullptr; }
+
+
 
       GOpExpr * getFalse() const { return FalseExpr; }
       GOpExpr *getTrue() const { return TrueExpr; }

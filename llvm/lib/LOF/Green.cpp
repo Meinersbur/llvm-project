@@ -13,7 +13,11 @@ void Operation:: assertOK() const {
   case Operation::Nop:
     assert(Inst==nullptr); // There is no "nop" LLVM instruction
     break;
-  case Operation::LLVMFloating:
+  case Operation::Select:
+    assert(NArgs >= 1); // with just a fallback-value, it's effectively like nop (maybe we don't need the Nop kind)
+    assert(NArgs % 2 ==1);
+    break;
+  case Operation::LLVMSpeculable:
   case Operation::LLVMInst:
     assert(Inst);
     if (!Inst->getType()->isVoidTy()) {

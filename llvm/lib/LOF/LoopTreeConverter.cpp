@@ -1,11 +1,12 @@
 #include "LoopTreeConverter.h"
+#include "llvm/Analysis/ValueTracking.h"
 
 using namespace llvm;
 using namespace lof;
 
 
 
-Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Cond) {
+Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Cond, GreenBuilder &ParentBuilder) {
   std::deque < std::pair< BasicBlock*, GExpr*>> Worklist; 
   Worklist.push_back({ Entry, GOpExpr::createTrueExpr() });
   GreenBuilder Builder(Ctx);
@@ -13,12 +14,13 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
   GSymbol* FirstSym = nullptr;
   GExpr* LoopCond;
   if (L) {
-    FirstSym = GSymbol::createFromScratch ( "loop.isfirst" , Type::getInt1Ty( Ctx.getLLVMContext() ) );
+    FirstSym = GSymbol::createFromScratch("loop.isfirst", Type::getInt1Ty( Ctx.getLLVMContext() ) );
     LoopCond = GExpr::createRef(FirstSym);
   }
 
-  llvm:: Instruction* OrigEnd = nullptr;
 
+
+  llvm:: Instruction* OrigEnd = nullptr;
   DenseSet<GSymbol*> Inputs;
   DenseSet<GSymbol*> Outputs;
 
@@ -30,16 +32,14 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
       bool DefinedOutside;
       if (isa<Argument>(Read->getLLVMValue())) {
         DefinedOutside = true;
-      }
-      else if (auto LLVMVal = dyn_cast<Instruction>(Read->getLLVMValue())) {
+      } else if (auto LLVMVal = dyn_cast<Instruction>(Read->getLLVMValue())) {
         if (L) {
           DefinedOutside = !L->contains(LLVMVal);
         } else {
           // TODO: Use DominatorTree to find whether defined before Entry. Currently this assumes that it's the entire function:
           DefinedOutside = false;
         }
-      }
-      else {
+      } else {
         // A constant or global
         continue;
       }
@@ -58,8 +58,7 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
         bool UsedOutside;
         if (L) {
           UsedOutside = !L->contains(UserInst);
-        }
-        else {
+        } else {
           // TODO: Currently assuming this is an entire function
           UsedOutside = isa<ReturnInst>(UserInst);
         }
@@ -70,7 +69,7 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
     }
   };
 
-  auto QueueSuccessor = [&,this](BasicBlock* BB, GExpr *BBCond) {
+  std::function<void(BasicBlock* BB, GExpr *BBCond)>  QueueSuccessor = [&,this](BasicBlock* BB, GExpr *BBCond) {
     // Backedge
     if (L && BB == L->getHeader()) 
       return;
@@ -91,6 +90,7 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
     
     assert(InLoop->getHeader()==BB);
 
+#if 0
     BasicBlock* Latch = nullptr;
     BasicBlock* Entering = nullptr;
     for (auto Pred : predecessors(BB)) {
@@ -110,12 +110,50 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
       auto PHISum = getOrCreateSym(&PHI); 
       Builder.addInstruction(BBCond, Operation(Operation::Nop, nullptr), { IncomingVal }, { PHISum }, &PHI );
     }
+#endif
 
-    auto InnerLoop = buildOriginalLoop(InLoop, BB, BBCond);
+
+    auto InnerLoop = buildOriginalLoop(InLoop, BB, BBCond, Builder);
     Builder.addStmt( BBCond,  InnerLoop);
     ReadsKillsWrites(InnerLoop);
+
+
+    SmallVector<BasicBlock*, 4> ExitBlocks;
+    InLoop->getExitBlocks(ExitBlocks);
+    for (auto ExitBlock : ExitBlocks) {
+      // TODO: If there are multiple exit blocks, they have conditions of leaving
+      QueueSuccessor( ExitBlock,GOpExpr::createTrueExpr()    );
+     // Worklist.push_back({ ExitBlock , GOpExpr::createTrueExpr()  });
+    }
   };
 
+  SmallVector<std::pair< GSymbol*,Value* >, 4> PHINextVals;
+  if (L) {
+    auto Header = L->getHeader();
+    for (auto& EntryPHI : Header->phis()) {
+      auto NumPredecessors = EntryPHI.getNumIncomingValues();
+      Value* InitialVal = nullptr;
+      Value* NextVal = nullptr;
+      for (int i = 0; i < NumPredecessors; i += 1) {
+        auto IncomingBlock = EntryPHI.getIncomingBlock(i);
+        auto IncomingValue = EntryPHI.getIncomingValue(i);
+        if (L->contains(IncomingBlock)) {
+          assert(!NextVal);
+          NextVal = IncomingValue;
+        } else {
+          assert(!InitialVal);
+          InitialVal = IncomingValue;
+        }
+      }
+      assert(InitialVal);
+      assert(NextVal);
+
+      auto PHISymbol = getOrCreateSym(&EntryPHI);
+      ParentBuilder.addAssignment( Ctx.getTrue(), PHISymbol, getExpr(InitialVal) );
+
+      PHINextVals.emplace_back(  PHISymbol, NextVal );
+    }
+  }
 
   while (!Worklist.empty()) {
     auto p = Worklist.front();
@@ -126,7 +164,7 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
     for (auto& Inst: *BB) {
       if (auto PHI = dyn_cast<PHINode>(&Inst)) {
         if (L && L->getHeader() == BB) {
-           // Handled separately
+           // Handled separately (TODO)
           continue;
         }
       }
@@ -165,9 +203,16 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
         assert(Operand.getUser() == &Inst);
         auto OpIdx = Operand.getOperandNo();
         auto Def = Operand.get();
-        //  OutputSlot* OperandSlot;
 
-        OperandVals[OpIdx] = getOrCreateRefExpr(Def);
+ 
+       // OperandVals[OpIdx] = getOrCreateRefExpr(Def);
+        OperandVals[OpIdx] = getExpr(Def);
+      }
+
+
+      if (llvm::isSafeToSpeculativelyExecute(&Inst)) {
+        InputsExprs[&Inst] = GOpExpr::create(Operation(Operation::LLVMSpeculable, &Inst), OperandVals);
+        continue;
       }
 
       Green* Stmt;
@@ -175,8 +220,9 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
         Stmt = Builder.addInstruction(BBCond, Operation(Operation::LLVMInst, &Inst), OperandVals, {}, &Inst);
       } else {
         auto ResultVal = GSymbol::createLLVM(&Inst);
-         Stmt = Builder.addInstruction(BBCond, Operation(Operation::LLVMInst, &Inst), OperandVals, { ResultVal }, &Inst);
-         InputsVals[&Inst] = ResultVal;
+        Stmt = Builder.addInstruction(BBCond, Operation(Operation::LLVMInst, &Inst), OperandVals, { ResultVal }, &Inst);
+        InputsVals[&Inst] = ResultVal;
+        InputsExprs[&Inst] = GExpr::createRef(ResultVal);
       }
      
       ReadsKillsWrites(Stmt);
@@ -198,15 +244,14 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
     }
   }
 
-  if (L) {
-    for (auto& EntryPHI : L->getHeader()->phis()) {
-      auto ContinueVal = getOrCreateRefExpr(EntryPHI.getIncomingValueForBlock(L->getLoopLatch()));
-      auto PHISum = getOrCreateSym(&EntryPHI);
-      auto Stmt = Builder.addInstruction(GOpExpr::createTrueExpr(), Operation(Operation::Nop, nullptr), { ContinueVal }, { PHISum }, &EntryPHI);
+  for (auto P : PHINextVals ) {
+      auto ContinueVal = getExpr(P.second);
+      auto PHISym = P.first;
+      auto Stmt = Builder.addInstruction(GOpExpr::createTrueExpr(), Operation(Operation::Nop, nullptr), { ContinueVal }, { PHISym }, cast<Instruction>( PHISym->getLLVMValue()));
+    
       ReadsKillsWrites(Stmt);
-    }
-
   }
+
   
   SmallVector<GSymbol*, 8> ScalarReads(Inputs.begin(), Inputs.end()  );
   Builder.setScalarReads(ScalarReads);

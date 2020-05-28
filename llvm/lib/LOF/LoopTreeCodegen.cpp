@@ -301,7 +301,7 @@ Value* GreenCodeGen:: emitOperation(const  Operation& Op, ArrayRef<GExpr*> Argum
   case Operation::LLVMInst:
     assert(!IsExpr);
     LLVM_FALLTHROUGH;
-  case Operation::LLVMFloating:{
+  case Operation::LLVMSpeculable:{
       auto I = Op.getLLVMInst();
       if (auto C = dyn_cast<Constant>(I)) {
         return C;

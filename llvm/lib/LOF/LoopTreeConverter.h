@@ -10,21 +10,27 @@ namespace lof {
 
     class GreenConverter {
       DenseMap <llvm::Value*, GSymbol*> InputsVals;
-      llvm::  Function* Func;
-      llvm:: LoopInfo* LI;
+      DenseMap <llvm::Value*, GExpr*> InputsExprs;
+      llvm::Function* Func;
+      llvm::LoopInfo* LI;
       LoopContext& Ctx;
 
 
     public:
       GreenConverter( LoopContext& Ctx, llvm::Function *Func,llvm::LoopInfo* LI) : Func(Func),  LI(LI), Ctx(Ctx) {
-        assert(& Ctx.getLLVMContext() == &Func->getContext() );
+        assert(&Ctx.getLLVMContext() == &Func->getContext() );
       }
 
       Green* build() {
         for (auto &Arg : Func->args()) {
-          InputsVals[&Arg] = GSymbol::createLLVM(&Arg);
+          auto ArgExpr = GSymbol::createLLVM(&Arg);
+          InputsVals[&Arg] = ArgExpr;
+          InputsExprs[&Arg] = ArgExpr;
+
         }
-        return buildOriginalLoop(nullptr, &Func->getEntryBlock(), GOpExpr::createTrueExpr());
+
+        GreenBuilder DummyBuilder( Ctx);
+        return buildOriginalLoop(nullptr, &Func->getEntryBlock(), GOpExpr::createTrueExpr(),DummyBuilder );
       }
 
     private:
@@ -33,6 +39,7 @@ namespace lof {
         auto &Sym = InputsVals[LLVMVal];
         if (!Sym) {
           Sym = GSymbol::createLLVM( LLVMVal );
+          InputsExprs[LLVMVal] = Sym;
         }
         return Sym;
       }
@@ -45,7 +52,16 @@ namespace lof {
         return getOrCreateSym(LLVMVal);
       }
 
-      Green* buildOriginalLoop(llvm::Loop* L, llvm::BasicBlock* Entry, GExpr* Cond);
+
+      GExpr* getExpr(llvm::Value* LLVMVal) {
+        if (auto C = dyn_cast<llvm::Constant>(LLVMVal))
+          return GOpExpr::createConstExpr(C);
+      auto Operand =  InputsExprs.lookup(LLVMVal);
+      assert(Operand);
+      return Operand;
+      }
+      
+      Green* buildOriginalLoop(llvm::Loop* L, llvm::BasicBlock* Entry, GExpr* Cond, GreenBuilder&ParentBuilder);
 
 
     }; // class GreenConverter

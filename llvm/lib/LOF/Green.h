@@ -40,7 +40,6 @@ namespace llvm {
 
 
 namespace lof {
-
     class  green_child_iterator :public map_index_iterator< green_child_iterator, GCommon*, GCommon*, std::ptrdiff_t, GCommon**, GCommon* > {
     public:
       green_child_iterator(GCommon* Parent, size_t Idx) : map_index_iterator(Parent, Idx) {}
@@ -48,50 +47,8 @@ namespace lof {
     public:
       GCommon* operator*() const;
     }; // class green_child_iterator
-       
-#if 0
-    // We define our manual iterator to make it available for GraphTraits<lof:: Green *>::ChildIteratorType
-    class  green_child_iterator :public llvm:: iterator_facade_base<green_child_iterator, std::random_access_iterator_tag, GCommon*, ptrdiff_t,GCommon**,GCommon* /* operator* returns RValue */ >
-    {
-      const GCommon* Parent;
-      size_t Idx;
-    public:
-      green_child_iterator() = default;
-      green_child_iterator(const GCommon* Parent, size_t Idx) : Parent(Parent), Idx(Idx) {}
-      green_child_iterator(const green_child_iterator& That) : Parent(That.Parent), Idx(That.Idx) {}
-
-      green_child_iterator& operator=(const green_child_iterator& That) {
-        Parent = That.Parent;
-        Idx = That.Idx;
-        return *this;
-      }
-
-       GCommon* operator*() const;
-
-      bool operator==(const green_child_iterator& That) const {
-        return Parent == That.Parent && Idx == That.Idx;
-      }
-
-      green_child_iterator& operator+=(std::ptrdiff_t N) {
-        Idx += N;
-        return *this;
-      }
-
-      green_child_iterator& operator-=(std::ptrdiff_t N) {
-        Idx -= N;
-        return *this;
-      }
-
-      std::ptrdiff_t operator-(const green_child_iterator& That) const {
-        return Idx - That.Idx;
-      }
-
-      bool operator<(const green_child_iterator& That) const {
-        return Idx < That.Idx;
-      }
-    };
-#endif
   } // namespace lof
+
 
 
   namespace llvm {
@@ -99,7 +56,7 @@ namespace lof {
     struct GraphTraits<lof::GCommon*> {
       // Green as graph node; enumerate children
       using NodeRef = lof::GCommon*;
-      using  ChildIteratorType =lof:: green_child_iterator;
+      using  ChildIteratorType = lof::green_child_iterator;
       static inline ChildIteratorType child_begin(NodeRef N);
       static inline ChildIteratorType child_end(NodeRef N);
 
@@ -124,6 +81,16 @@ namespace lof {
 
         // Do an assignment
         Nop, 
+        
+        // Assign first value for this the preceding condition is true
+        // Args are: [condition1, value1, condition2, value2, ..., fallback-value]
+        Select,
+        
+#if 0
+        // Loop meta-instructions
+        LoopCounter,
+        LoopIsFirst,
+#endif 
 
         // Logical operations
         False,
@@ -139,17 +106,19 @@ namespace lof {
         // Should work with normalized loop induction variables.
         AddRecExpr,
 
-        // Affine expression: Requires ISL 
-        ISLPwAff,
 
         // LLVM operations
         LLVMInst,
-        LLVMFloating,
+        LLVMSpeculable,
 
         // MLIR operations
         MLIROperation,
         MLIRAff,
         MLIRFlatAff,
+
+        // Affine expression: Requires ISL 
+        ISLPwAff,
+
 
         Last = Disjunction
       };
@@ -157,9 +126,11 @@ namespace lof {
     private:
       Kind K = Unknown;
 
-      // Using this only to avoid duplicating the representation of an LLVM instruction. It's SSA value and operands have no meaning in the green DAG.
+      /// Using this only to avoid duplicating the representation of an LLVM instruction. It's SSA value and operands have no meaning in the green DAG.
       llvm::Value* Inst = nullptr;
 
+      /// Number of arguments for variable-argument instructions that are not an llvm::Value.
+      int NArgs = -1;
 
 
       void assertOK() const;
@@ -167,13 +138,13 @@ namespace lof {
 
     public:
       Operation() {  }
-      Operation(Kind K, llvm::Value* Inst) : K(K), Inst(Inst) { 
+      Operation(Kind K, llvm::Value* Inst, int NArgs = -1) : K(K), Inst(Inst), NArgs(-1) { 
         assertOK();
       }
 
       Kind getKind() const { return K; }
-   llvm::   Value* getLLVMInst() const {
-        assert(K == LLVMInst || K==LLVMFloating);
+      llvm::Value* getLLVMInst() const {
+        assert(K == LLVMInst || K==LLVMSpeculable);
         return Inst;
       }
 
@@ -190,8 +161,15 @@ namespace lof {
         switch (K)        {
         case Nop:
           return 1;
+        case Select:
+          return NArgs;
+#if 0
+        case LoopCounter:
+        case LoopIsFirst:
+          return 0;
+#endif
         case LLVMInst:
-        case LLVMFloating:
+        case LLVMSpeculable:
           if (auto C = dyn_cast<llvm::Constant>(Inst))
             return 0;
           return cast<llvm::Operator >(Inst)->getNumOperands();
@@ -215,8 +193,15 @@ namespace lof {
         switch (K)        {
         case Nop:
           return 1;
+        case Select:
+          return 1;
+#if 0
+        case LoopCounter:
+        case LoopIsFirst:
+          return 1;
+#endif
         case LLVMInst:
-        case LLVMFloating:
+        case LLVMSpeculable:
           if (Inst->getType()->isVoidTy())
             return 0;
           return 1;
@@ -240,6 +225,17 @@ namespace lof {
           case lof::Operation::Unknown:
             OS << "???";
             break;
+          case Select:
+            OS << "select";
+            break;
+#if 0
+          case LoopCounter:
+            OS << "iter";
+            break;
+          case LoopIsFirst:
+            OS << "isfirst";
+            break;
+#endif
           case lof::Operation::Nop:
             OS << "nop";
             break;
@@ -267,7 +263,7 @@ namespace lof {
             else
               OS << "llvm::Inst";
             break;
-          case lof::Operation::LLVMFloating:
+          case lof::Operation::LLVMSpeculable:
             if (Inst) {     
               OS << "(Speculable) ";
               Inst->print(OS);
@@ -477,7 +473,7 @@ namespace lof {
       }
 
       static GOpExpr* createConstExpr(llvm::Constant *Val) {
-        return createOp(Operation(Operation::LLVMFloating, Val), {});
+        return createOp(Operation(Operation::LLVMSpeculable, Val), {});
       }
 
       static GOpExpr* createNotExpr(GExpr* Subexpr) {
@@ -576,14 +572,18 @@ namespace lof {
       }
 
     private:
-      SmallVector<GExpr*, 8 > ChildConds;
+      SmallVector<GExpr*, 8> ChildConds;
       SmallVector<Green*, 8> SubStmts;
 
     private:
-      /// Counter always rises from 0 step 1 with an unsigned integer of undefined width (infinite, but will eventually be truncated).
-      GSymbol* CanonicalCounter;
+      /// [0] CanonicalCounter Counter always rises from 0 step 1 with an unsigned integer of undefined width (infinite, but will eventually be truncated).
+      /// [1] IsFirstIteration Whether this is the first iteration of the loop; always exists
+      /// TODO: Maybe list loop-carried scalars here as well
+      SmallVector<GSymbol*, 2> DefinedInside;
+
     public:
-      GSymbol* getCanonicalCounter() const { return CanonicalCounter; }
+      GSymbol* getCanonicalCounter() const { return DefinedInside[0]; }
+      GSymbol* getIsFirstIteration() const { return DefinedInside[1]; }
 
     private:
        Green* TransformationOf = nullptr;
@@ -595,8 +595,8 @@ namespace lof {
       Green* getTransformationOf() const { return TransformationOf; }
 
     private:
-      Green(GExpr *ExecCond, ArrayRef<Green*> SubStmts ,   ArrayRef<GExpr*> Conds ,  bool IsLooping,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, Optional< ArrayRef<GSymbol*>> ScalarReads,  Optional< ArrayRef<GSymbol*>> ScalarKills, Optional< ArrayRef<GSymbol*>> ScalarWrites, GSymbol * CanonicalCounter, Green*TransformationOf) : 
-          ExecCond(ExecCond), SubStmts(SubStmts.begin(), SubStmts.end()), ChildConds(Conds.begin(), Conds.end()),  IsLoop(IsLooping) , OrigBegin(OrigBegin), OrigEnd(OrigEnd) , CanonicalCounter(CanonicalCounter), TransformationOf(TransformationOf) {
+      Green(GExpr *ExecCond, ArrayRef<Green*> SubStmts ,   ArrayRef<GExpr*> Conds ,  bool IsLooping,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, Optional< ArrayRef<GSymbol*>> ScalarReads,  Optional< ArrayRef<GSymbol*>> ScalarKills, Optional< ArrayRef<GSymbol*>> ScalarWrites,  GSymbol* LoopIsFirst, GSymbol *CanonicalCounter, Green*TransformationOf) : 
+        ExecCond(ExecCond), SubStmts(SubStmts.begin(), SubStmts.end()), ChildConds(Conds.begin(), Conds.end()), IsLoop(IsLooping), OrigBegin(OrigBegin), OrigEnd(OrigEnd), DefinedInside{CanonicalCounter, LoopIsFirst} {
         if (ScalarReads.hasValue()) {
           this->  ScalarReads.emplace( ScalarReads.getValue().begin() , ScalarReads.getValue().end());
         }
@@ -606,8 +606,6 @@ namespace lof {
         if (ScalarWrites.hasValue()) {
           this->  ScalarWrites.emplace( ScalarWrites.getValue().begin() , ScalarWrites.getValue().end());
         }
-
-
 
         assertOK();
       }
@@ -654,7 +652,7 @@ namespace lof {
 
       void assertOK() const {
         if (IsLoop) {
-          assert(CanonicalCounter);
+          assert(getIsFirstIteration());
         }
 
 #if 0
@@ -761,7 +759,7 @@ public:
                 Op.printLine(OS);
               } else if (isStmt()) {
                 OS << "Sequence";
-              }              else {
+              } else {
                 OS << "???";
               }
 

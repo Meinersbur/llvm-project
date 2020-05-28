@@ -210,10 +210,12 @@
 
 
       // TODO: Parameters defining number of iterations
-      Green* createLoop(GExpr *ExecCond,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, GSymbol *LoopCounter) {
+      Green* createLoop(GExpr *ExecCond,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, GSymbol *LoopIsFirst, GSymbol *LoopCounter) {
+        if (!LoopIsFirst)
+          LoopIsFirst = GSymbol::createFromScratch("isfirst", Ctx.getBoolType());
         if (!LoopCounter)
-          LoopCounter = GSymbol::createFromScratch(StringRef(), nullptr);
-        return finish(ExecCond,true,OrigBegin,OrigEnd, LoopCounter);
+          LoopCounter = GSymbol::createFromScratch("iv", Ctx.getGenericIntType()));
+        return finish(ExecCond,true,OrigBegin,OrigEnd,LoopIsFirst, LoopCounter);
       }
 
 
@@ -249,7 +251,7 @@
 
 
       private:
-        Green* finish(GExpr *ExecCond, bool IsLooping, llvm::Instruction *OrigBegin, llvm::Instruction *OrigEnd, GSymbol* CanonicalCounter) {
+        Green* finish(GExpr *ExecCond, bool IsLooping, llvm::Instruction *OrigBegin, llvm::Instruction *OrigEnd,GSymbol *LoopIsFirst, GSymbol* CanonicalCounter) {
          
          return new Green(ExecCond, Children, Conds, IsLooping, OrigBegin, OrigEnd, 
            make_optional_ArrayRef<GSymbol*>(ScalarReads),
