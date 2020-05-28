@@ -263,7 +263,7 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
 
     if (L) {
     //return Green::createLoop(InputDeps.size(), InputDeps, NumIntermediates, NumOutputs, LvlInsts);
-    return Builder.createLoop(LoopCond, &*Entry->begin(), OrigEnd, nullptr);
+    return Builder.createLoop(LoopCond, &*Entry->begin(), OrigEnd, nullptr, nullptr);
   }
   //  return Green::createFunc(InputDeps.size(), InputDeps, NumIntermediates, NumOutputs,  LvlInsts);
   return Builder.createStmt(&*Entry->begin(), OrigEnd);

@@ -66,7 +66,7 @@ namespace {
       jamBuilder(G, Builder);
 
       // Copy loop
-      return Builder.createLoop( Builder.getTrue(), G->getOrigRange().first, G->getOrigRange().second, G->getCanonicalCounter() );
+      return Builder.createLoop( Builder.getTrue(), G->getOrigRange().first, G->getOrigRange().second, G->getIsFirstIteration(), G->getCanonicalCounter() );
     }
 
      Green* unroll(Green *G) {
@@ -74,7 +74,7 @@ namespace {
 
        OrigCounter = G->getCanonicalCounter(); assert(OrigCounter);
        auto NewCnt = Builder.createSymbolFromScratch("unroll.cnt", nullptr);
-
+       auto NewIsFirst = Builder.createSymbolFromScratch("unroll.isfirst", nullptr);
 
         UnrolledCounters.set_size(Factor);
         for (int f = 0; f < Factor; f += 1) {
@@ -84,7 +84,7 @@ namespace {
 
       
        jamBuilder(G, Builder);
-       return Builder.createLoop(Builder.getTrue(), G->getOrigRange().first, G->getOrigRange().second, NewCnt);
+       return Builder.createLoop(Builder.getTrue(), G->getOrigRange().first, G->getOrigRange().second,  NewIsFirst, NewCnt);
      }
 
   }; //  class UnrollAndJamTransformer

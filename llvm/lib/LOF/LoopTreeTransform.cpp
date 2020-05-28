@@ -48,6 +48,6 @@ Green* GreenTreeTransform::transfromStmtOrLoop(Green* Node, bool IsLoop) {
   }
 
   if (IsLoop)
-    return Builder.createLoop(NewExecCond, Node->getOrigRange().first, Node->getOrigRange().second ,  Node->getCanonicalCounter() );
+    return Builder.createLoop(NewExecCond, Node->getOrigRange().first, Node->getOrigRange().second ,  Node->getIsFirstIteration(), Node->getCanonicalCounter() );
   return Builder.createStmt(Node->getOrigRange().first, Node->getOrigRange().second);
 }

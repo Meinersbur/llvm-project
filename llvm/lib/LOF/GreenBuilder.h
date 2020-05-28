@@ -205,7 +205,7 @@
 #endif
 
       Green* createStmt(llvm::Instruction *OrigBegin,llvm:: Instruction *OrigEnd) {
-        return finish(GOpExpr::createTrueExpr() , false, OrigBegin,OrigEnd,nullptr);
+        return finish(GOpExpr::createTrueExpr() , false, OrigBegin,OrigEnd,nullptr,nullptr);
       }
 
 
@@ -214,7 +214,7 @@
         if (!LoopIsFirst)
           LoopIsFirst = GSymbol::createFromScratch("isfirst", Ctx.getBoolType());
         if (!LoopCounter)
-          LoopCounter = GSymbol::createFromScratch("iv", Ctx.getGenericIntType()));
+          LoopCounter = GSymbol::createFromScratch("iv", Ctx.getGenericIntType());
         return finish(ExecCond,true,OrigBegin,OrigEnd,LoopIsFirst, LoopCounter);
       }
 
@@ -256,7 +256,7 @@
          return new Green(ExecCond, Children, Conds, IsLooping, OrigBegin, OrigEnd, 
            make_optional_ArrayRef<GSymbol*>(ScalarReads),
            make_optional_ArrayRef<GSymbol*>(ScalarKills),
-           make_optional_ArrayRef<GSymbol*>(ScalarKills), CanonicalCounter, TransformationOf);
+           make_optional_ArrayRef<GSymbol*>(ScalarKills), LoopIsFirst, CanonicalCounter, TransformationOf);
         }
     };
 

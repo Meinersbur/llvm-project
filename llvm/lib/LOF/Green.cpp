@@ -2,8 +2,11 @@
 #include "Red.h"
 #include "LoopContext.h"
 #include "llvm/Analysis/ValueTracking.h"
+#include "llvm/IR/instructions.h"
+
 
 using namespace lof;
+
 
 void Operation:: assertOK() const {
   switch (K) {
