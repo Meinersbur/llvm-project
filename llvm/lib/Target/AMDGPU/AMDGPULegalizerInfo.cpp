@@ -66,12 +66,6 @@ static LegalityPredicate isMultiple32(unsigned TypeIdx,
   };
 }
 
-static LegalityPredicate sizeIs(unsigned TypeIdx, unsigned Size) {
-  return [=](const LegalityQuery &Query) {
-    return Query.Types[TypeIdx].getSizeInBits() == Size;
-  };
-}
-
 static LegalityPredicate isSmallOddVector(unsigned TypeIdx) {
   return [=](const LegalityQuery &Query) {
     const LLT Ty = Query.Types[TypeIdx];
@@ -371,14 +365,14 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
     .legalFor({S32, S64, S16})
     .clampScalar(0, S16, S64);
 
-  getActionDefinitionsBuilder(G_IMPLICIT_DEF)
-    .legalFor({S1, S32, S64, S16, V2S32, V4S32, V2S16, V4S16, GlobalPtr,
-               ConstantPtr, LocalPtr, FlatPtr, PrivatePtr})
-    .moreElementsIf(isSmallOddVector(0), oneMoreElement(0))
-    .clampScalarOrElt(0, S32, S1024)
-    .legalIf(isMultiple32(0))
-    .widenScalarToNextPow2(0, 32)
-    .clampMaxNumElements(0, S32, 16);
+  getActionDefinitionsBuilder({G_IMPLICIT_DEF, G_FREEZE})
+      .legalFor({S1, S32, S64, S16, V2S32, V4S32, V2S16, V4S16, GlobalPtr,
+                 ConstantPtr, LocalPtr, FlatPtr, PrivatePtr})
+      .moreElementsIf(isSmallOddVector(0), oneMoreElement(0))
+      .clampScalarOrElt(0, S32, S1024)
+      .legalIf(isMultiple32(0))
+      .widenScalarToNextPow2(0, 32)
+      .clampMaxNumElements(0, S32, 16);
 
   setAction({G_FRAME_INDEX, PrivatePtr}, Legal);
   getActionDefinitionsBuilder(G_GLOBAL_VALUE)
@@ -560,9 +554,17 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
       .scalarize(0);
   }
 
-  getActionDefinitionsBuilder({G_PTR_ADD, G_PTR_MASK})
-    .scalarize(0)
-    .alwaysLegal();
+  // FIXME: Clamp offset operand.
+  getActionDefinitionsBuilder(G_PTR_ADD)
+    .legalIf(isPointer(0))
+    .scalarize(0);
+
+  getActionDefinitionsBuilder(G_PTRMASK)
+    .legalIf(typeInSet(1, {S64, S32}))
+    .minScalar(1, S32)
+    .maxScalarIf(sizeIs(0, 32), 1, S32)
+    .maxScalarIf(sizeIs(0, 64), 1, S64)
+    .scalarize(0);
 
   auto &CmpBuilder =
     getActionDefinitionsBuilder(G_ICMP)
@@ -1066,9 +1068,9 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
           GlobalPtr, LocalPtr, FlatPtr, PrivatePtr,
           LLT::vector(2, LocalPtr), LLT::vector(2, PrivatePtr)}, {S1, S32})
     .clampScalar(0, S16, S64)
+    .scalarize(1)
     .moreElementsIf(isSmallOddVector(0), oneMoreElement(0))
     .fewerElementsIf(numElementsNotEven(0), scalarize(0))
-    .scalarize(1)
     .clampMaxNumElements(0, S32, 2)
     .clampMaxNumElements(0, LocalPtr, 2)
     .clampMaxNumElements(0, PrivatePtr, 2)
@@ -1082,12 +1084,22 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
     .legalFor({{S32, S32}, {S64, S32}});
   if (ST.has16BitInsts()) {
     if (ST.hasVOP3PInsts()) {
-      Shifts.legalFor({{S16, S32}, {S16, S16}, {V2S16, V2S16}})
+      Shifts.legalFor({{S16, S16}, {V2S16, V2S16}})
             .clampMaxNumElements(0, S16, 2);
     } else
-      Shifts.legalFor({{S16, S32}, {S16, S16}});
+      Shifts.legalFor({{S16, S16}});
 
-    // TODO: Support 16-bit shift amounts
+    // TODO: Support 16-bit shift amounts for all types
+    Shifts.widenScalarIf(
+      [=](const LegalityQuery &Query) {
+        // Use 16-bit shift amounts for any 16-bit shift. Otherwise we want a
+        // 32-bit amount.
+        const LLT ValTy = Query.Types[0];
+        const LLT AmountTy = Query.Types[1];
+        return ValTy.getSizeInBits() <= 16 &&
+               AmountTy.getSizeInBits() < 16;
+      }, changeTo(1, S16));
+    Shifts.maxScalarIf(typeIs(0, S16), 1, S16);
     Shifts.clampScalar(1, S32, S32);
     Shifts.clampScalar(0, S16, S64);
     Shifts.widenScalarToNextPow2(0, 16);
@@ -1219,12 +1231,15 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
     };
 
     auto &Builder = getActionDefinitionsBuilder(Op)
+      .lowerFor({{S16, V2S16}})
+      .lowerIf([=](const LegalityQuery &Query) {
+          const LLT BigTy = Query.Types[BigTyIdx];
+          return BigTy.getSizeInBits() == 32;
+        })
       // Try to widen to s16 first for small types.
       // TODO: Only do this on targets with legal s16 shifts
       .minScalarOrEltIf(narrowerThan(LitTyIdx, 16), LitTyIdx, S16)
-
       .widenScalarToNextPow2(LitTyIdx, /*Min*/ 16)
-      .lowerFor({{S16, V2S16}})
       .moreElementsIf(isSmallOddVector(BigTyIdx), oneMoreElement(BigTyIdx))
       .fewerElementsIf(all(typeIs(0, S16), vectorWiderThan(1, 32),
                            elementTypeIs(1, S16)),
@@ -2265,22 +2280,30 @@ bool AMDGPULegalizerInfo::legalizeBuildVector(
 // Return the use branch instruction, otherwise null if the usage is invalid.
 static MachineInstr *verifyCFIntrinsic(MachineInstr &MI,
                                        MachineRegisterInfo &MRI,
-                                       MachineInstr *&Br) {
+                                       MachineInstr *&Br,
+                                       MachineBasicBlock *&UncondBrTarget) {
   Register CondDef = MI.getOperand(0).getReg();
   if (!MRI.hasOneNonDBGUse(CondDef))
     return nullptr;
 
+  MachineBasicBlock *Parent = MI.getParent();
   MachineInstr &UseMI = *MRI.use_instr_nodbg_begin(CondDef);
-  if (UseMI.getParent() != MI.getParent() ||
+  if (UseMI.getParent() != Parent ||
       UseMI.getOpcode() != AMDGPU::G_BRCOND)
     return nullptr;
 
-  // Make sure the cond br is followed by a G_BR
+  // Make sure the cond br is followed by a G_BR, or is the last instruction.
   MachineBasicBlock::iterator Next = std::next(UseMI.getIterator());
-  if (Next != MI.getParent()->end()) {
+  if (Next == Parent->end()) {
+    MachineFunction::iterator NextMBB = std::next(Parent->getIterator());
+    if (NextMBB == Parent->getParent()->end()) // Illegal intrinsic use.
+      return nullptr;
+    UncondBrTarget = &*NextMBB;
+  } else {
     if (Next->getOpcode() != AMDGPU::G_BR)
       return nullptr;
     Br = &*Next;
+    UncondBrTarget = Br->getOperand(0).getMBB();
   }
 
   return &UseMI;
@@ -2895,15 +2918,15 @@ bool AMDGPULegalizerInfo::legalizeFDIV32(MachineInstr &MI,
 
   auto DenominatorScaled =
     B.buildIntrinsic(Intrinsic::amdgcn_div_scale, {S32, S1}, false)
-      .addUse(RHS)
       .addUse(LHS)
-      .addImm(1)
+      .addUse(RHS)
+      .addImm(0)
       .setMIFlags(Flags);
   auto NumeratorScaled =
     B.buildIntrinsic(Intrinsic::amdgcn_div_scale, {S32, S1}, false)
       .addUse(LHS)
       .addUse(RHS)
-      .addImm(0)
+      .addImm(1)
       .setMIFlags(Flags);
 
   auto ApproxRcp = B.buildIntrinsic(Intrinsic::amdgcn_rcp, {S32}, false)
@@ -2961,7 +2984,7 @@ bool AMDGPULegalizerInfo::legalizeFDIV64(MachineInstr &MI,
   auto DivScale0 = B.buildIntrinsic(Intrinsic::amdgcn_div_scale, {S64, S1}, false)
     .addUse(LHS)
     .addUse(RHS)
-    .addImm(1)
+    .addImm(0)
     .setMIFlags(Flags);
 
   auto NegDivScale0 = B.buildFNeg(S64, DivScale0.getReg(0), Flags);
@@ -2977,11 +3000,11 @@ bool AMDGPULegalizerInfo::legalizeFDIV64(MachineInstr &MI,
   auto DivScale1 = B.buildIntrinsic(Intrinsic::amdgcn_div_scale, {S64, S1}, false)
     .addUse(LHS)
     .addUse(RHS)
-    .addImm(0)
+    .addImm(1)
     .setMIFlags(Flags);
 
   auto Fma3 = B.buildFMA(S64, Fma1, Fma2, Fma1, Flags);
-  auto Mul = B.buildMul(S64, DivScale1.getReg(0), Fma3, Flags);
+  auto Mul = B.buildFMul(S64, DivScale1.getReg(0), Fma3, Flags);
   auto Fma4 = B.buildFMA(S64, NegDivScale0, Mul, DivScale1.getReg(0), Flags);
 
   Register Scale;
@@ -4097,7 +4120,8 @@ bool AMDGPULegalizerInfo::legalizeIntrinsic(MachineInstr &MI,
   case Intrinsic::amdgcn_if:
   case Intrinsic::amdgcn_else: {
     MachineInstr *Br = nullptr;
-    if (MachineInstr *BrCond = verifyCFIntrinsic(MI, MRI, Br)) {
+    MachineBasicBlock *UncondBrTarget = nullptr;
+    if (MachineInstr *BrCond = verifyCFIntrinsic(MI, MRI, Br, UncondBrTarget)) {
       const SIRegisterInfo *TRI
         = static_cast<const SIRegisterInfo *>(MRI.getTargetRegisterInfo());
 
@@ -4105,25 +4129,28 @@ bool AMDGPULegalizerInfo::legalizeIntrinsic(MachineInstr &MI,
       Register Def = MI.getOperand(1).getReg();
       Register Use = MI.getOperand(3).getReg();
 
-      MachineBasicBlock *BrTarget = BrCond->getOperand(1).getMBB();
-      if (Br)
-        BrTarget = Br->getOperand(0).getMBB();
-
+      MachineBasicBlock *CondBrTarget = BrCond->getOperand(1).getMBB();
       if (IntrID == Intrinsic::amdgcn_if) {
         B.buildInstr(AMDGPU::SI_IF)
           .addDef(Def)
           .addUse(Use)
-          .addMBB(BrTarget);
+          .addMBB(UncondBrTarget);
       } else {
         B.buildInstr(AMDGPU::SI_ELSE)
           .addDef(Def)
           .addUse(Use)
-          .addMBB(BrTarget)
+          .addMBB(UncondBrTarget)
           .addImm(0);
       }
 
-      if (Br)
-        Br->getOperand(0).setMBB(BrCond->getOperand(1).getMBB());
+      if (Br) {
+        Br->getOperand(0).setMBB(CondBrTarget);
+      } else {
+        // The IRTranslator skips inserting the G_BR for fallthrough cases, but
+        // since we're swapping branch targets it needs to be reinserted.
+        // FIXME: IRTranslator should probably not do this
+        B.buildBr(*CondBrTarget);
+      }
 
       MRI.setRegClass(Def, TRI->getWaveMaskRegClass());
       MRI.setRegClass(Use, TRI->getWaveMaskRegClass());
@@ -4136,23 +4163,23 @@ bool AMDGPULegalizerInfo::legalizeIntrinsic(MachineInstr &MI,
   }
   case Intrinsic::amdgcn_loop: {
     MachineInstr *Br = nullptr;
-    if (MachineInstr *BrCond = verifyCFIntrinsic(MI, MRI, Br)) {
+    MachineBasicBlock *UncondBrTarget = nullptr;
+    if (MachineInstr *BrCond = verifyCFIntrinsic(MI, MRI, Br, UncondBrTarget)) {
       const SIRegisterInfo *TRI
         = static_cast<const SIRegisterInfo *>(MRI.getTargetRegisterInfo());
 
       B.setInstr(*BrCond);
 
-      MachineBasicBlock *BrTarget = BrCond->getOperand(1).getMBB();
-      if (Br)
-        BrTarget = Br->getOperand(0).getMBB();
-
+      MachineBasicBlock *CondBrTarget = BrCond->getOperand(1).getMBB();
       Register Reg = MI.getOperand(2).getReg();
       B.buildInstr(AMDGPU::SI_LOOP)
         .addUse(Reg)
-        .addMBB(BrTarget);
+        .addMBB(UncondBrTarget);
 
       if (Br)
-        Br->getOperand(0).setMBB(BrCond->getOperand(1).getMBB());
+        Br->getOperand(0).setMBB(CondBrTarget);
+      else
+        B.buildBr(*CondBrTarget);
 
       MI.eraseFromParent();
       BrCond->eraseFromParent();

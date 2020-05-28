@@ -25,7 +25,6 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/Types.h"
-#include "mlir/Support/Functional.h"
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/FoldUtils.h"
 
@@ -525,8 +524,6 @@ using namespace mlir;
 
 #define DEBUG_TYPE "early-vect"
 
-using functional::makePtrDynCaster;
-using functional::map;
 using llvm::dbgs;
 using llvm::SetVector;
 
@@ -796,10 +793,7 @@ static LogicalResult vectorizeRootOrTerminal(Value iv,
     LLVM_DEBUG(permutationMap.print(dbgs()));
     auto transfer = b.create<vector::TransferReadOp>(
         opInst->getLoc(), vectorType, memoryOp.getMemRef(), indices,
-        AffineMapAttr::get(permutationMap),
-        // TODO(b/144455320) add a proper padding value, not just 0.0 : f32
-        state->folder->create<ConstantFloatOp>(b, opInst->getLoc(),
-                                               APFloat(0.0f), b.getF32Type()));
+        permutationMap);
     state->registerReplacement(opInst, transfer.getOperation());
   } else {
     state->registerTerminal(opInst);
@@ -812,7 +806,6 @@ static LogicalResult vectorizeRootOrTerminal(Value iv,
 /// operations into the appropriate vector.transfer.
 static LogicalResult vectorizeAffineForOp(AffineForOp loop, int64_t step,
                                           VectorizationState *state) {
-  using namespace functional;
   loop.setStep(step);
 
   FilterFunctionType notVectorizedThisPattern = [state](Operation &op) {
@@ -969,7 +962,7 @@ static Value vectorizeOperand(Value operand, Operation *op,
     return nullptr;
   }
   // 3. vectorize constant.
-  if (auto constant = dyn_cast_or_null<ConstantOp>(operand.getDefiningOp())) {
+  if (auto constant = operand.getDefiningOp<ConstantOp>()) {
     return vectorizeConstant(
         op, constant,
         VectorType::get(state->strategy->vectorSizes, operand.getType()));
@@ -1024,8 +1017,7 @@ static Operation *vectorizeOneOperation(Operation *opInst,
     LLVM_DEBUG(dbgs() << "\n[early-vect]+++++ permutationMap: ");
     LLVM_DEBUG(permutationMap.print(dbgs()));
     auto transfer = b.create<vector::TransferWriteOp>(
-        opInst->getLoc(), vectorValue, memRef, indices,
-        AffineMapAttr::get(permutationMap));
+        opInst->getLoc(), vectorValue, memRef, indices, permutationMap);
     auto *res = transfer.getOperation();
     LLVM_DEBUG(dbgs() << "\n[early-vect]+++++ vectorized store: " << *res);
     // "Terminals" (i.e. AffineStoreOps) are erased on the spot.
@@ -1059,8 +1051,7 @@ static Operation *vectorizeOneOperation(Operation *opInst,
   OpBuilder b(opInst);
   OperationState newOp(opInst->getLoc(), opInst->getName().getStringRef(),
                        vectorOperands, vectorTypes, opInst->getAttrs(),
-                       /*successors=*/{},
-                       /*regions=*/{}, opInst->hasResizableOperandsList());
+                       /*successors=*/{}, /*regions=*/{});
   return b.createOperation(newOp);
 }
 

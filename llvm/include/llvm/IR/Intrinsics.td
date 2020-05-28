@@ -289,6 +289,7 @@ def llvm_v1f64_ty      : LLVMType<v1f64>;    //  1 x double
 def llvm_v2f64_ty      : LLVMType<v2f64>;    //  2 x double
 def llvm_v4f64_ty      : LLVMType<v4f64>;    //  4 x double
 def llvm_v8f64_ty      : LLVMType<v8f64>;    //  8 x double
+def llvm_v16f64_ty     : LLVMType<v16f64>;   // 16 x double
 
 def llvm_vararg_ty     : LLVMType<isVoid>;   // this means vararg here
 
@@ -508,6 +509,9 @@ def int_instrprof_value_profile : Intrinsic<[],
                                              llvm_i32_ty],
                                             []>;
 
+def int_call_preallocated_setup : Intrinsic<[llvm_token_ty], [llvm_i32_ty]>;
+def int_call_preallocated_arg : Intrinsic<[llvm_ptr_ty], [llvm_token_ty, llvm_i32_ty]>;
+
 //===------------------- Standard C Library Intrinsics --------------------===//
 //
 
@@ -575,6 +579,7 @@ let IntrProperties = [IntrNoMem, IntrSpeculatable, IntrWillReturn] in {
   def int_rint  : Intrinsic<[llvm_anyfloat_ty], [LLVMMatchType<0>]>;
   def int_nearbyint : Intrinsic<[llvm_anyfloat_ty], [LLVMMatchType<0>]>;
   def int_round : Intrinsic<[llvm_anyfloat_ty], [LLVMMatchType<0>]>;
+  def int_roundeven    : Intrinsic<[llvm_anyfloat_ty], [LLVMMatchType<0>]>;
   def int_canonicalize : Intrinsic<[llvm_anyfloat_ty], [LLVMMatchType<0>],
                                    [IntrNoMem]>;
 
@@ -607,6 +612,13 @@ def int_objectsize : Intrinsic<[llvm_anyint_ty],
                                 llvm_i1_ty, llvm_i1_ty],
                                [IntrNoMem, IntrSpeculatable, IntrWillReturn, ImmArg<1>, ImmArg<2>, ImmArg<3>]>,
                                GCCBuiltin<"__builtin_object_size">;
+
+//===--------------- Access to Floating Point Environment -----------------===//
+//
+
+let IntrProperties = [IntrInaccessibleMemOnly, IntrWillReturn] in {
+  def int_flt_rounds    : Intrinsic<[llvm_i32_ty], []>;
+}
 
 //===--------------- Constrained Floating Point Intrinsics ----------------===//
 //
@@ -772,6 +784,9 @@ let IntrProperties = [IntrInaccessibleMemOnly, IntrWillReturn] in {
   def int_experimental_constrained_round : Intrinsic<[ llvm_anyfloat_ty ],
                                                      [ LLVMMatchType<0>,
                                                       llvm_metadata_ty ]>;
+  def int_experimental_constrained_roundeven : Intrinsic<[ llvm_anyfloat_ty ],
+                                                         [ LLVMMatchType<0>,
+                                                           llvm_metadata_ty ]>;
   def int_experimental_constrained_trunc : Intrinsic<[ llvm_anyfloat_ty ],
                                                      [ LLVMMatchType<0>,
                                                        llvm_metadata_ty ]>;
@@ -1111,8 +1126,6 @@ def int_coro_subfn_addr : Intrinsic<[llvm_ptr_ty], [llvm_ptr_ty, llvm_i8_ty],
 
 ///===-------------------------- Other Intrinsics --------------------------===//
 //
-def int_flt_rounds : Intrinsic<[llvm_i32_ty]>,
-                     GCCBuiltin<"__builtin_flt_rounds">;
 def int_trap : Intrinsic<[], [], [IntrNoReturn, IntrCold]>,
                GCCBuiltin<"__builtin_trap">;
 def int_debugtrap : Intrinsic<[]>,
@@ -1156,7 +1169,7 @@ def int_is_constant : Intrinsic<[llvm_i1_ty], [llvm_any_ty],
                                 "llvm.is.constant">;
 
 // Intrinsic to mask out bits of a pointer.
-def int_ptrmask: Intrinsic<[llvm_anyptr_ty], [llvm_anyptr_ty, llvm_anyint_ty],
+def int_ptrmask: Intrinsic<[llvm_anyptr_ty], [LLVMMatchType<0>, llvm_anyint_ty],
                            [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 //===---------------- Vector Predication Intrinsics --------------===//
@@ -1430,7 +1443,7 @@ def int_loop_decrement :
 // may be optimised.
 def int_loop_decrement_reg :
   Intrinsic<[llvm_anyint_ty],
-            [llvm_anyint_ty, llvm_anyint_ty], [IntrNoDuplicate]>;
+            [LLVMMatchType<0>, LLVMMatchType<0>], [IntrNoDuplicate]>;
 
 //===----- Intrinsics that are used to provide predicate information -----===//
 

@@ -509,7 +509,7 @@ bool ReadDataFromGlobal(Constant *C, uint64_t ByteOffset, unsigned char *CurPtr,
 Constant *FoldReinterpretLoadFromConstPtr(Constant *C, Type *LoadTy,
                                           const DataLayout &DL) {
   // Bail out early. Not expect to load from scalable global variable.
-  if (LoadTy->isVectorTy() && cast<VectorType>(LoadTy)->isScalable())
+  if (isa<ScalableVectorType>(LoadTy))
     return nullptr;
 
   auto *PTy = cast<PointerType>(C->getType());
@@ -836,8 +836,7 @@ Constant *SymbolicallyEvaluateGEP(const GEPOperator *GEP,
   Type *SrcElemTy = GEP->getSourceElementType();
   Type *ResElemTy = GEP->getResultElementType();
   Type *ResTy = GEP->getType();
-  if (!SrcElemTy->isSized() ||
-      (SrcElemTy->isVectorTy() && cast<VectorType>(SrcElemTy)->isScalable()))
+  if (!SrcElemTy->isSized() || isa<ScalableVectorType>(SrcElemTy))
     return nullptr;
 
   if (Constant *C = CastGEPIndices(SrcElemTy, Ops, ResTy,
@@ -1458,6 +1457,7 @@ bool llvm::canConstantFoldCallTo(const CallBase *Call, const Function *F) {
   case Intrinsic::amdgcn_cubetc:
   case Intrinsic::amdgcn_fmul_legacy:
   case Intrinsic::amdgcn_fract:
+  case Intrinsic::amdgcn_ldexp:
   case Intrinsic::x86_sse_cvtss2si:
   case Intrinsic::x86_sse_cvtss2si64:
   case Intrinsic::x86_sse_cvttss2si:
@@ -1493,6 +1493,7 @@ bool llvm::canConstantFoldCallTo(const CallBase *Call, const Function *F) {
   case Intrinsic::ceil:
   case Intrinsic::floor:
   case Intrinsic::round:
+  case Intrinsic::roundeven:
   case Intrinsic::trunc:
   case Intrinsic::nearbyint:
   case Intrinsic::rint:
@@ -1501,6 +1502,7 @@ bool llvm::canConstantFoldCallTo(const CallBase *Call, const Function *F) {
   case Intrinsic::experimental_constrained_ceil:
   case Intrinsic::experimental_constrained_floor:
   case Intrinsic::experimental_constrained_round:
+  case Intrinsic::experimental_constrained_roundeven:
   case Intrinsic::experimental_constrained_trunc:
   case Intrinsic::experimental_constrained_nearbyint:
   case Intrinsic::experimental_constrained_rint:
@@ -1782,6 +1784,11 @@ static Constant *ConstantFoldScalarCall1(StringRef Name,
 
     if (IntrinsicID == Intrinsic::round) {
       U.roundToIntegral(APFloat::rmNearestTiesToAway);
+      return ConstantFP::get(Ty->getContext(), U);
+    }
+
+    if (IntrinsicID == Intrinsic::roundeven) {
+      U.roundToIntegral(APFloat::rmNearestTiesToEven);
       return ConstantFP::get(Ty->getContext(), U);
     }
 
@@ -2225,6 +2232,16 @@ static Constant *ConstantFoldScalarCall2(StringRef Name,
         return ConstantFP::get(Ty->getContext(),
                                APFloat((double)std::pow((double)Op1V,
                                                  (int)Op2C->getZExtValue())));
+
+      if (IntrinsicID == Intrinsic::amdgcn_ldexp) {
+        // FIXME: Should flush denorms depending on FP mode, but that's ignored
+        // everywhere else.
+
+        // scalbn is equivalent to ldexp with float radix 2
+        APFloat Result = scalbn(Op1->getValueAPF(), Op2C->getSExtValue(),
+                                APFloat::rmNearestTiesToEven);
+        return ConstantFP::get(Ty->getContext(), Result);
+      }
     }
     return nullptr;
   }
@@ -2572,7 +2589,7 @@ static Constant *ConstantFoldVectorCall(StringRef Name,
 
   // Do not iterate on scalable vector. The number of elements is unknown at
   // compile-time.
-  if (VTy->isScalable())
+  if (isa<ScalableVectorType>(VTy))
     return nullptr;
 
   if (IntrinsicID == Intrinsic::masked_load) {

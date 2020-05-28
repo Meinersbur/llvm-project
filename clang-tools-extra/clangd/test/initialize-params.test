@@ -11,8 +11,11 @@
 # CHECK-NEXT:        "resolveProvider": false,
 # CHECK-NEXT:        "triggerCharacters": [
 # CHECK-NEXT:          ".",
+# CHECK-NEXT:          "<",
 # CHECK-NEXT:          ">",
-# CHECK-NEXT:          ":"
+# CHECK-NEXT:          ":",
+# CHECK-NEXT:          "\"",
+# CHECK-NEXT:          "/"
 # CHECK-NEXT:        ]
 # CHECK-NEXT:      },
 # CHECK-NEXT:      "declarationProvider": true,
@@ -56,7 +59,11 @@
 # CHECK-NEXT:          ","
 # CHECK-NEXT:        ]
 # CHECK-NEXT:      },
-# CHECK-NEXT:      "textDocumentSync": 2,
+# CHECK-NEXT:      "textDocumentSync": {
+# CHECK-NEXT:        "change": 2,
+# CHECK-NEXT:        "openClose": true,
+# CHECK-NEXT:        "save": true
+# CHECK-NEXT:      },
 # CHECK-NEXT:      "typeHierarchyProvider": true
 # CHECK-NEXT:      "workspaceSymbolProvider": true
 # CHECK-NEXT:    },

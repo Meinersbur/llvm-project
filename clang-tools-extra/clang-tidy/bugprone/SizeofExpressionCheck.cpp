@@ -60,12 +60,12 @@ CharUnits getSizeOfType(const ASTContext &Ctx, const Type *Ty) {
 SizeofExpressionCheck::SizeofExpressionCheck(StringRef Name,
                                              ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
-      WarnOnSizeOfConstant(Options.get("WarnOnSizeOfConstant", 1) != 0),
+      WarnOnSizeOfConstant(Options.get("WarnOnSizeOfConstant", true)),
       WarnOnSizeOfIntegerExpression(
-          Options.get("WarnOnSizeOfIntegerExpression", 0) != 0),
-      WarnOnSizeOfThis(Options.get("WarnOnSizeOfThis", 1) != 0),
+          Options.get("WarnOnSizeOfIntegerExpression", false)),
+      WarnOnSizeOfThis(Options.get("WarnOnSizeOfThis", true)),
       WarnOnSizeOfCompareToConstant(
-          Options.get("WarnOnSizeOfCompareToConstant", 1) != 0) {}
+          Options.get("WarnOnSizeOfCompareToConstant", true)) {}
 
 void SizeofExpressionCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "WarnOnSizeOfConstant", WarnOnSizeOfConstant);
@@ -163,10 +163,10 @@ void SizeofExpressionCheck::registerMatchers(MatchFinder *Finder) {
   if (WarnOnSizeOfCompareToConstant) {
     Finder->addMatcher(
         binaryOperator(matchers::isRelationalOperator(),
-                       hasEitherOperand(ignoringParenImpCasts(SizeOfExpr)),
-                       hasEitherOperand(ignoringParenImpCasts(
-                           anyOf(integerLiteral(equals(0)),
-                                 integerLiteral(isBiggerThan(0x80000))))))
+                       hasOperands(ignoringParenImpCasts(SizeOfExpr),
+                                   ignoringParenImpCasts(anyOf(
+                                       integerLiteral(equals(0)),
+                                       integerLiteral(isBiggerThan(0x80000))))))
             .bind("sizeof-compare-constant"),
         this);
   }
@@ -205,10 +205,11 @@ void SizeofExpressionCheck::registerMatchers(MatchFinder *Finder) {
 
   Finder->addMatcher(
       binaryOperator(hasOperatorName("*"),
-                     hasEitherOperand(ignoringParenImpCasts(SizeOfExpr)),
-                     hasEitherOperand(ignoringParenImpCasts(binaryOperator(
-                         hasOperatorName("*"),
-                         hasEitherOperand(ignoringParenImpCasts(SizeOfExpr))))))
+                     hasOperands(ignoringParenImpCasts(SizeOfExpr),
+                                 ignoringParenImpCasts(binaryOperator(
+                                     hasOperatorName("*"),
+                                     hasEitherOperand(
+                                         ignoringParenImpCasts(SizeOfExpr))))))
           .bind("sizeof-multiply-sizeof"),
       this);
 
@@ -232,12 +233,12 @@ void SizeofExpressionCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(
       binaryOperator(
           hasAnyOperatorName("==", "!=", "<", "<=", ">", ">=", "+", "-"),
-          hasEitherOperand(expr(anyOf(
-              ignoringParenImpCasts(SizeOfExpr),
-              ignoringParenImpCasts(binaryOperator(
-                  hasOperatorName("*"),
-                  hasEitherOperand(ignoringParenImpCasts(SizeOfExpr))))))),
-          hasEitherOperand(ignoringParenImpCasts(PtrDiffExpr)))
+          hasOperands(expr(anyOf(ignoringParenImpCasts(SizeOfExpr),
+                                 ignoringParenImpCasts(binaryOperator(
+                                     hasOperatorName("*"),
+                                     hasEitherOperand(
+                                         ignoringParenImpCasts(SizeOfExpr)))))),
+                      ignoringParenImpCasts(PtrDiffExpr)))
           .bind("sizeof-in-ptr-arithmetic-mul"),
       this);
 

@@ -18,6 +18,10 @@ def StdC : StandardSpec<"stdc"> {
 
   NamedType SigHandlerT = NamedType<"__sighandler_t">;
 
+  NamedType FILE = NamedType<"FILE">;
+  PtrType FILEPtr = PtrType<FILE>;
+  RestrictedPtrType FILERestrictedPtr = RestrictedPtrType<FILE>;
+
   HeaderSpec Assert = HeaderSpec<
       "assert.h",
       [
@@ -178,8 +182,14 @@ def StdC : StandardSpec<"stdc"> {
       ],
       [], // Enumerations
       [
+          FunctionSpec<"fabs", RetValSpec<DoubleType>, [ArgSpec<DoubleType>]>,
+          FunctionSpec<"fabsf", RetValSpec<FloatType>, [ArgSpec<FloatType>]>,
+
           FunctionSpec<"cosf", RetValSpec<FloatType>, [ArgSpec<FloatType>]>,
           FunctionSpec<"sinf", RetValSpec<FloatType>, [ArgSpec<FloatType>]>,
+
+          FunctionSpec<"expf", RetValSpec<FloatType>, [ArgSpec<FloatType>]>,
+          FunctionSpec<"exp2f", RetValSpec<FloatType>, [ArgSpec<FloatType>]>,
 
           FunctionSpec<"round", RetValSpec<DoubleType>, [ArgSpec<DoubleType>]>,
       ]
@@ -190,16 +200,17 @@ def StdC : StandardSpec<"stdc"> {
       [], // Macros
       [ // Types
           SizeTType,
+          FILE,
       ],
       [], // Enumerations
       [
           FunctionSpec<
-              "snprintf",
-              RetValSpec<IntType>,
-              [ArgSpec<CharPtr>,
-               ArgSpec<SizeTType>,
-               ArgSpec<ConstCharRestrictedPtr>,
-               ArgSpec<VarArgType>]
+              "fwrite",
+              RetValSpec<SizeTType>,
+              [ArgSpec<ConstVoidRestrictedPtr>,
+              ArgSpec<SizeTType>,
+              ArgSpec<SizeTType>,
+              ArgSpec<FILERestrictedPtr>]
           >,
       ]
   >;

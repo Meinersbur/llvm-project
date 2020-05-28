@@ -317,7 +317,7 @@ StatementMatcher makeCombinedMatcher() {
 UseAutoCheck::UseAutoCheck(StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
       MinTypeNameLength(Options.get("MinTypeNameLength", 5)),
-      RemoveStars(Options.get("RemoveStars", 0)) {}
+      RemoveStars(Options.get("RemoveStars", false)) {}
 
 void UseAutoCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "MinTypeNameLength", MinTypeNameLength);
@@ -325,7 +325,8 @@ void UseAutoCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
 }
 
 void UseAutoCheck::registerMatchers(MatchFinder *Finder) {
-    Finder->addMatcher(makeCombinedMatcher(), this);
+  Finder->addMatcher(traverse(ast_type_traits::TK_AsIs, makeCombinedMatcher()),
+                     this);
 }
 
 void UseAutoCheck::replaceIterators(const DeclStmt *D, ASTContext *Context) {

@@ -7,18 +7,18 @@
 //===----------------------------------------------------------------------===//
 
 #include "ClangdLSPServer.h"
-#include "Context.h"
+#include "CodeComplete.h"
 #include "Diagnostics.h"
 #include "DraftStore.h"
-#include "FormattedString.h"
 #include "GlobalCompilationDatabase.h"
 #include "Protocol.h"
 #include "SemanticHighlighting.h"
 #include "SourceCode.h"
 #include "TUScheduler.h"
-#include "Trace.h"
 #include "URI.h"
 #include "refactor/Tweak.h"
+#include "support/Context.h"
+#include "support/Trace.h"
 #include "clang/Basic/Version.h"
 #include "clang/Tooling/Core/Replacement.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -42,6 +42,11 @@
 namespace clang {
 namespace clangd {
 namespace {
+
+// Tracks end-to-end latency of high level lsp calls. Measurements are in
+// seconds.
+constexpr trace::Metric LSPLatency("lsp_latency", trace::Metric::Distribution,
+                                   "method_name");
 
 // LSP defines file versions as numbers that increase.
 // ClangdServer treats them as opaque and therefore uses strings instead.
@@ -185,7 +190,7 @@ public:
     WithContext HandlerContext(handlerContext());
     // Calls can be canceled by the client. Add cancellation context.
     WithContext WithCancel(cancelableRequestContext(ID));
-    trace::Span Tracer(Method);
+    trace::Span Tracer(Method, LSPLatency);
     SPAN_ATTACH(Tracer, "Params", Params);
     ReplyOnce Reply(ID, Method, &Server, Tracer.Args);
     log("<-- {0}({1})", Method, ID);
@@ -297,7 +302,7 @@ public:
         elog("Failed to decode {0} request.", Method);
         return;
       }
-      trace::Span Tracer(Method);
+      trace::Span Tracer(Method, LSPLatency);
       SPAN_ATTACH(Tracer, "Params", RawParams);
       (Server.*Handler)(P);
     };
@@ -409,7 +414,8 @@ private:
   //  - cleans up the entry in RequestCancelers when it's no longer needed
   // If a client reuses an ID, the last wins and the first cannot be canceled.
   Context cancelableRequestContext(const llvm::json::Value &ID) {
-    auto Task = cancelableTask();
+    auto Task = cancelableTask(
+        /*Reason=*/static_cast<int>(ErrorCode::RequestCancelled));
     auto StrID = llvm::to_string(ID);  // JSON-serialize ID for map key.
     auto Cookie = NextRequestCookie++; // No lock, only called on main thread.
     {
@@ -527,6 +533,8 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
   CCOpts.IncludeFixIts = Params.capabilities.CompletionFixes;
   if (!CCOpts.BundleOverloads.hasValue())
     CCOpts.BundleOverloads = Params.capabilities.HasSignatureHelp;
+  CCOpts.DocumentationFormat =
+      Params.capabilities.CompletionDocumentationFormat;
   DiagOpts.EmbedFixesInDiagnostics = Params.capabilities.DiagnosticFixes;
   DiagOpts.SendDiagnosticCategory = Params.capabilities.DiagnosticCategory;
   DiagOpts.EmitRelatedLocations =
@@ -568,7 +576,12 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
                            {"version", getClangToolFullVersion("clangd")}}},
        {"capabilities",
         llvm::json::Object{
-            {"textDocumentSync", (int)TextDocumentSyncKind::Incremental},
+            {"textDocumentSync",
+             llvm::json::Object{
+                 {"openClose", true},
+                 {"change", (int)TextDocumentSyncKind::Incremental},
+                 {"save", true},
+             }},
             {"documentFormattingProvider", true},
             {"documentRangeFormattingProvider", true},
             {"documentOnTypeFormattingProvider",
@@ -581,9 +594,8 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
              llvm::json::Object{
                  {"allCommitCharacters", " \t()[]{}<>:;,+-/*%^&#?.=\"'|"},
                  {"resolveProvider", false},
-                 // We do extra checks for '>' and ':' in completion to only
-                 // trigger on '->' and '::'.
-                 {"triggerCharacters", {".", ">", ":"}},
+                 // We do extra checks, e.g. that > is part of ->.
+                 {"triggerCharacters", {".", "<", ">", ":", "\"", "/"}},
              }},
             {"semanticTokensProvider",
              llvm::json::Object{
@@ -683,7 +695,16 @@ void ClangdLSPServer::onDocumentDidChange(
                       WantDiags, Params.forceRebuild);
 }
 
+void ClangdLSPServer::onDocumentDidSave(
+    const DidSaveTextDocumentParams &Params) {
+  reparseOpenFilesIfNeeded([](llvm::StringRef) { return true; });
+}
+
 void ClangdLSPServer::onFileEvent(const DidChangeWatchedFilesParams &Params) {
+  // We could also reparse all open files here. However:
+  //  - this could be frequent, and revalidating all the preambles isn't free
+  //  - this is useful e.g. when switching git branches, but we're likely to see
+  //    fresh headers but still have the old-branch main-file content
   Server->onFileEvent(Params);
 }
 
@@ -1179,7 +1200,8 @@ void ClangdLSPServer::applyConfiguration(
     }
   }
 
-  reparseOpenedFiles(ModifiedFiles);
+  reparseOpenFilesIfNeeded(
+      [&](llvm::StringRef File) { return ModifiedFiles.count(File) != 0; });
 }
 
 void ClangdLSPServer::publishTheiaSemanticHighlighting(
@@ -1272,7 +1294,7 @@ void ClangdLSPServer::onSemanticTokens(const SemanticTokensParams &Params,
         Result.tokens = toSemanticTokens(*HT);
         {
           std::lock_guard<std::mutex> Lock(SemanticTokensMutex);
-          auto& Last = LastSemanticTokens[File];
+          auto &Last = LastSemanticTokens[File];
 
           Last.tokens = Result.tokens;
           increment(Last.resultId);
@@ -1297,7 +1319,7 @@ void ClangdLSPServer::onSemanticTokensEdits(
         SemanticTokensOrEdits Result;
         {
           std::lock_guard<std::mutex> Lock(SemanticTokensMutex);
-          auto& Last = LastSemanticTokens[File];
+          auto &Last = LastSemanticTokens[File];
 
           if (PrevResultID == Last.resultId) {
             Result.edits = diffTokens(Last.tokens, Toks);
@@ -1357,6 +1379,7 @@ ClangdLSPServer::ClangdLSPServer(
   MsgHandler->bind("textDocument/didOpen", &ClangdLSPServer::onDocumentDidOpen);
   MsgHandler->bind("textDocument/didClose", &ClangdLSPServer::onDocumentDidClose);
   MsgHandler->bind("textDocument/didChange", &ClangdLSPServer::onDocumentDidChange);
+  MsgHandler->bind("textDocument/didSave", &ClangdLSPServer::onDocumentDidSave);
   MsgHandler->bind("workspace/didChangeWatchedFiles", &ClangdLSPServer::onFileEvent);
   MsgHandler->bind("workspace/didChangeConfiguration", &ClangdLSPServer::onChangeConfiguration);
   MsgHandler->bind("textDocument/symbolInfo", &ClangdLSPServer::onSymbolInfo);
@@ -1402,23 +1425,19 @@ std::vector<Fix> ClangdLSPServer::getFixes(llvm::StringRef File,
   return FixItsIter->second;
 }
 
+// A completion request is sent when the user types '>' or ':', but we only
+// want to trigger on '->' and '::'. We check the preceeding text to make
+// sure it matches what we expected.
+// Running the lexer here would be more robust (e.g. we can detect comments
+// and avoid triggering completion there), but we choose to err on the side
+// of simplicity here.
 bool ClangdLSPServer::shouldRunCompletion(
     const CompletionParams &Params) const {
-  llvm::StringRef Trigger = Params.context.triggerCharacter;
-  if (Params.context.triggerKind != CompletionTriggerKind::TriggerCharacter ||
-      (Trigger != ">" && Trigger != ":"))
+  if (Params.context.triggerKind != CompletionTriggerKind::TriggerCharacter)
     return true;
-
   auto Code = DraftMgr.getDraft(Params.textDocument.uri.file());
   if (!Code)
     return true; // completion code will log the error for untracked doc.
-
-  // A completion request is sent when the user types '>' or ':', but we only
-  // want to trigger on '->' and '::'. We check the preceeding character to make
-  // sure it matches what we expected.
-  // Running the lexer here would be more robust (e.g. we can detect comments
-  // and avoid triggering completion there), but we choose to err on the side
-  // of simplicity here.
   auto Offset = positionToOffset(Code->Contents, Params.position,
                                  /*AllowColumnsBeyondLineLength=*/false);
   if (!Offset) {
@@ -1426,15 +1445,7 @@ bool ClangdLSPServer::shouldRunCompletion(
          Params.position, Params.textDocument.uri.file());
     return true;
   }
-  if (*Offset < 2)
-    return false;
-
-  if (Trigger == ">")
-    return Code->Contents[*Offset - 2] == '-'; // trigger only on '->'.
-  if (Trigger == ":")
-    return Code->Contents[*Offset - 2] == ':'; // trigger only on '::'.
-  assert(false && "unhandled trigger character");
-  return true;
+  return allowImplicitCompletion(Code->Contents, *Offset);
 }
 
 void ClangdLSPServer::onHighlightingsReady(
@@ -1565,13 +1576,11 @@ void ClangdLSPServer::onFileUpdated(PathRef File, const TUStatus &Status) {
   notify("textDocument/clangd.fileStatus", Status.render(File));
 }
 
-void ClangdLSPServer::reparseOpenedFiles(
-    const llvm::StringSet<> &ModifiedFiles) {
-  if (ModifiedFiles.empty())
-    return;
+void ClangdLSPServer::reparseOpenFilesIfNeeded(
+    llvm::function_ref<bool(llvm::StringRef File)> Filter) {
   // Reparse only opened files that were modified.
   for (const Path &FilePath : DraftMgr.getActiveFiles())
-    if (ModifiedFiles.find(FilePath) != ModifiedFiles.end())
+    if (Filter(FilePath))
       if (auto Draft = DraftMgr.getDraft(FilePath)) // else disappeared in race?
         Server->addDocument(FilePath, std::move(Draft->Contents),
                             encodeVersion(Draft->Version),

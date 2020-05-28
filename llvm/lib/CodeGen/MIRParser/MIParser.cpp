@@ -495,7 +495,7 @@ public:
   bool parseOffset(int64_t &Offset);
   bool parseAlignment(unsigned &Alignment);
   bool parseAddrspace(unsigned &Addrspace);
-  bool parseMBBS(MachineBasicBlockSection &T);
+  bool parseSectionID(Optional<MBBSectionID> &SID);
   bool parseOperandsOffset(MachineOperand &Op);
   bool parseIRValue(const Value *&V);
   bool parseMemoryOperandFlag(MachineMemOperand::Flags &Flags);
@@ -620,21 +620,24 @@ bool MIParser::consumeIfPresent(MIToken::TokenKind TokenKind) {
   return true;
 }
 
-// Parse Machine Basic Block Section Type.
-bool MIParser::parseMBBS(MachineBasicBlockSection &T) {
+// Parse Machine Basic Block Section ID.
+bool MIParser::parseSectionID(Optional<MBBSectionID> &SID) {
   assert(Token.is(MIToken::kw_bbsections));
   lex();
-  const StringRef &S = Token.stringValue();
-  if (S == "Entry")
-    T = MBBS_Entry;
-  else if (S == "Exception")
-    T = MBBS_Exception;
-  else if (S == "Cold")
-    T = MBBS_Cold;
-  else if (S == "Unique")
-    T = MBBS_Unique;
-  else
-    return error("Unknown Section Type");
+  if (Token.is(MIToken::IntegerLiteral)) {
+    unsigned Value = 0;
+    if (getUnsigned(Value))
+      return error("Unknown Section ID");
+    SID = MBBSectionID{Value};
+  } else {
+    const StringRef &S = Token.stringValue();
+    if (S == "Exception")
+      SID = MBBSectionID::ExceptionSectionID;
+    else if (S == "Cold")
+      SID = MBBSectionID::ColdSectionID;
+    else
+      return error("Unknown Section ID");
+  }
   lex();
   return false;
 }
@@ -651,7 +654,7 @@ bool MIParser::parseBasicBlockDefinition(
   bool HasAddressTaken = false;
   bool IsLandingPad = false;
   bool IsEHFuncletEntry = false;
-  MachineBasicBlockSection SectionType = MBBS_None;
+  Optional<MBBSectionID> SectionID;
   unsigned Alignment = 0;
   BasicBlock *BB = nullptr;
   if (consumeIfPresent(MIToken::lparen)) {
@@ -681,7 +684,7 @@ bool MIParser::parseBasicBlockDefinition(
         lex();
         break;
       case MIToken::kw_bbsections:
-        if (parseMBBS(SectionType))
+        if (parseSectionID(SectionID))
           return true;
         break;
       default:
@@ -714,8 +717,8 @@ bool MIParser::parseBasicBlockDefinition(
     MBB->setHasAddressTaken();
   MBB->setIsEHPad(IsLandingPad);
   MBB->setIsEHFuncletEntry(IsEHFuncletEntry);
-  if (SectionType != MBBS_None) {
-    MBB->setSectionType(SectionType);
+  if (SectionID.hasValue()) {
+    MBB->setSectionID(SectionID.getValue());
     MF.setBBSectionsType(BasicBlockSection::List);
   }
   return false;
@@ -2239,9 +2242,8 @@ bool MIParser::parseCFIOperand(MachineOperand &Dest) {
   case MIToken::kw_cfi_def_cfa_offset:
     if (parseCFIOffset(Offset))
       return true;
-    // NB: MCCFIInstruction::createDefCfaOffset negates the offset.
-    CFIIndex = MF.addFrameInst(
-        MCCFIInstruction::createDefCfaOffset(nullptr, -Offset));
+    CFIIndex =
+        MF.addFrameInst(MCCFIInstruction::cfiDefCfaOffset(nullptr, Offset));
     break;
   case MIToken::kw_cfi_adjust_cfa_offset:
     if (parseCFIOffset(Offset))
@@ -2253,9 +2255,8 @@ bool MIParser::parseCFIOperand(MachineOperand &Dest) {
     if (parseCFIRegister(Reg) || expectAndConsume(MIToken::comma) ||
         parseCFIOffset(Offset))
       return true;
-    // NB: MCCFIInstruction::createDefCfa negates the offset.
     CFIIndex =
-        MF.addFrameInst(MCCFIInstruction::createDefCfa(nullptr, Reg, -Offset));
+        MF.addFrameInst(MCCFIInstruction::cfiDefCfa(nullptr, Reg, Offset));
     break;
   case MIToken::kw_cfi_remember_state:
     CFIIndex = MF.addFrameInst(MCCFIInstruction::createRememberState(nullptr));

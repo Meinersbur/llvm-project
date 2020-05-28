@@ -64,6 +64,7 @@
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -968,9 +969,11 @@ void LiveDebugValues::transferDebugValue(const MachineInstr &MI,
   } else if (MI.hasOneMemOperand()) {
     llvm_unreachable("DBG_VALUE with mem operand encountered after regalloc?");
   } else {
-    // This must be an undefined location. We should leave OpenRanges closed.
+    // This must be an undefined location. If it has an open range, erase it.
     assert(MI.getOperand(0).isReg() && MI.getOperand(0).getReg() == 0 &&
            "Unexpected non-undef DBG_VALUE encountered");
+    VarLoc VL(MI, LS);
+    OpenRanges.erase(VL);
   }
 }
 
@@ -1610,10 +1613,6 @@ bool LiveDebugValues::isEntryValueCandidate(
   if (MI.getDebugLoc()->getInlinedAt())
     return false;
 
-  // Do not consider indirect debug values (TODO: explain why).
-  if (MI.isIndirectDebugValue())
-    return false;
-
   // Only consider parameters that are described using registers. Parameters
   // that are passed on the stack are not yet supported, so ignore debug
   // values that are described by the frame or stack pointer.
@@ -1628,7 +1627,7 @@ bool LiveDebugValues::isEntryValueCandidate(
     return false;
 
   // TODO: Add support for parameters that have a pre-existing debug expressions
-  // (e.g. fragments, or indirect parameters using DW_OP_deref).
+  // (e.g. fragments).
   if (MI.getDebugExpression()->getNumElements() > 0)
     return false;
 

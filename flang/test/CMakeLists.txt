@@ -12,13 +12,11 @@ configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.cfg.py
 )
 
-add_subdirectory(Semantics)
-
 set(FLANG_TEST_PARAMS
   flang_site_config=${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py)
 
 set(FLANG_TEST_DEPENDS
-  f18
+  f18 FileCheck count not module_files
 )
 
 if (LINK_WITH_FIR)
@@ -31,7 +29,7 @@ add_lit_testsuite(check-flang "Running the Flang regression tests"
   ${CMAKE_CURRENT_BINARY_DIR}
   PARAMS ${FLANG_TEST_PARAMS}
   DEPENDS ${FLANG_TEST_DEPENDS}
-  )
+)
 set_target_properties(check-flang PROPERTIES FOLDER "Tests")
 
 add_lit_testsuites(FLANG ${CMAKE_CURRENT_SOURCE_DIR}
