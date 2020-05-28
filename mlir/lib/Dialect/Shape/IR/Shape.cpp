@@ -177,7 +177,7 @@ OpFoldResult BroadcastOp::fold(ArrayRef<Attribute> operands) {
   if (!OpTrait::util::getBroadcastedShape(lhsShape, rhsShape, resultShape))
     return nullptr;
   Builder builder(getContext());
-  return builder.getI64TensorAttr(resultShape);
+  return builder.getIndexTensorAttr(resultShape);
 }
 
 //===----------------------------------------------------------------------===//
@@ -215,22 +215,13 @@ static ParseResult parseConstShapeOp(OpAsmParser &parser,
     ints.push_back(attr.getInt());
   }
   Builder &builder = parser.getBuilder();
-  result.addAttribute("shape", builder.getI64TensorAttr(ints));
+  result.addAttribute("shape", builder.getIndexTensorAttr(ints));
 
   result.types.push_back(ShapeType::get(builder.getContext()));
   return success();
 }
 
 OpFoldResult ConstShapeOp::fold(ArrayRef<Attribute>) { return shape(); }
-
-LogicalResult
-ConstShapeOp::inferReturnTypes(MLIRContext *context,
-                               Optional<Location> location, ValueRange operands,
-                               DictionaryAttr attributes, RegionRange regions,
-                               SmallVectorImpl<Type> &inferredReturnTypes) {
-  inferredReturnTypes.push_back(ShapeType::get(context));
-  return success();
-}
 
 //===----------------------------------------------------------------------===//
 // ConstSizeOp
@@ -266,7 +257,7 @@ OpFoldResult FromExtentsOp::fold(ArrayRef<Attribute> operands) {
   for (auto attr : operands)
     extents.push_back(attr.cast<IntegerAttr>().getInt());
   Builder builder(getContext());
-  return builder.getI64TensorAttr(extents);
+  return builder.getIndexTensorAttr(extents);
 }
 
 //===----------------------------------------------------------------------===//
@@ -290,14 +281,7 @@ OpFoldResult GetExtentOp::fold(ArrayRef<Attribute> operands) {
   // TODO: Constant fold this to some kind of constant error.
   if (dimToGet >= (uint64_t)elements.getNumElements())
     return nullptr;
-  // This is a little inconvenient because getValue returns an IntegerAttr
-  // that is not of IndexType, but the result here needs to be of
-  // IndexType.
-  // TODO: Make ConstShapeOp hold an tensor of index instead of i64.
-  Builder builder(getContext());
-  return builder.getIntegerAttr(
-      builder.getIndexType(),
-      elements.getValue<IntegerAttr>({dimToGet}).getInt());
+  return elements.getValue({dimToGet});
 }
 
 //===----------------------------------------------------------------------===//
@@ -318,7 +302,7 @@ OpFoldResult ShapeOfOp::fold(ArrayRef<Attribute>) {
   if (!type || !type.hasStaticShape())
     return nullptr;
   Builder builder(getContext());
-  return builder.getI64TensorAttr(type.getShape());
+  return builder.getIndexTensorAttr(type.getShape());
 }
 
 //===----------------------------------------------------------------------===//
@@ -352,8 +336,8 @@ LogicalResult SplitAtOp::fold(ArrayRef<Attribute> operands,
   if (splitPoint < 0)
     splitPoint += shape.size();
   Builder builder(operands[0].getContext());
-  results.push_back(builder.getI64TensorAttr(shape.take_front(splitPoint)));
-  results.push_back(builder.getI64TensorAttr(shape.drop_front(splitPoint)));
+  results.push_back(builder.getIndexTensorAttr(shape.take_front(splitPoint)));
+  results.push_back(builder.getIndexTensorAttr(shape.drop_front(splitPoint)));
   return success();
 }
 
@@ -382,7 +366,7 @@ OpFoldResult ConcatOp::fold(ArrayRef<Attribute> operands) {
   resultShape.append(lhsShape.begin(), lhsShape.end());
   resultShape.append(rhsShape.begin(), rhsShape.end());
   Builder builder(getContext());
-  return builder.getI64TensorAttr(resultShape);
+  return builder.getIndexTensorAttr(resultShape);
 }
 
 //===----------------------------------------------------------------------===//
