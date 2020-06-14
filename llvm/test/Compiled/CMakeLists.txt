@@ -1,8 +1,17 @@
 
 
-# copied from add_unittest
-function(add_compiled_test testfile)
-  
+function(ensure_compile_test_target testdir testtargetname abstestpath)
+  message("testdir ${testdir}")
+  message("testtargetname ${testtargetname}")
+
+  if (TARGET "${testtargetname}")
+    # target already created, anly append to list of tests
+    message("Adding test to ${testtargetname}: ${abstestpath}")
+    target_sources("${testtargetname}" PUBLIC "${testfile}")
+    return ()
+  endif ()
+
+  # The following is inspired by add_unittest
 
   if( NOT LLVM_BUILD_TESTS )
     set(EXCLUDE_FROM_ALL ON)
@@ -32,40 +41,83 @@ function(add_compiled_test testfile)
   set(LLVM_REQUIRES_RTTI OFF)
   list(APPEND LLVM_LINK_COMPONENTS Support) # gtest needs it for raw_ostream
 
-  set(test_name "${sourcefile}")
-  string(REPLACE  "/" "_" test_name "${test_name}")
-  string(REPLACE  "\\" "_" test_name "${test_name}")
-  message("test_name: ${test_name} sourcefile: ${sourcefile}")
-  add_llvm_executable(${test_name} ${sourcefile}  NO_INSTALL_RPATH DEPENDS regression)
-  target_link_libraries(${test_name} PUBLIC regression)
-  # IGNORE_EXTERNALIZE_DEBUGINFO
+  message("Creating compiled test ${testtargetname} using ${abstestpath}")
+  add_llvm_executable("${testtargetname}" "${abstestpath}" NO_INSTALL_RPATH)
+  
+  set(outdir "${LLVM_COMPILED_TEST_BINARY_DIR}")
+  message("outdir: ${LLVM_COMPILED_TEST_BINARY_DIR}")
 
-  # TODO: put into appropriate subdir
-  set(outdir ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR})
-  message("outdir: ${outdir}")
-  set_output_directory(${test_name} BINARY_DIR ${outdir} LIBRARY_DIR ${outdir})
+  set_output_directory(${testtargetname} BINARY_DIR ${outdir} LIBRARY_DIR ${outdir})
   # libpthreads overrides some standard library symbols, so main
   # executable must be linked with it in order to provide consistent
   # API for all shared libaries loaded by this executable.
-  target_link_libraries(${test_name} PRIVATE gtest_main gtest ${LLVM_PTHREAD_LIB})
+  target_link_libraries(${testtargetname} PRIVATE compiledtestboilerplate gtest_main gtest ${LLVM_PTHREAD_LIB})
 
-  set(LLVM_TEST_DEPENDS "${LLVM_TEST_DEPENDS};${test_name}" PARENT_SCOPE)
-  message("depends ${LLVM_TEST_DEPENDS}")
-  #list(APPEND LLVM_TEST_DEPENDS ${test_name} )
-  #add_dependencies(llvm-test-depends ${test_name})
-  #get_target_property(test_suite_folder ${test_suite} FOLDER)
-  #if (NOT ${test_suite_folder} STREQUAL "NOTFOUND")
-  #  set_property(TARGET ${test_name} PROPERTY FOLDER "${test_suite_folder}")
-  #endif ()
+  add_dependencies(llvm-compiled-tests ${testtargetname})
+  set_property(TARGET ${testtargetname} PROPERTY FOLDER "compiled tests")
+endfunction ()
+
+
+
+
+
+function(add_compiled_test testfile abstestpath)
+  get_filename_component(testdir "${testfile}" DIRECTORY)
+
+  set(testtargetname "${testdir}")
+  string(REPLACE "/" "_" testtargetname "${testdir}")
+  string(REPLACE "\\" "_" testtargetname "${testtargetname}")
+
+  ensure_compile_test_target("${testdir}" "${testtargetname}CompiledTests" "${abstestpath}")
 endfunction()
 
 
 
 
 
-file(GLOB_RECURSE compiled_tests FOLLOW_SYMLINKS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
-message("COMPILED TESTS FOUND: ${compiled_tests}")
-foreach(compiled_test IN LISTS compiled_tests)
-  message("TEST: ${compiled_test}")
-  add_compiled_test(${compiled_test})
-endforeach()
+
+
+function(find_compiled_tests testsrcdir)
+  message("testdir: ${testsrcdir}")
+  file(GLOB_RECURSE compiled_tests FOLLOW_SYMLINKS RELATIVE "${testsrcdir}" CONFIGURE_DEPENDS "${testsrcdir}/*.cxx")
+  message("COMPILED TESTS FOUND: ${compiled_tests}")
+
+  # Group by folder
+  foreach(compiled_test IN LISTS compiled_tests)
+    message("TEST: ${compiled_test}")
+
+    set(abstestpath "${testsrcdir}/${compiled_test}")
+
+    add_compiled_test("${compiled_test}" "${abstestpath}")
+  endforeach()
+endfunction()
+
+
+
+
+
+
+if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
+  # Compile regression tests as a separate build
+  message("using externally compiled regression tests")
+
+  project(llvm-regression CXX)
+else ()
+  # Compile regression tests in the same build
+  message("integrated regression test compilation")
+
+  add_custom_target(llvm-compiled-tests)
+
+  set(LLVM_COMPILED_TEST_BINARY_DIR "${LLVM_BINARY_DIR}/compiledtests/${CMAKE_CFG_INTDIR}")
+  find_compiled_tests("${CMAKE_CURRENT_SOURCE_DIR}/..")
+endif ()
+
+
+
+
+
+
+
+
+
+

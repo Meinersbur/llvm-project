@@ -182,7 +182,7 @@ namespace lof {
       if (Node->isStmt()) 
         return getDerived(). transformStmt(cast<Green>(Node));
       if (isa<GSymbol>(Node))
-        return getDerived().transformRefExpr( cast<GSymbol>(Node));
+        return getDerived().transformRefExpr(cast<GSymbol>(Node));
       if (Node->isExpr()) 
         return getDerived(). transformExpr(cast<GOpExpr>(Node));
       llvm_unreachable("unhandled case");
@@ -195,7 +195,7 @@ namespace lof {
 
 
      virtual Green* transformLoop(Green* Node) {
-      return getDerived().transfromStmtOrLoop(Node, false);
+      return getDerived().transfromStmtOrLoop(Node, true);
     }
 
 

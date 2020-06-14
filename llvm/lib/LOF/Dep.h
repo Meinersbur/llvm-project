@@ -54,8 +54,12 @@ namespace lof {
     }; // class Dep
 
 
+    Green* detectArrays(LoopContext& Ctx, Green *Root);
+
+
     std::vector<Dep*> getAllDependencies(Green *Root);
     bool checkDependencies(Green* NewRoot, ArrayRef<Dep*> Deps);
+
 
   } // namespace lof
 #endif /* LLVM_LOF_DEP_H */

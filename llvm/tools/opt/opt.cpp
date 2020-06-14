@@ -540,6 +540,7 @@ struct TimeTracerRAII {
 // main for opt
 //
 int main(int argc, char **argv) {
+  assert(0);
   InitLLVM X(argc, argv);
 
   // Enable debug stream buffering.

@@ -106,6 +106,11 @@ namespace lof {
         // Should work with normalized loop induction variables.
         AddRecExpr,
 
+        // Array accesses
+        // TODO: should define a byte array range (range at each dimension? range subexpr?)
+        LoadArrayElt,
+        StoreArrayElt,
+
 
         // LLVM operations
         LLVMInst,
@@ -120,7 +125,9 @@ namespace lof {
         ISLPwAff,
 
 
-        Last = Disjunction
+
+
+        Last = ISLPwAff
       };
 
     private:
@@ -173,6 +180,10 @@ namespace lof {
           if (auto C = dyn_cast<llvm::Constant>(Inst))
             return 0;
           return cast<llvm::Operator >(Inst)->getNumOperands();
+        case Operation::LoadArrayElt:
+          return 2;
+        case Operation::StoreArrayElt:
+          return 3;
         case False:
         case True:
           return 0;
@@ -205,6 +216,10 @@ namespace lof {
           if (Inst->getType()->isVoidTy())
             return 0;
           return 1;
+        case Operation::LoadArrayElt:
+          return 1;
+        case Operation::StoreArrayElt:
+          return 0;
         case False:
         case True:
         case Negation:
@@ -269,6 +284,12 @@ namespace lof {
               Inst->print(OS);
             }            else
               OS << "llvm::Value";
+            break;
+          case lof::Operation::LoadArrayElt:
+            OS << "load[]";
+            break;
+          case lof::Operation::StoreArrayElt:
+            OS << "store[]";
             break;
           default:
             OS << "Kind=" << K;
@@ -377,6 +398,8 @@ namespace lof {
       // TODO: Define exactly what this means
       bool IsScalar =true;
 
+      SmallVector<GExpr*, 4 > DimSizes;
+
       // Number of subscript dimensions
       // For Arrays: Need the size of each dimension
       // For Scalar: Number of loop surrounding the definition of the scalar; can be indexed by `last`, or surrounding loop counter value of the definition we want to use
@@ -411,12 +434,16 @@ namespace lof {
       }
 
     private:
-      GSymbol(StringRef Name ,llvm:: Value* LLVMName,llvm:: Type *Ty): Name(Name), LLVMName(LLVMName) , Ty(Ty) {
+      GSymbol(StringRef Name ,llvm:: Value* LLVMName,  ArrayRef<GExpr*> DimSizes,  llvm:: Type *Ty): Name(Name), LLVMName(LLVMName) , DimSizes(DimSizes.begin(), DimSizes.end()), Ty(Ty) {
         assertOK();
       }
+
+
     public:
-      static GSymbol* createLLVM(llvm::Value* LLVMName) { return new GSymbol(LLVMName->getName(), LLVMName, LLVMName->getType() ); }
-      static GSymbol* createFromScratch(StringRef  Name, llvm::Type *Ty) { return new GSymbol(Name, nullptr, Ty); }
+      static GSymbol* createLLVM(llvm::Value* LLVMName) { return new GSymbol(LLVMName->getName(), LLVMName, {}, LLVMName->getType()); }
+      static GSymbol* createFromScratch(StringRef  Name, llvm::Type* Ty) { return new GSymbol(Name, nullptr, {}, Ty); }
+      static GSymbol* createArray(StringRef Name, ArrayRef<GExpr*> Sizes, llvm::Type *ElemTy) { return new GSymbol(Name, nullptr,Sizes, ElemTy); }
+
 
     public:
       void printLine(llvm::raw_ostream& OS) const override {
@@ -443,6 +470,7 @@ namespace lof {
       const Operation& getOperation() const { return Op; }
       ArrayRef<GExpr*> args() const { return Args; }
        ArrayRef<GExpr*> getArguments() const { return Args; }
+       size_t getNumArguments() const { return Args.size(); }
 
     public:
       size_t getNumChildren() const override  { return Args.size(); }
@@ -527,7 +555,9 @@ namespace lof {
       friend class green_child_iterator;
 
     private:
-      //bool Staging = true;
+      /// If we make Green nodes edible after creation (to apply additional transformations when we know that the node is not used anywhere else), this flag indicated that this nodes is not yet used anywhere else.
+      bool Staging = true;
+
       //bool IsFloating = false;
 
 
@@ -607,6 +637,7 @@ namespace lof {
           this->  ScalarWrites.emplace( ScalarWrites.getValue().begin() , ScalarWrites.getValue().end());
         }
 
+        this->Staging = false;
         assertOK();
       }
 
@@ -626,6 +657,7 @@ namespace lof {
 
     private:
       Green(Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments,llvm::Instruction *OrigBegin,llvm:: Instruction *OrigEnd, llvm::Loop *OrigLoop,  Green *TransformationOf): Op(Op) , Arguments(Arguments.begin(), Arguments.end()), Assignments(Assignments.begin(), Assignments.end()), OrigBegin(OrigBegin), OrigEnd(OrigEnd), OrigLoop(OrigLoop), TransformationOf(TransformationOf) {
+        this->Staging = false;
         assertOK();
       }
 
@@ -640,7 +672,7 @@ namespace lof {
 
 
     public:
-      Operation& getOperation() {
+     const Operation& getOperation() const {
         return Op;
       }
 
@@ -651,8 +683,33 @@ namespace lof {
 
 
       void assertOK() const {
-        if (IsLoop) {
+        if (Staging)
+          return;
+
+        assert(isStmt());
+        assert(!isExpr());
+        assert(isInstruction() ^ isContainer());
+
+
+        if (isContainer()) {
+          assert(isLoop() ^ isSequence());
+        }
+
+
+        if (isLoop()) {
+          assert(isContainer());
           assert(getIsFirstIteration());
+        }
+
+        if (isSequence()) {
+        }
+
+        if (isInstruction()) {
+          auto NumInputs = getOperation().getNumInputs();
+          auto NumOutputs = getOperation().getNumOutputs();
+
+          assert( getNumArguments() == NumInputs );
+          assert( getNumAssignments() == NumOutputs );
         }
 
 #if 0
@@ -699,6 +756,7 @@ namespace lof {
 public:
       bool isLoop() const override { return IsLoop; }
       bool isContainer() const override { return ! Op.isValid(); }
+      bool isSequence() const  { return isContainer() && !isLoop(); }
 
       /// TODO: Allow compiling instruction sequences into units.
       bool isUnit() const override { return isInstruction(); }
@@ -828,24 +886,22 @@ public:
               llvm_unreachable("Should have been visited");
             default: {
               auto It = Visited.insert(Node);
-              if (It.second) {
+              if (!It.second) {
+                // print address
                 OS << Node << '\n';
                 return;
               }
 
-              Node->printLine(OS);
+              //Node->printLine(OS);
               // print address
-              OS <<  Node << ' ';
+              OS << Node << ' ';
               Node->printLine(OS);
-
             } break;
             case 1:
               Node->printLine(OS);
               break;
             }
           }
-
-    
           OS << '\n';
         
         Indent += 1;

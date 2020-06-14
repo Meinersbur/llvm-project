@@ -74,6 +74,9 @@ public:
     OrigTree->dump();
     OrigTree->asRedRoot()->dump();
 
+    OrigTree = detectArrays(*Ctx, OrigTree);
+    OrigTree->dump();
+
     computeReachableDefs(OrigTree->asRedRoot());
 
     auto OrigDeps = getAllDependencies(OrigTree);

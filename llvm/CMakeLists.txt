@@ -2,8 +2,6 @@
 
 cmake_minimum_required(VERSION 3.4.3)
 
-message("CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
-
 if ("${CMAKE_VERSION}" VERSION_LESS "3.13.4")
   message(WARNING
     "Your CMake version is ${CMAKE_VERSION}. Starting with LLVM 12.0.0, the "
@@ -980,6 +978,7 @@ if( LLVM_INCLUDE_UTILS )
   add_subdirectory(utils/count)
   add_subdirectory(utils/not)
   add_subdirectory(utils/yaml-bench)
+  add_subdirectory(utils/compiledtestboilerplate)
 else()
   if ( LLVM_INCLUDE_TESTS )
     message(FATAL_ERROR "Including tests when not building utils will not work.
@@ -1027,13 +1026,6 @@ if( LLVM_INCLUDE_TESTS )
   if( LLVM_INCLUDE_UTILS )
     add_subdirectory(utils/unittest)
   endif()
-  
-  option( LLVM_EXTERNAL_COMPILED_TESTS "Build compiled regression tests separately" OFF )
-  if ( LLVM_EXTERNAL_COMPILED_TESTS )
-    add_subdirectory( utils/compiledtest/cmake )
-  else ()
-    add_subdirectory( compiledtests )
-  endif ()
 
   if (WIN32)
     # This utility is used to prevent crashing tests from calling Dr. Watson on

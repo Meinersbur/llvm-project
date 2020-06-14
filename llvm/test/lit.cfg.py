@@ -22,13 +22,13 @@ config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
 # suffixes: A list of file extensions to treat as test files. This is overriden
 # by individual lit.local.cfg files in the test subdirectories.
-config.suffixes = ['.ll', '.c', '.cpp', '.cxx', '.test', '.txt', '.s', '.mir']
+config.suffixes = ['.ll', '.c', '.test', '.txt', '.s', '.mir']
 
 # excludes: A list of directories to exclude from the testsuite. The 'Inputs'
 # subdirectories contain auxiliary inputs for various tests in their parent
 # directories.
 #'config.excludes = ['Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt']
-config.excludes = ['Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt', 'Analysis', 'Assembler', 'Bindings', 'Bitcode', 'BugPoint', 'CodeGen', 'DebugInfo', 'Demangle', 'Examples', 'ExecutionEngine', 'Feature', 'FileCheck', 'Instrumentation', 'Integer', 'JitListener', 'Linker', 'LTO', 'MachineVerifier', 'MC', 'Object', 'ObjectYAML', 'Other', 'SafepointIRVerifier', 'Support', 'SymbolRewriter', 'TableGen', 'ThinLTO', 'tools', 'Transforms', 'Unit', 'YAMLParser', 'Verifier']
+config.excludes = ['Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt', 'Analysis', 'Assembler', 'Bindings', 'Bitcode', 'BugPoint', 'CodeGen', 'DebugInfo', 'Demangle', 'Examples', 'ExecutionEngine', 'Feature', 'FileCheck', 'Instrumentation', 'Integer', 'JitListener', 'Linker', 'LTO', 'MachineVerifier', 'MC', 'Object', 'ObjectYAML', 'Other', 'SafepointIRVerifier', 'Support', 'SymbolRewriter', 'TableGen', 'ThinLTO', 'tools', 'Transforms', 'YAMLParser', 'Verifier', 'Reduce', 'Unit']
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)

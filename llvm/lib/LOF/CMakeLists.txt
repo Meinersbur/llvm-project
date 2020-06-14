@@ -1,4 +1,4 @@
-add_llvm_library(LLVMLOF
+add_llvm_component_library(LLVMLOF
   Dep.cpp
   LoopOpt.cpp
   LoopOptPass.cpp
@@ -20,5 +20,5 @@ add_llvm_library(LLVMLOF
     ${LLVM_MAIN_INCLUDE_DIR}/llvm/LOF
     
   DEPENDS
-  intrinsics_gen
+    intrinsics_gen
 )

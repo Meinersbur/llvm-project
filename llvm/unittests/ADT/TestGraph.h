@@ -160,7 +160,9 @@ public:
   }
 
   /// ChildIterator - Visit all children of a node.
-  class ChildIterator {
+  class ChildIterator : public std::iterator< std::input_iterator_tag, NodeType> {
+
+  private:
     friend class Graph;
 
     /// FirstNode - Pointer to first node in the graph's Nodes array.

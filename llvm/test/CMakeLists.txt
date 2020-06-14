@@ -40,6 +40,7 @@ configure_lit_site_cfg(
   "LLVM_TOOLS_DIR"
   "SHLIBDIR"
   )
+
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/Compiled/lit.site.cfg.py.in
   ${CMAKE_CURRENT_BINARY_DIR}/Compiled/lit.site.cfg.py
@@ -125,8 +126,17 @@ set(LLVM_TEST_DEPENDS
           verify-uselistorder
           yaml-bench
           yaml2obj
-          regression
         )
+
+
+option( LLVM_EXTERNAL_COMPILED_TESTS "Build compiled regression tests separately" OFF )
+if ( LLVM_EXTERNAL_COMPILED_TESTS )
+  llvm_ExternalProject_Add( compiled-tests "${CMAKE_CURRENT_SOURCE_DIR}/compiled" NO_INSTALL )
+  # TODO: add dependencies
+else ()
+  add_subdirectory( compiled )
+  list(APPEND LLVM_TEST_DEPENDS llvm-compiled-tests)
+endif ()
 
 if(TARGET llvm-lto)
   set(LLVM_TEST_DEPENDS ${LLVM_TEST_DEPENDS} llvm-lto)
@@ -188,12 +198,6 @@ if(TARGET ocaml_llvm)
         )
 endif()
 
-
-
-
-
-
-
 add_custom_target(llvm-test-depends DEPENDS ${LLVM_TEST_DEPENDS})
 set_target_properties(llvm-test-depends PROPERTIES FOLDER "Tests")
 
@@ -219,6 +223,3 @@ add_lit_testsuites(LLVM ${CMAKE_CURRENT_SOURCE_DIR}
 add_custom_target(check)
 add_dependencies(check check-all)
 set_target_properties(check PROPERTIES FOLDER "Tests")
-
-
-

@@ -1,10 +1,92 @@
 #include "Dep.h"
 #include "Red.h"
 #include "LoopTreeTransform.h"
+#include "GreenBuilder.h"
+#include "llvm/Analysis/AliasSetTracker.h"
+#include "llvm/Analysis/ScalarEvolution.h"
 
 #define DEBUG_TYPE "lof-dep"
 
 using namespace lof;
+
+
+namespace {
+
+  class ArrayDetector :public GreenTreeTransform {
+  private:
+  //  llvm:: ScalarEvolution& SE;
+    DenseMap< GSymbol*, GSymbol*  > BasePtrToArray;
+
+    GSymbol* getArrayForBasePtr(GSymbol* BasePtr) {
+      auto& Result = BasePtrToArray[BasePtr];
+      if (!Result) {
+        Result = GSymbol::createFromScratch("anarray", BasePtr->getType());
+      }
+      return Result;
+    }
+
+  public:
+    ArrayDetector(LoopContext &Ctx) : GreenTreeTransform(Ctx) {
+    } 
+
+    Green* transformInstruction(Green* Node) override {
+      if (Node->getOperation().getKind() != Operation::LLVMInst)
+        return Node;
+
+      auto LLVMInst =dyn_cast<llvm::Instruction>( Node->getOperation().getLLVMInst());
+      if (!LLVMInst)
+        return Node;
+      if (!isa<llvm::LoadInst>(LLVMInst) && !isa<llvm::StoreInst>(LLVMInst))
+        return Node;
+
+      GExpr* PtrArg;
+      GExpr* ValArg;
+  
+      bool IsStore;
+      if (auto LI = dyn_cast<llvm::LoadInst>(LLVMInst)) {
+        PtrArg = Node->getArguments()[LI->getPointerOperandIndex()];
+        ValArg = Node->getAssignments()[0];
+        IsStore = false;
+      } else if (auto SI = dyn_cast<llvm::StoreInst>(LLVMInst)) {
+        PtrArg = Node->getArguments()[SI->getPointerOperandIndex()];
+        ValArg = Node->getArguments()[0];
+        IsStore = true;
+      } else {
+        return Node;
+      }
+
+      // The array access "analysis"
+      auto Gep = cast<GOpExpr>(PtrArg);
+      assert(Gep->getOperation().getKind()==Operation::LLVMSpeculable);
+      assert(isa<llvm::GetElementPtrInst> (Gep->getOperation().getLLVMInst()));
+      assert(Gep->getNumArguments()==2); // BasePtr and index
+      auto BasePtr = Gep->getArguments()[0];
+      auto ArrayIndex = Gep->getArguments()[1];
+
+
+      //GreenBuilder Builder{ Ctx };
+      Green* NewInst;
+      if (IsStore) {    
+         NewInst = Green::createInstruction(Operation(Operation::StoreArrayElt, nullptr), { BasePtr, ArrayIndex, ValArg }, {}, LLVMInst, Node );
+      } else {
+         NewInst = Green::createInstruction(Operation(Operation::LoadArrayElt, nullptr), { BasePtr,ArrayIndex   }, {cast<GSymbol>( ValArg)}, LLVMInst, Node );
+      }
+
+      return NewInst;
+    }
+
+
+  }; // class ArrayDetector
+}; // anon namespace 
+
+
+
+
+
+Green* lof:: detectArrays(LoopContext& Ctx, Green* Root) {
+  ArrayDetector Detector(Ctx);
+  return cast<Green>(Detector.visit(Root));
+}
 
 
 

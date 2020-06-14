@@ -231,6 +231,8 @@ function(llvm_ExternalProject_Add name source_dir)
     set(cmake_args ${ARG_CMAKE_ARGS})
   endif()
 
+  message("External proj: ${name}")
+  message("DEPENDS ${ARG_DEPENDS} llvm-config")
   ExternalProject_Add(${name}
     DEPENDS ${ARG_DEPENDS} llvm-config
     ${name}-clobber

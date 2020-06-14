@@ -1,6 +1,5 @@
 import os
 import sys
-import traceback
 
 
 class TestingConfig(object):
@@ -103,16 +102,11 @@ class TestingConfig(object):
                     path, traceback.format_exc()))
         self.finish(litConfig)
 
-
-
     def __init__(self, parent, name, suffixes, test_format,
                  environment, substitutions, unsupported,
                  test_exec_root, test_source_root, excludes,
                  available_features, pipefail, limit_to_features = [],
                  is_early = False, parallelism_group = None):
-                 
-        traceback.print_tb(sys.exc_info()[2])
-        
         self.parent = parent
         self.name = str(name)
         self.suffixes = set(suffixes)

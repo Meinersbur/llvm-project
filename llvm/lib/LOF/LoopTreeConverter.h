@@ -21,17 +21,7 @@ namespace lof {
         assert(&Ctx.getLLVMContext() == &Func->getContext() );
       }
 
-      Green* build() {
-        for (auto &Arg : Func->args()) {
-          auto ArgExpr = GSymbol::createLLVM(&Arg);
-          InputsVals[&Arg] = ArgExpr;
-          InputsExprs[&Arg] = ArgExpr;
-
-        }
-
-        GreenBuilder DummyBuilder( Ctx);
-        return buildOriginalLoop(nullptr, &Func->getEntryBlock(), GOpExpr::createTrueExpr(),DummyBuilder );
-      }
+      Green* build();
 
     private:
       GSymbol* getOrCreateSym(llvm::Value* LLVMVal) {

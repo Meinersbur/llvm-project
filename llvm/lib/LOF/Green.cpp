@@ -31,6 +31,9 @@ void Operation:: assertOK() const {
       assert( !cast<llvm::Instruction>(I)->isTerminator() && "Operations don't cover control-flow");
     }
     break;
+  case Operation::LoadArrayElt:
+    case Operation::StoreArrayElt:
+      break;
   case Operation::True:
     if (Inst) {
       auto C = cast<llvm::ConstantInt>(Inst);

@@ -1,5 +1,6 @@
 #include "LoopTreeConverter.h"
 #include "llvm/Analysis/ValueTracking.h"
+#include "llvm/Analysis/AliasSetTracker.h"
 
 using namespace llvm;
 using namespace lof;
@@ -13,7 +14,9 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
 
   GSymbol* FirstSym = nullptr;
   GExpr* LoopCond;
+  BasicBlock* Header = nullptr;
   if (L) {
+    Header = L->getHeader();
     FirstSym = GSymbol::createFromScratch("loop.isfirst", Type::getInt1Ty( Ctx.getLLVMContext() ) );
     LoopCond = GExpr::createRef(FirstSym);
   }
@@ -69,7 +72,7 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
     }
   };
 
-  std::function<void(BasicBlock* BB, GExpr *BBCond)>  QueueSuccessor = [&,this](BasicBlock* BB, GExpr *BBCond) {
+  std::function<void(BasicBlock* BB, GExpr *BBCond)> QueueSuccessor = [&,this](BasicBlock* BB, GExpr *BBCond) {
     // Backedge
     if (L && BB == L->getHeader()) 
       return;
@@ -87,31 +90,7 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
       return;
     }
 
-    
     assert(InLoop->getHeader()==BB);
-
-#if 0
-    BasicBlock* Latch = nullptr;
-    BasicBlock* Entering = nullptr;
-    for (auto Pred : predecessors(BB)) {
-      if (InLoop->contains(Pred)) {
-        assert(!Latch && "Requiring simplified loops for now");
-        Latch = Pred;
-      } else {
-        assert(!Entering && "requiring a preheader for now");
-        Entering = Pred;
-      }
-    }
-    assert(Latch);
-    assert(Entering);
-
-    for (auto &PHI :  BB->phis()) {
-      auto IncomingVal = getOrCreateRefExpr(PHI.getIncomingValueForBlock( Entering ));
-      auto PHISum = getOrCreateSym(&PHI); 
-      Builder.addInstruction(BBCond, Operation(Operation::Nop, nullptr), { IncomingVal }, { PHISum }, &PHI );
-    }
-#endif
-
 
     auto InnerLoop = buildOriginalLoop(InLoop, BB, BBCond, Builder);
     Builder.addStmt( BBCond,  InnerLoop);
@@ -155,11 +134,18 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
     }
   }
 
+  DenseSet<BasicBlock*> AlreadyVisited;
+
   while (!Worklist.empty()) {
     auto p = Worklist.front();
     auto BB = p.first;
     auto BBCond = p.second;
     Worklist.pop_front();
+
+    auto  It = AlreadyVisited.insert(BB);
+    if (!It.second) {
+      continue;
+    }
 
     for (auto& Inst: *BB) {
       if (auto PHI = dyn_cast<PHINode>(&Inst)) {
@@ -194,33 +180,49 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
       }
 
 
-
-
-
       SmallVector<GExpr*, 8> OperandVals;
       OperandVals.set_size(Inst.getNumOperands());
-      for (auto &Operand : Inst.operands()) {
+      for (auto& Operand : Inst.operands()) {
         assert(Operand.getUser() == &Inst);
         auto OpIdx = Operand.getOperandNo();
         auto Def = Operand.get();
 
- 
-       // OperandVals[OpIdx] = getOrCreateRefExpr(Def);
+
+        // OperandVals[OpIdx] = getOrCreateRefExpr(Def);
         OperandVals[OpIdx] = getExpr(Def);
       }
 
 
-      if (llvm::isSafeToSpeculativelyExecute(&Inst)) {
-        InputsExprs[&Inst] = GOpExpr::create(Operation(Operation::LLVMSpeculable, &Inst), OperandVals);
-        continue;
-      }
 
       Green* Stmt;
-      if (Inst.getType()->isVoidTy()) {
-        Stmt = Builder.addInstruction(BBCond, Operation(Operation::LLVMInst, &Inst), OperandVals, {}, &Inst);
+      GSymbol* ResultVal = nullptr;
+      if (isa<llvm::PHINode>(Inst)) {
+        ResultVal = GSymbol::createLLVM(&Inst);
+        if (Inst.getNumOperands() == 1) {
+          // LCSSA node
+          Stmt = Builder.addInstruction(BBCond, Operation(Operation::Nop, nullptr), { OperandVals[0] }, { ResultVal }, &Inst);
+        }        else   if (Inst.getParent() == Header) {
+          assert(OperandVals.size()==2);
+          Stmt = Builder.addInstruction(BBCond, Operation(Operation::Select, nullptr, 3), { FirstSym, OperandVals[0], OperandVals[1] }, { ResultVal }, &Inst);
+        } else {
+          llvm_unreachable("To handle non-header PHI");
+        }
       } else {
-        auto ResultVal = GSymbol::createLLVM(&Inst);
-        Stmt = Builder.addInstruction(BBCond, Operation(Operation::LLVMInst, &Inst), OperandVals, { ResultVal }, &Inst);
+        if (llvm::isSafeToSpeculativelyExecute(&Inst)) {
+          InputsExprs[&Inst] = GOpExpr::create(Operation(Operation::LLVMSpeculable, &Inst), OperandVals);
+          continue;
+        }
+
+        if (Inst.getType()->isVoidTy()) {
+          Stmt = Builder.addInstruction(BBCond, Operation(Operation::LLVMInst, &Inst), OperandVals, {}, &Inst);
+        } else {
+           ResultVal = GSymbol::createLLVM(&Inst);
+          Stmt = Builder.addInstruction(BBCond, Operation(Operation::LLVMInst, &Inst), OperandVals, { ResultVal }, &Inst);
+
+        }
+      }
+
+      if (ResultVal) {
         InputsVals[&Inst] = ResultVal;
         InputsExprs[&Inst] = GExpr::createRef(ResultVal);
       }
@@ -244,7 +246,7 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
     }
   }
 
-  for (auto P : PHINextVals ) {
+  for (auto P : PHINextVals) {
       auto ContinueVal = getExpr(P.second);
       auto PHISym = P.first;
       auto Stmt = Builder.addInstruction(GOpExpr::createTrueExpr(), Operation(Operation::Nop, nullptr), { ContinueVal }, { PHISym }, cast<Instruction>( PHISym->getLLVMValue()));
@@ -267,4 +269,17 @@ Green* GreenConverter:: buildOriginalLoop(Loop* L, BasicBlock *Entry, GExpr *Con
   }
   //  return Green::createFunc(InputDeps.size(), InputDeps, NumIntermediates, NumOutputs,  LvlInsts);
   return Builder.createStmt(&*Entry->begin(), OrigEnd);
+}
+
+
+Green* GreenConverter:: build() {
+  for (auto &Arg : Func->args()) {
+    auto ArgExpr = GSymbol::createLLVM(&Arg);
+    InputsVals[&Arg] = ArgExpr;
+    InputsExprs[&Arg] = ArgExpr;
+
+  }
+
+  GreenBuilder DummyBuilder( Ctx);
+  return buildOriginalLoop(nullptr, &Func->getEntryBlock(), GOpExpr::createTrueExpr(),DummyBuilder );
 }
