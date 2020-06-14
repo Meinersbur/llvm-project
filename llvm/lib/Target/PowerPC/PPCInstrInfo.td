@@ -216,6 +216,8 @@ def PPCsrl        : SDNode<"PPCISD::SRL"       , SDTIntShiftOp>;
 def PPCsra        : SDNode<"PPCISD::SRA"       , SDTIntShiftOp>;
 def PPCshl        : SDNode<"PPCISD::SHL"       , SDTIntShiftOp>;
 
+def PPCfnmsub     : SDNode<"PPCISD::FNMSUB"    , SDTFPTernaryOp>;
+
 def PPCextswsli : SDNode<"PPCISD::EXTSWSLI" , SDT_PPCextswsli>;
 
 // Move 2 i64 values into a VSX register
@@ -3381,15 +3383,19 @@ def : Pat<(atomic_fence (timm), (timm)), (SYNC 1)>, Requires<[HasSYNC]>;
 def : Pat<(atomic_fence (timm), (timm)), (MSYNC)>, Requires<[HasOnlyMSYNC]>;
 
 let Predicates = [HasFPU] in {
-// Additional FNMSUB patterns: -a*c + b == -(a*c - b)
-def : Pat<(fma (fneg f64:$A), f64:$C, f64:$B),
-          (FNMSUB $A, $C, $B)>;
-def : Pat<(fma f64:$A, (fneg f64:$C), f64:$B),
-          (FNMSUB $A, $C, $B)>;
-def : Pat<(fma (fneg f32:$A), f32:$C, f32:$B),
-          (FNMSUBS $A, $C, $B)>;
-def : Pat<(fma f32:$A, (fneg f32:$C), f32:$B),
-          (FNMSUBS $A, $C, $B)>;
+// Additional fnmsub patterns for custom node
+def : Pat<(PPCfnmsub f64:$A, f64:$B, f64:$C),
+          (FNMSUB $A, $B, $C)>;
+def : Pat<(PPCfnmsub f32:$A, f32:$B, f32:$C),
+          (FNMSUBS $A, $B, $C)>;
+def : Pat<(fneg (PPCfnmsub f64:$A, f64:$B, f64:$C)),
+          (FMSUB $A, $B, $C)>;
+def : Pat<(fneg (PPCfnmsub f32:$A, f32:$B, f32:$C)),
+          (FMSUBS $A, $B, $C)>;
+def : Pat<(PPCfnmsub f64:$A, f64:$B, (fneg f64:$C)),
+          (FNMADD $A, $B, $C)>;
+def : Pat<(PPCfnmsub f32:$A, f32:$B, (fneg f32:$C)),
+          (FNMADDS $A, $B, $C)>;
 
 // FCOPYSIGN's operand types need not agree.
 def : Pat<(fcopysign f64:$frB, f32:$frA),
@@ -4501,9 +4507,9 @@ def DCBFL  : PPCAsmPseudo<"dcbfl $dst", (ins memrr:$dst)>;
 def DCBFLP : PPCAsmPseudo<"dcbflp $dst", (ins memrr:$dst)>;
 
 def : Pat<(int_ppc_dcbfl xoaddr:$dst),
-          (DCBFL xoaddr:$dst)>;
+          (DCBF 1, xoaddr:$dst)>;
 def : Pat<(int_ppc_dcbflp xoaddr:$dst),
-          (DCBFLP xoaddr:$dst)>;
+          (DCBF 3, xoaddr:$dst)>;
 
 def : InstAlias<"crset $bx", (CREQV crbitrc:$bx, crbitrc:$bx, crbitrc:$bx)>;
 def : InstAlias<"crclr $bx", (CRXOR crbitrc:$bx, crbitrc:$bx, crbitrc:$bx)>;
