@@ -342,8 +342,7 @@ cl::opt<std::string> CSProfileGenFile(
 
 
 static std::unique_ptr<Module>
-parseIntegratedIRFile(StringRef Filename, StringRef Def,
-               SMDiagnostic &Err, LLVMContext &Context,  DataLayoutCallbackTy DataLayoutCallback) {
+parseIntegratedIRFile(StringRef Filename, StringRef Def, SMDiagnostic &Err, LLVMContext &Context, DataLayoutCallbackTy DataLayoutCallback) {
   ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =    MemoryBuffer::getFile(Filename);
   if (std::error_code EC = FileOrErr.getError()) {
     Err = SMDiagnostic(Filename, SourceMgr::DK_Error, "Could not open input file: " + EC.message());
@@ -357,13 +356,14 @@ parseIntegratedIRFile(StringRef Filename, StringRef Def,
     auto ifdef = (Twine("#ifdef ") + Def + "\n").str();
     StringRef Haystack = Buf;
 
-    auto ifdefpos = Haystack.find(ifdef);
-    auto elsepos = Haystack.find("\n#else", ifdefpos + 1);
+    auto ifdefpos = Haystack.find(ifdef); assert(ifdefpos != StringRef::npos);
+    auto elsepos = Haystack.find("\n#else", ifdefpos + 1); assert(elsepos != StringRef::npos);
     auto start = ifdefpos + ifdef.size();
 
-    auto ModuleStr = Haystack.substr(start, elsepos - start);
+    // .str() because the parser requires the end to be null-terminated.
+    auto ModuleStr = Haystack.substr(start, elsepos - start).str();
 
-    MemoryBufferRef F(ModuleStr,  (Twine() + FileOrErr.get()->getBufferIdentifier() + ":" + Def).str() );
+    MemoryBufferRef F(ModuleStr,  (Twine() + FileOrErr.get()->getBufferIdentifier() + ":" + Def).str());
     return parseAssembly(F, Err, Context, nullptr, DataLayoutCallback);
 }
 
@@ -580,15 +580,23 @@ struct TimeTracerRAII {
 };
 #endif
 
-std::unique_ptr<llvm::Module> run_opt(const char* FileName, const char* Def, llvm::ArrayRef<const char*> Args) {
+std::unique_ptr<ModuleResult> run_opt(StringRef FileName, StringRef Def, ArrayRef<const char*> Args) {
   bool AnalyzeOnly = false;
-  bool NoOutput = false;
+  bool NoOutput = true;
+  bool Force = false;
+  bool OutputAssembly = false;
+  bool OutputThinLTOBC = false;
+  bool SplitLTOUnit = false; bool NoUpgradeDebugInfo = false;
+  std::string OutputFilename;
+  std::string ThinLinkBitcodeFile;
+  bool PrintEachXForm = false;
   //InitLLVM X(argc, argv);
 
   // Enable debug stream buffering.
   EnableDebugBuffering = true;
 
-  LLVMContext Context;
+  auto Result = std::make_unique<ModuleResult>();
+  LLVMContext& Context = Result->Context;
 
   InitializeAllTargets();
   InitializeAllTargetMCs();
@@ -677,15 +685,14 @@ std::unique_ptr<llvm::Module> run_opt(const char* FileName, const char* Def, llv
       return None;
     return ClDataLayout;
   };
-  std::unique_ptr<Module> M = parseIntegratedIRFile( FileName, Def, Err, Context,SetDataLayout );
-#if 0
-  if (NoUpgradeDebugInfo)
-    M = parseAssemblyFileWithIndexNoUpgradeDebugInfo(
-      InputFilename, Err, Context, nullptr, SetDataLayout)
-    .Mod;
-  else
-    M = parseIRFile(InputFilename, Err, Context, SetDataLayout);
-#endif
+  std::unique_ptr<Module>& M = Result->M;
+
+  if (NoUpgradeDebugInfo) {
+    llvm_unreachable("There is no version of parseAssemblyFileWithIndexNoUpgradeDebugInfo taking a raw string");
+   // M = parseAssemblyFileWithIndexNoUpgradeDebugInfo(InputFilename, Err, Context, nullptr, SetDataLayout).Mod;
+  }  else
+    M = parseIntegratedIRFile(FileName, Def, Err, Context,SetDataLayout );
+
 
   if (!M) {
     Err.print(argv[0], errs());
@@ -724,7 +731,6 @@ std::unique_ptr<llvm::Module> run_opt(const char* FileName, const char* Def, llv
   updateVCallVisibilityInModule(*M,
     /* WholeProgramVisibilityEnabledInLTO */ false);
 
-#if 0
   // Figure out what stream we are supposed to write to...
   std::unique_ptr<ToolOutputFile> Out;
   std::unique_ptr<ToolOutputFile> ThinLinkOut;
@@ -743,7 +749,7 @@ std::unique_ptr<llvm::Module> run_opt(const char* FileName, const char* Def, llv
     Out.reset(new ToolOutputFile(OutputFilename, EC, Flags));
     if (EC) {
       errs() << EC.message() << '\n';
-      return 1;
+      return {};
     }
 
     if (!ThinLinkBitcodeFile.empty()) {
@@ -751,11 +757,10 @@ std::unique_ptr<llvm::Module> run_opt(const char* FileName, const char* Def, llv
         new ToolOutputFile(ThinLinkBitcodeFile, EC, sys::fs::OF_None));
       if (EC) {
         errs() << EC.message() << '\n';
-        return 1;
+        return {};
       }
     }
   }
-#endif
 
   Triple ModuleTriple(M->getTargetTriple());
   std::string CPUStr, FeaturesStr;
@@ -805,13 +810,12 @@ std::unique_ptr<llvm::Module> run_opt(const char* FileName, const char* Def, llv
     // The user has asked to use the new pass manager and provided a pipeline
     // string. Hand off the rest of the functionality to the new code for that
     // layer.
-    return runPassPipeline(argv[0], *M, TM.get(), Out.get(), ThinLinkOut.get(),
+    runPassPipeline(argv[0], *M.get(), TM.get(), Out.get(), ThinLinkOut.get(),
       RemarksFile.get(), PassPipeline, OK, VK,
       PreserveAssemblyUseListOrder,
       PreserveBitcodeUseListOrder, EmitSummaryIndex,
-      EmitModuleHash, EnableDebugify, Coroutines)
-      ? 0
-      : 1;
+      EmitModuleHash, EnableDebugify, Coroutines);
+    return Result;
   }
 
   // Create a PassManager to hold and optimize the collection of passes we are
@@ -834,7 +838,7 @@ std::unique_ptr<llvm::Module> run_opt(const char* FileName, const char* Def, llv
       else {
         errs() << argv[0] << ": cannot disable nonexistent builtin function "
           << FuncName << '\n';
-        return 1;
+        return {};
       }
   }
 
@@ -866,7 +870,7 @@ std::unique_ptr<llvm::Module> run_opt(const char* FileName, const char* Def, llv
         sys::fs::OF_None);
       if (EC) {
         errs() << EC.message() << '\n';
-        return 1;
+        return {};
       }
     }
     Passes.add(createBreakpointPrinter(Out->os()));
@@ -1058,7 +1062,7 @@ std::unique_ptr<llvm::Module> run_opt(const char* FileName, const char* Def, llv
       }
       if (RemarksFile)
         RemarksFile->keep();
-      return 1;
+      return {};
     }
     if (ShouldEmitOutput)
       Out->os() << BOS->str();

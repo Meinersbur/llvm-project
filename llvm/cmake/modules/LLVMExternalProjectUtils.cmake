@@ -234,8 +234,7 @@ function(llvm_ExternalProject_Add name source_dir)
   message("External proj: ${name}")
   message("DEPENDS ${ARG_DEPENDS} llvm-config")
   ExternalProject_Add(${name}
-    DEPENDS ${ARG_DEPENDS} llvm-config
-    ${name}-clobber
+    DEPENDS ${ARG_DEPENDS} llvm-config ${name}-clobber
     PREFIX ${CMAKE_BINARY_DIR}/projects/${name}
     SOURCE_DIR ${source_dir}
     STAMP_DIR ${STAMP_DIR}

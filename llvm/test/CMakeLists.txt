@@ -1,3 +1,5 @@
+include(ExternalProject)
+
 llvm_canonicalize_cmake_booleans(
   BUILD_SHARED_LIBS
   HAVE_LIBXAR
@@ -131,8 +133,11 @@ set(LLVM_TEST_DEPENDS
 
 option( LLVM_EXTERNAL_COMPILED_TESTS "Build compiled regression tests separately" OFF )
 if ( LLVM_EXTERNAL_COMPILED_TESTS )
-  llvm_ExternalProject_Add( compiled-tests "${CMAKE_CURRENT_SOURCE_DIR}/compiled" NO_INSTALL )
-  # TODO: add dependencies
+  llvm_ExternalProject_Add( llvm-compiled-tests "${CMAKE_CURRENT_SOURCE_DIR}/compiled" 
+    CMAKE_ARGS "-DLLVM_COMPILED_TEST_BINARY_DIR=${LLVM_BINARY_DIR}/compiledtests/${CMAKE_CFG_INTDIR}"
+    DEPENDS LLVMCore
+    NO_INSTALL )
+  list(APPEND LLVM_TEST_DEPENDS llvm-compiled-tests)
 else ()
   add_subdirectory( compiled )
   list(APPEND LLVM_TEST_DEPENDS llvm-compiled-tests)

@@ -102,6 +102,12 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
   message("using externally compiled regression tests")
 
   project(llvm-regression CXX)
+  cmake_minimum_required(VERSION 3.4.3)
+
+  find_package(LLVM REQUIRED)
+  include(AddLLVM)
+
+  find_compiled_tests("${CMAKE_CURRENT_SOURCE_DIR}/..")
 else ()
   # Compile regression tests in the same build
   message("integrated regression test compilation")

@@ -283,14 +283,18 @@ template <typename T> auto drop_begin(T &&RangeOrContainer, size_t N) {
 // mapped_iterator - This is a simple iterator adapter that causes a function to
 // be applied whenever operator* is invoked on the iterator.
 
-template <typename ItTy, typename FuncTy,
-          typename FuncReturnTy =
-            decltype(std::declval<FuncTy>()(*std::declval<ItTy>()))>
+template <typename ItTy,
+          typename FuncTy,
+          typename FuncReturnTy = decltype(std::declval<FuncTy>()(*std::declval<ItTy>()))>
 class mapped_iterator
     : public iterator_adaptor_base<
              mapped_iterator<ItTy, FuncTy>, ItTy,
              typename std::iterator_traits<ItTy>::iterator_category,
-             typename std::remove_reference<FuncReturnTy>::type> {
+             typename std::remove_reference<FuncReturnTy>::type,   // value_type
+             typename std::iterator_traits<ItTy>::difference_type, // difference_type
+             typename std::remove_reference<FuncReturnTy>::type*,  // pointer
+             FuncReturnTy                                          // reference (if Func returns an r-value, cannot convert it to a reference)
+    > {
 public:
   mapped_iterator(ItTy U, FuncTy F)
     : mapped_iterator::iterator_adaptor_base(std::move(U)), F(std::move(F)) {}
@@ -380,15 +384,12 @@ class filter_iterator_base
     : public iterator_adaptor_base<
           filter_iterator_base<WrappedIteratorT, PredicateT, IterTag>,
           WrappedIteratorT,
-          typename std::common_type<
-              IterTag, typename std::iterator_traits<
-                           WrappedIteratorT>::iterator_category>::type> {
+          typename std::common_type<IterTag, typename std::iterator_traits<WrappedIteratorT>::iterator_category>::type> {
   using BaseT = iterator_adaptor_base<
       filter_iterator_base<WrappedIteratorT, PredicateT, IterTag>,
       WrappedIteratorT,
       typename std::common_type<
-          IterTag, typename std::iterator_traits<
-                       WrappedIteratorT>::iterator_category>::type>;
+          IterTag, typename std::iterator_traits<WrappedIteratorT>::iterator_category>::type>;
 
 protected:
   WrappedIteratorT End;

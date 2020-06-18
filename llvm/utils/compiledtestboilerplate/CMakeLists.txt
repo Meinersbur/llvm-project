@@ -48,7 +48,6 @@ add_llvm_library(compiledtestboilerplate
   NewPMDriver.cpp
   PassPrinters.cpp
   PrintSCC.cpp
-  opt.cpp
   compiledtestboilerplate.cpp
 
   DEPENDS

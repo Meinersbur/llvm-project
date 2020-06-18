@@ -30,12 +30,36 @@ attributes #0 = { nounwind readnone "vector-function-abi-variant"="_ZGV_LLVM_N2v
 #else /* IR */
 
 #include "compiledtestboilerplate.h"
-#include <llvm/IR/LLVMContext.h>
-
 using namespace llvm;
 
+
 TEST(VectorizeVFone, getScalarFunc) {
-  
+  auto M = run_opt(__FILE__, "IR", "-passes=loop-vectorize");
+  auto getScalarFunc = M->getFunc("getScalarFunc");
+
+  // Set of calls to atan
+  auto Calls = getScalarFunc.call_insts();
+
+  // Expect at least one call in the output.
+  Calls.expectMinCount(1);
+
+  // Return type must not be a vector
+  ASSERT_TRUE(
+    Calls.all_of([](CallInst* CI)->bool { return !isa<VectorType>(CI->getType()); })
+  );
+
+  // Argument must not be vectors
+  ASSERT_TRUE(
+    Calls.operands()
+    .all_of([](const llvm::Use& V) ->bool {return !isa<llvm::VectorType>(V.get()->getType()); })
+  );
+
+   // Actually, there must be no vector at all
+   ASSERT_TRUE(getScalarFunc.operands()
+     .all_of([](const llvm::Use& U) ->bool {
+      return! isa<llvm::VectorType>(U.get()->getType());
+      })
+    );
 }
 
 #endif /* IR */
