@@ -1150,6 +1150,52 @@ static bool eliminateNoopStore(Instruction *Inst, BasicBlock::iterator &BBI,
   return false;
 }
 
+static Constant *
+tryToMergePartialOverlappingStores(StoreInst *Earlier, StoreInst *Later,
+                                   int64_t InstWriteOffset,
+                                   int64_t DepWriteOffset, const DataLayout &DL,
+                                   AliasAnalysis *AA, DominatorTree *DT) {
+
+  if (Earlier && isa<ConstantInt>(Earlier->getValueOperand()) &&
+      DL.typeSizeEqualsStoreSize(Earlier->getValueOperand()->getType()) &&
+      Later && isa<ConstantInt>(Later->getValueOperand()) &&
+      DL.typeSizeEqualsStoreSize(Later->getValueOperand()->getType()) &&
+      memoryIsNotModifiedBetween(Earlier, Later, AA, DL, DT)) {
+    // If the store we find is:
+    //   a) partially overwritten by the store to 'Loc'
+    //   b) the later store is fully contained in the earlier one and
+    //   c) they both have a constant value
+    //   d) none of the two stores need padding
+    // Merge the two stores, replacing the earlier store's value with a
+    // merge of both values.
+    // TODO: Deal with other constant types (vectors, etc), and probably
+    // some mem intrinsics (if needed)
+
+    APInt EarlierValue =
+        cast<ConstantInt>(Earlier->getValueOperand())->getValue();
+    APInt LaterValue = cast<ConstantInt>(Later->getValueOperand())->getValue();
+    unsigned LaterBits = LaterValue.getBitWidth();
+    assert(EarlierValue.getBitWidth() > LaterValue.getBitWidth());
+    LaterValue = LaterValue.zext(EarlierValue.getBitWidth());
+
+    // Offset of the smaller store inside the larger store
+    unsigned BitOffsetDiff = (InstWriteOffset - DepWriteOffset) * 8;
+    unsigned LShiftAmount = DL.isBigEndian() ? EarlierValue.getBitWidth() -
+                                                   BitOffsetDiff - LaterBits
+                                             : BitOffsetDiff;
+    APInt Mask = APInt::getBitsSet(EarlierValue.getBitWidth(), LShiftAmount,
+                                   LShiftAmount + LaterBits);
+    // Clear the bits we'll be replacing, then OR with the smaller
+    // store, shifted appropriately.
+    APInt Merged = (EarlierValue & ~Mask) | (LaterValue << LShiftAmount);
+    LLVM_DEBUG(dbgs() << "DSE: Merge Stores:\n  Earlier: " << *Earlier
+                      << "\n  Later: " << *Later
+                      << "\n  Merged Value: " << Merged << '\n');
+    return ConstantInt::get(Earlier->getValueOperand()->getType(), Merged);
+  }
+  return nullptr;
+}
+
 static bool eliminateDeadStores(BasicBlock &BB, AliasAnalysis *AA,
                                 MemoryDependenceResults *MD, DominatorTree *DT,
                                 const TargetLibraryInfo *TLI) {
@@ -1297,51 +1343,11 @@ static bool eliminateDeadStores(BasicBlock &BB, AliasAnalysis *AA,
                    OR == OW_PartialEarlierWithFullLater) {
           auto *Earlier = dyn_cast<StoreInst>(DepWrite);
           auto *Later = dyn_cast<StoreInst>(Inst);
-          if (Earlier && isa<ConstantInt>(Earlier->getValueOperand()) &&
-              DL.typeSizeEqualsStoreSize(
-                  Earlier->getValueOperand()->getType()) &&
-              Later && isa<ConstantInt>(Later->getValueOperand()) &&
-              DL.typeSizeEqualsStoreSize(
-                  Later->getValueOperand()->getType()) &&
-              memoryIsNotModifiedBetween(Earlier, Later, AA, DL, DT)) {
-            // If the store we find is:
-            //   a) partially overwritten by the store to 'Loc'
-            //   b) the later store is fully contained in the earlier one and
-            //   c) they both have a constant value
-            //   d) none of the two stores need padding
-            // Merge the two stores, replacing the earlier store's value with a
-            // merge of both values.
-            // TODO: Deal with other constant types (vectors, etc), and probably
-            // some mem intrinsics (if needed)
-
-            APInt EarlierValue =
-                cast<ConstantInt>(Earlier->getValueOperand())->getValue();
-            APInt LaterValue =
-                cast<ConstantInt>(Later->getValueOperand())->getValue();
-            unsigned LaterBits = LaterValue.getBitWidth();
-            assert(EarlierValue.getBitWidth() > LaterValue.getBitWidth());
-            LaterValue = LaterValue.zext(EarlierValue.getBitWidth());
-
-            // Offset of the smaller store inside the larger store
-            unsigned BitOffsetDiff = (InstWriteOffset - DepWriteOffset) * 8;
-            unsigned LShiftAmount =
-                DL.isBigEndian()
-                    ? EarlierValue.getBitWidth() - BitOffsetDiff - LaterBits
-                    : BitOffsetDiff;
-            APInt Mask =
-                APInt::getBitsSet(EarlierValue.getBitWidth(), LShiftAmount,
-                                  LShiftAmount + LaterBits);
-            // Clear the bits we'll be replacing, then OR with the smaller
-            // store, shifted appropriately.
-            APInt Merged =
-                (EarlierValue & ~Mask) | (LaterValue << LShiftAmount);
-            LLVM_DEBUG(dbgs() << "DSE: Merge Stores:\n  Earlier: " << *DepWrite
-                              << "\n  Later: " << *Inst
-                              << "\n  Merged Value: " << Merged << '\n');
-
+          if (Constant *C = tryToMergePartialOverlappingStores(
+                  Earlier, Later, InstWriteOffset, DepWriteOffset, DL, AA,
+                  DT)) {
             auto *SI = new StoreInst(
-                ConstantInt::get(Earlier->getValueOperand()->getType(), Merged),
-                Earlier->getPointerOperand(), false, Earlier->getAlign(),
+                C, Earlier->getPointerOperand(), false, Earlier->getAlign(),
                 Earlier->getOrdering(), Earlier->getSyncScopeID(), DepWrite);
 
             unsigned MDToKeep[] = {LLVMContext::MD_dbg, LLVMContext::MD_tbaa,
@@ -1606,7 +1612,7 @@ struct DSEState {
     const DataLayout &DL = F.getParent()->getDataLayout();
 
     return CC &&
-           isOverwrite(DefLoc, *CC, DL, TLI, DepWriteOffset, InstWriteOffset,
+           isOverwrite(*CC, DefLoc, DL, TLI, DepWriteOffset, InstWriteOffset,
                        UseInst, IOL, AA, &F) == OW_Complete;
   }
 
@@ -1796,11 +1802,8 @@ struct DSEState {
         if (CommonPred)
           WorkList.insert(CommonPred);
         else
-          for (BasicBlock *R : PDT.getRoots()) {
-            if (!DT.isReachableFromEntry(R))
-              continue;
+          for (BasicBlock *R : PDT.getRoots())
             WorkList.insert(R);
-          }
 
         NumCFGTries++;
         // Check if all paths starting from an exit node go through one of the
@@ -1812,6 +1815,12 @@ struct DSEState {
             continue;
           if (Current == DomAccess->getBlock())
             return None;
+
+          // DomAccess is reachable from the entry, so we don't have to explore
+          // unreachable blocks further.
+          if (!DT.isReachableFromEntry(Current))
+            continue;
+
           unsigned CPO = PostOrderNumbers.find(Current)->second;
           // Current block is not on a path starting at DomAccess.
           if (CPO > UpperBound)
@@ -1891,23 +1900,21 @@ struct DSEState {
   //  * A memory instruction that may throw and \p SI accesses a non-stack
   //  object.
   //  * Atomic stores stronger that monotonic.
-  bool isDSEBarrier(Instruction *SI, MemoryLocation &SILoc,
-                    const Value *SILocUnd, Instruction *NI,
-                    MemoryLocation &NILoc) const {
+  bool isDSEBarrier(const Value *SILocUnd, Instruction *NI) const {
     // If NI may throw it acts as a barrier, unless we are to an alloca/alloca
     // like object that does not escape.
     if (NI->mayThrow() && !InvisibleToCallerBeforeRet.count(SILocUnd))
       return true;
 
+    // If NI is an atomic load/store stronger than monotonic, do not try to
+    // eliminate/reorder it.
     if (NI->isAtomic()) {
-      if (auto *NSI = dyn_cast<StoreInst>(NI)) {
-        if (isStrongerThanMonotonic(NSI->getOrdering()))
-          return true;
-      } else
-        llvm_unreachable(
-            "Other instructions should be modeled/skipped in MemorySSA");
+      if (auto *LI = dyn_cast<LoadInst>(NI))
+        return isStrongerThanMonotonic(LI->getOrdering());
+      if (auto *SI = dyn_cast<StoreInst>(NI))
+        return isStrongerThanMonotonic(SI->getOrdering());
+      llvm_unreachable("other instructions should be skipped in MemorySSA");
     }
-
     return false;
   }
 };
@@ -1945,9 +1952,9 @@ bool eliminateDeadStoresMemorySSA(Function &F, AliasAnalysis &AA,
     // Check if we're storing a value that we just loaded.
     if (auto *Load = dyn_cast<LoadInst>(SI->getOperand(0))) {
       if (storeIsNoop(MSSA, Load, KillingDef)) {
-        State.deleteDeadInstruction(SI);
         LLVM_DEBUG(dbgs() << "DSE: Remove Dead Store:\n  DEAD: " << *SI
                           << '\n');
+        State.deleteDeadInstruction(SI);
         NumNoopStores++;
         MadeChange = true;
         continue;
@@ -2021,6 +2028,22 @@ bool eliminateDeadStoresMemorySSA(Function &F, AliasAnalysis &AA,
       Instruction *NI = NextDef->getMemoryInst();
       LLVM_DEBUG(dbgs() << " (" << *NI << ")\n");
 
+      // Before we try to remove anything, check for any extra throwing
+      // instructions that block us from DSEing
+      if (State.mayThrowBetween(SI, NI, SILocUnd)) {
+        LLVM_DEBUG(dbgs() << "  ... skip, may throw!\n");
+        break;
+      }
+
+      // Check for anything that looks like it will be a barrier to further
+      // removal
+      if (State.isDSEBarrier(SILocUnd, NI)) {
+        LLVM_DEBUG(dbgs() << "  ... skip, barrier\n");
+        continue;
+      }
+
+      ToCheck.insert(NextDef->getDefiningAccess());
+
       if (!hasAnalyzableMemoryWrite(NI, TLI)) {
         LLVM_DEBUG(dbgs() << "  ... skip, cannot analyze def\n");
         continue;
@@ -2031,24 +2054,10 @@ bool eliminateDeadStoresMemorySSA(Function &F, AliasAnalysis &AA,
         continue;
       }
 
-      MemoryLocation NILoc = *State.getLocForWriteEx(NI);
-      // Check for anything that looks like it will be a barrier to further
-      // removal
-      if (State.isDSEBarrier(SI, SILoc, SILocUnd, NI, NILoc)) {
-        LLVM_DEBUG(dbgs() << "  ... skip, barrier\n");
-        continue;
-      }
-
-      // Before we try to remove anything, check for any extra throwing
-      // instructions that block us from DSEing
-      if (State.mayThrowBetween(SI, NI, SILocUnd)) {
-        LLVM_DEBUG(dbgs() << "  ... skip, may throw!\n");
-        break;
-      }
-
       if (!DebugCounter::shouldExecute(MemorySSACounter))
         continue;
 
+      MemoryLocation NILoc = *State.getLocForWriteEx(NI);
       // Check if NI overwrites SI.
       int64_t InstWriteOffset, DepWriteOffset;
       auto Iter = State.IOLs.insert(
@@ -2058,7 +2067,28 @@ bool eliminateDeadStoresMemorySSA(Function &F, AliasAnalysis &AA,
       OverwriteResult OR = isOverwrite(SILoc, NILoc, DL, TLI, DepWriteOffset,
                                        InstWriteOffset, NI, IOL, AA, &F);
 
-      ToCheck.insert(NextDef->getDefiningAccess());
+      if (EnablePartialStoreMerging && OR == OW_PartialEarlierWithFullLater) {
+        auto *Earlier = dyn_cast<StoreInst>(NI);
+        auto *Later = dyn_cast<StoreInst>(SI);
+        if (Constant *Merged = tryToMergePartialOverlappingStores(
+                Earlier, Later, InstWriteOffset, DepWriteOffset, DL, &AA,
+                &DT)) {
+
+          // Update stored value of earlier store to merged constant.
+          Earlier->setOperand(0, Merged);
+          ++NumModifiedStores;
+          MadeChange = true;
+
+          // Remove later store and remove any outstanding overlap intervals for
+          // the updated store.
+          State.deleteDeadInstruction(Later);
+          auto I = State.IOLs.find(Earlier->getParent());
+          if (I != State.IOLs.end())
+            I->second.erase(Earlier);
+          break;
+        }
+      }
+
       if (OR == OW_Complete) {
         LLVM_DEBUG(dbgs() << "DSE: Remove Dead Store:\n  DEAD: " << *NI
                           << "\n  KILLER: " << *SI << '\n');
