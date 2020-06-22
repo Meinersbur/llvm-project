@@ -78,8 +78,23 @@ endfunction()
 
 
 function(find_compiled_tests testsrcdir)
+  cmake_parse_arguments(ARG
+    ""
+    "GLOBBING"
+    ""
+    ${ARGN})
   message("testdir: ${testsrcdir}")
-  file(GLOB_RECURSE compiled_tests FOLLOW_SYMLINKS RELATIVE "${testsrcdir}" CONFIGURE_DEPENDS "${testsrcdir}/*.cxx")
+  message("GLOBBING ${ARG_GLOBBING}")
+
+  if (ARG_GLOBBING)
+    message("Globbing at compile-time")
+    file(GLOB_RECURSE compiled_tests FOLLOW_SYMLINKS RELATIVE "${testsrcdir}" CONFIGURE_DEPENDS "${testsrcdir}/*.cxx")
+  else ()
+    message("Globbing at configure-time")
+    file(GLOB_RECURSE compiled_tests FOLLOW_SYMLINKS RELATIVE "${testsrcdir}" "${testsrcdir}/*.cxx")
+  endif ()
+
+  
   message("COMPILED TESTS FOUND: ${compiled_tests}")
 
   # Group by folder
@@ -104,26 +119,31 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
   project(llvm-regression CXX)
   cmake_minimum_required(VERSION 3.4.3)
 
-  find_package(LLVM REQUIRED)
+  set(llvm_cmake_config_dir ${LLVM_BINARY_DIR})
+  message("LLVM config expected at ${llvm_cmake_config_dir}")
+  find_package(LLVM REQUIRED CONFIG 
+    PATHS "${llvm_cmake_config_dir}"
+    NO_DEFAULT_PATH
+  )
+
+  message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+  message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+  list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
   include(AddLLVM)
 
-  find_compiled_tests("${CMAKE_CURRENT_SOURCE_DIR}/..")
+  add_custom_target(llvm-compiled-tests)
+
+  find_compiled_tests("${CMAKE_CURRENT_SOURCE_DIR}/.." GLOBBING ON)
 else ()
   # Compile regression tests in the same build
   message("integrated regression test compilation")
+  option(LLVM_TEST_GLOBBING "Research for new regression test before each compilation" ON)
 
   add_custom_target(llvm-compiled-tests)
 
   set(LLVM_COMPILED_TEST_BINARY_DIR "${LLVM_BINARY_DIR}/compiledtests/${CMAKE_CFG_INTDIR}")
-  find_compiled_tests("${CMAKE_CURRENT_SOURCE_DIR}/..")
+  find_compiled_tests("${CMAKE_CURRENT_SOURCE_DIR}/.." GLOBBING ${LLVM_TEST_GLOBBING})
 endif ()
-
-
-
-
-
-
-
 
 
 

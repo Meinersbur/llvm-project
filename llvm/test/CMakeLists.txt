@@ -133,9 +133,17 @@ set(LLVM_TEST_DEPENDS
 
 option( LLVM_EXTERNAL_COMPILED_TESTS "Build compiled regression tests separately" OFF )
 if ( LLVM_EXTERNAL_COMPILED_TESTS )
-  llvm_ExternalProject_Add( llvm-compiled-tests "${CMAKE_CURRENT_SOURCE_DIR}/compiled" 
-    CMAKE_ARGS "-DLLVM_COMPILED_TEST_BINARY_DIR=${LLVM_BINARY_DIR}/compiledtests/${CMAKE_CFG_INTDIR}"
-    DEPENDS LLVMCore
+  llvm_ExternalProject_Add( llvm-compiled-tests-external "${CMAKE_CURRENT_SOURCE_DIR}/compiled" 
+    BINARY_DIR
+      "${LLVM_BINARY_DIR}/compiledtests/${CMAKE_CFG_INTDIR}"
+    CMAKE_ARGS 
+      "-DLLVM_COMPILED_TEST_BINARY_DIR=${LLVM_BINARY_DIR}/compiledtests/${CMAKE_CFG_INTDIR}"
+      "-DLLVM_CMAKE_PATH=${LLVM_BINARY_DIR}"
+      # "-DLLVM_ROOT=${LLVM_BINARY_DIR}" # Only CMake 3.12
+    EXTRA_TARGETS
+      llvm-compiled-tests
+    DEPENDS 
+      compiledtestboilerplate
     NO_INSTALL )
   list(APPEND LLVM_TEST_DEPENDS llvm-compiled-tests)
 else ()

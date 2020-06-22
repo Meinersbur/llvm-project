@@ -65,6 +65,21 @@ function(llvm_create_cross_target project_name target_name toolchain buildtype)
          "-DLLVM_EXTERNAL_${name}_SOURCE_DIR=${LLVM_EXTERNAL_${name}_SOURCE_DIR}")
   endforeach()
 
+  message("${CMAKE_COMMAND} -G ${CMAKE_GENERATOR}
+        -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
+        ${CROSS_TOOLCHAIN_FLAGS_${target_name}} ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CROSS_TOOLCHAIN_FLAGS_${project_name}_${target_name}}
+        -DLLVM_TARGET_IS_CROSSCOMPILE_HOST=TRUE
+        -DLLVM_TARGETS_TO_BUILD=${targets_to_build_arg}
+        -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=${experimental_targets_to_build_arg}
+        -DLLVM_DEFAULT_TARGET_TRIPLE=${TARGET_TRIPLE}
+        -DLLVM_TARGET_ARCH=${LLVM_TARGET_ARCH}
+        -DLLVM_ENABLE_PROJECTS=${llvm_enable_projects_arg}
+        -DLLVM_EXTERNAL_PROJECTS=${llvm_external_projects_arg}
+        ${external_project_source_dirs}
+        -DLLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN=${LLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN}
+        ${build_type_flags} ${linker_flag} ${external_clang_dir}
+        ${ARGN}")
   add_custom_command(OUTPUT ${${project_name}_${target_name}_BUILD}/CMakeCache.txt
     COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}"
         -DCMAKE_MAKE_PROGRAM="${CMAKE_MAKE_PROGRAM}"

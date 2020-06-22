@@ -41,7 +41,7 @@ endfunction()
 function(llvm_ExternalProject_Add name source_dir)
   cmake_parse_arguments(ARG
     "USE_TOOLCHAIN;EXCLUDE_FROM_ALL;NO_INSTALL;ALWAYS_CLEAN"
-    "SOURCE_DIR"
+    "SOURCE_DIR;BINARY_DIR"
     "CMAKE_ARGS;TOOLCHAIN_TOOLS;RUNTIME_LIBRARIES;DEPENDS;EXTRA_TARGETS;PASSTHROUGH_PREFIXES;STRIP_TOOL"
     ${ARGN})
   canonicalize_tool_name(${name} nameCanon)
@@ -99,7 +99,11 @@ function(llvm_ExternalProject_Add name source_dir)
   endif()
 
   set(STAMP_DIR ${CMAKE_CURRENT_BINARY_DIR}/${name}-stamps/)
-  set(BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/${name}-bins/)
+  if (ARG_BINARY_DIR)
+    set(BINARY_DIR ${ARG_BINARY_DIR})
+  else ()
+    set(BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/${name}-bins/)
+  endif ()
 
   add_custom_target(${name}-clear
     COMMAND ${CMAKE_COMMAND} -E remove_directory ${BINARY_DIR}
@@ -232,7 +236,28 @@ function(llvm_ExternalProject_Add name source_dir)
   endif()
 
   message("External proj: ${name}")
+  message("PREFIX ${CMAKE_BINARY_DIR}/projects/${name}")
+  message("SOURCE_DIR ${source_dir}")
+  message("BINARY_DIR ${BINARY_DIR}")
   message("DEPENDS ${ARG_DEPENDS} llvm-config")
+  message("cmake ${${nameCanon}_CMAKE_ARGS}
+               ${compiler_args}
+               -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+               ${sysroot_arg}
+               -DLLVM_BINARY_DIR=${PROJECT_BINARY_DIR}
+               -DLLVM_CONFIG_PATH=${llvm_config_path}
+               -DLLVM_ENABLE_WERROR=${LLVM_ENABLE_WERROR}
+               -DLLVM_HOST_TRIPLE=${LLVM_HOST_TRIPLE}
+               -DLLVM_HAVE_LINK_VElsRSION_SCRIPT=${LLVM_HAVE_LINK_VERSION_SCRIPT}
+               -DLLVM_USE_RELATIVE_PATHS_IN_DEBUG_INFO=${LLVM_USE_RELATIVE_PATHS_IN_DEBUG_INFO}
+               -DLLVM_USE_RELATIVE_PATHS_IN_FILES=${LLVM_USE_RELATIVE_PATHS_IN_FILES}
+               -DLLVM_SOURCE_PREFIX=${LLVM_SOURCE_PREFIX}
+               -DPACKAGE_VERSION=${PACKAGE_VERSION}
+               -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+               -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
+               -DCMAKE_EXPORT_COMPILE_COMMANDS=1
+               ${cmake_args}
+               ${PASSTHROUGH_VARIABLES}")
   ExternalProject_Add(${name}
     DEPENDS ${ARG_DEPENDS} llvm-config ${name}-clobber
     PREFIX ${CMAKE_BINARY_DIR}/projects/${name}

@@ -60,5 +60,10 @@ if(LLVM_BUILD_EXAMPLES)
     target_link_libraries(compiledtestboilerplate PRIVATE ExampleIRTransforms)
 endif(LLVM_BUILD_EXAMPLES)
 
+# This library is not intended to be installed
 target_include_directories(compiledtestboilerplate INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+target_include_directories(compiledtestboilerplate INTERFACE $<BUILD_INTERFACE:${LLVM_SOURCE_DIR}/include>)
+target_include_directories(compiledtestboilerplate INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../../include>)
+target_include_directories(compiledtestboilerplate INTERFACE $<BUILD_INTERFACE:${LLVM_SOURCE_DIR}/utils/unittest/googletest/include>)
 #target_link_libraries(compiledtestboilerplate PUBLIC gtest_main gtest ${LLVM_PTHREAD_LIB})
+

@@ -43,21 +43,21 @@ TEST(VectorizeVFone, getScalarFunc) {
   // Expect at least one call in the output.
   Calls.expectMinCount(1);
 
-  // Return type must not be a vector
+  // Return type must not be a vector.
   ASSERT_TRUE(
     Calls.all_of([](CallInst* CI)->bool { return !isa<VectorType>(CI->getType()); })
   );
 
-  // Argument must not be vectors
+  // Arguments must not be vectors.
   ASSERT_TRUE(
     Calls.operands()
     .all_of([](const llvm::Use& V) ->bool {return !isa<llvm::VectorType>(V.get()->getType()); })
   );
 
-   // Actually, there must be no vector at all
+   // Actually, there must be no vector at all.
    ASSERT_TRUE(getScalarFunc.operands()
      .all_of([](const llvm::Use& U) ->bool {
-      return! isa<llvm::VectorType>(U.get()->getType());
+      return !isa<llvm::VectorType>(U.get()->getType());
       })
     );
 }

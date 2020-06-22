@@ -1,5 +1,4 @@
 # -*- Python -*-
-
 # Configuration file for the 'lit' test runner.
 
 import os
