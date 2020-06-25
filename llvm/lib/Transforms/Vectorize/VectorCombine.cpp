@@ -47,6 +47,8 @@ static cl::opt<bool> DisableBinopExtractShuffle(
     "disable-binop-extract-shuffle", cl::init(false), cl::Hidden,
     cl::desc("Disable binop extract to shuffle transforms"));
 
+static const unsigned InvalidIndex = std::numeric_limits<unsigned>::max();
+
 class VectorCombine {
 public:
   VectorCombine(Function &F, const TargetTransformInfo &TTI,
@@ -196,7 +198,7 @@ static Value *createShiftShuffle(Value *Vec, unsigned OldIndex,
   // to the new element index. Example for OldIndex == 2 and NewIndex == 0:
   // ShufMask = { 2, undef, undef, undef }
   auto *VecTy = cast<FixedVectorType>(Vec->getType());
-  SmallVector<int, 32> ShufMask(VecTy->getNumElements(), -1);
+  SmallVector<int, 32> ShufMask(VecTy->getNumElements(), UndefMaskElem);
   ShufMask[NewIndex] = OldIndex;
   Value *Undef = UndefValue::get(VecTy);
   return Builder.CreateShuffleVector(Vec, Undef, ShufMask, "shift");
@@ -293,7 +295,7 @@ bool VectorCombine::foldExtractExtract(Instruction &I) {
   //       probably becomes unnecessary.
   auto *Ext0 = cast<ExtractElementInst>(I0);
   auto *Ext1 = cast<ExtractElementInst>(I1);
-  uint64_t InsertIndex = std::numeric_limits<uint64_t>::max();
+  uint64_t InsertIndex = InvalidIndex;
   if (I.hasOneUse())
     match(I.user_back(),
           m_InsertElt(m_Value(), m_Value(), m_ConstantInt(InsertIndex)));

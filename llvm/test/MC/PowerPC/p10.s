@@ -15,6 +15,30 @@
 # CHECK-BE: pextd 1, 2, 4                         # encoding: [0x7c,0x41,0x21,0x78]
 # CHECK-LE: pextd 1, 2, 4                         # encoding: [0x78,0x21,0x41,0x7c]
             pextd 1, 2, 4
+# CHECK-BE: vclzdm 1, 2, 3                        # encoding: [0x10,0x22,0x1f,0x84]
+# CHECK-LE: vclzdm 1, 2, 3                        # encoding: [0x84,0x1f,0x22,0x10]
+            vclzdm 1, 2, 3
+# CHECK-BE: vctzdm 1, 2, 3                        # encoding: [0x10,0x22,0x1f,0xc4]
+# CHECK-LE: vctzdm 1, 2, 3                        # encoding: [0xc4,0x1f,0x22,0x10]
+            vctzdm 1, 2, 3
+# CHECK-BE: cntlzdm 1, 3, 2                       # encoding: [0x7c,0x61,0x10,0x76]
+# CHECK-LE: cntlzdm 1, 3, 2                       # encoding: [0x76,0x10,0x61,0x7c]
+            cntlzdm 1, 3, 2
+# CHECK-BE: cnttzdm 1, 3, 2                       # encoding: [0x7c,0x61,0x14,0x76]
+# CHECK-LE: cnttzdm 1, 3, 2                       # encoding: [0x76,0x14,0x61,0x7c]
+            cnttzdm 1, 3, 2
+# CHECK-BE: xxgenpcvbm 0, 1, 2                    # encoding: [0xf0,0x02,0x0f,0x28]
+# CHECK-LE: xxgenpcvbm 0, 1, 2                    # encoding: [0x28,0x0f,0x02,0xf0]
+            xxgenpcvbm 0, 1, 2
+# CHECK-BE: xxgenpcvhm 0, 1, 2                    # encoding: [0xf0,0x02,0x0f,0x2a]
+# CHECK-LE: xxgenpcvhm 0, 1, 2                    # encoding: [0x2a,0x0f,0x02,0xf0]
+            xxgenpcvhm 0, 1, 2
+# CHECK-BE: xxgenpcvwm 0, 1, 2                    # encoding: [0xf0,0x02,0x0f,0x68]
+# CHECK-LE: xxgenpcvwm 0, 1, 2                    # encoding: [0x68,0x0f,0x02,0xf0]
+            xxgenpcvwm 0, 1, 2
+# CHECK-BE: xxgenpcvdm 0, 1, 2                    # encoding: [0xf0,0x02,0x0f,0x6a]
+# CHECK-LE: xxgenpcvdm 0, 1, 2                    # encoding: [0x6a,0x0f,0x02,0xf0]
+            xxgenpcvdm 0, 1, 2
 # CHECK-BE: vclrlb 1, 4, 3                        # encoding: [0x10,0x24,0x19,0x8d]
 # CHECK-LE: vclrlb 1, 4, 3                        # encoding: [0x8d,0x19,0x24,0x10]
             vclrlb 1, 4, 3
