@@ -1,7 +1,7 @@
 #ifndef LLVM_LOF_LOOPTREECONVERTER_H
 #define LLVM_LOF_LOOPTREECONVERTER_H
 
-#include "Green.h"
+#include "llvm/LOF/Green.h"
 #include "GreenBuilder.h"
 #include "llvm/Analysis/LoopInfo.h"
 

@@ -1,14 +1,14 @@
-#include "Green.h"
+#include "llvm/LOF/Green.h"
 #include "Red.h"
 #include "LoopContext.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/instructions.h"
-
+#include "llvm/ADT/BreadthFirstIterator.h"
 
 using namespace lof;
 
 
-void Operation:: assertOK() const {
+void Operation::assertOK() const {
   switch (K) {
   case Operation::Unknown:
     assert(Inst==nullptr);
@@ -20,6 +20,13 @@ void Operation:: assertOK() const {
     assert(NArgs >= 1); // with just a fallback-value, it's effectively like nop (maybe we don't need the Nop kind)
     assert(NArgs % 2 ==1);
     break;
+     
+  case Operation::ReduceReturn:
+  case Operation::ReduceLast:
+  case Operation::ReduceAdd:
+    assert(Inst==nullptr);
+    break;
+
   case Operation::LLVMSpeculable:
   case Operation::LLVMInst:
     assert(Inst);
@@ -72,6 +79,20 @@ void Operation:: assertOK() const {
   }
 }
 
+
+bool Operation:: isAssociative() const {
+  if (K != LLVMSpeculable) return false;
+  auto LLVMOp = llvm::dyn_cast<llvm::BinaryOperator>(Inst);
+  if (!LLVMOp) return false;
+  return LLVMOp->getOpcode() == llvm::BinaryOperator::Add;
+}
+
+
+#ifndef NDEBUG
+LLVM_DUMP_METHOD void Operation:: dump() const { printLine(llvm::errs()); llvm::errs() << '\n'; }
+#endif
+
+
 GOpExpr* GExpr:: createOp(Operation Op, ArrayRef<GExpr*> Args) { 
   return GOpExpr::create(Op,Args);
 }
@@ -92,7 +113,7 @@ static void visitDetermineScalar(GCommon* G, DenseSet<GSymbol*>& Reads, DenseSet
 
   auto Stmt = cast<Green>(G);
 
-  if (Stmt->hasComputedScalars()) {
+ // if ( Stmt->hasComputedScalars()) {
     auto StmtReads = Stmt->getScalarReads();
     Reads.insert(StmtReads.begin(), StmtReads.end());
 
@@ -104,7 +125,7 @@ static void visitDetermineScalar(GCommon* G, DenseSet<GSymbol*>& Reads, DenseSet
 
     // TODO: Still need AllReferences?
     return;
-  }
+ // }
 
 if (Stmt->isInstruction()) {
     auto Op = Stmt->getOperation();
@@ -125,13 +146,13 @@ if (Stmt->isStmt()) {
     return;
   }   
 
-    llvm_unreachable("unhandled");
+  llvm_unreachable("unhandled");
 }
 
 
 
-void GCommon:: determineScalars(DenseSet<GSymbol*>& Reads, DenseSet<GSymbol*>& Kills, DenseSet<GSymbol*>& Writes,  DenseSet<GSymbol*>& AllReferences) {
-  visitDetermineScalar(this, Reads, Kills, Writes,  AllReferences);
+void lof::determineScalars(GCommon *Node, DenseSet<GSymbol*>& Reads, DenseSet<GSymbol*>& Kills, DenseSet<GSymbol*>& Writes,  DenseSet<GSymbol*>& AllReferences) {
+  visitDetermineScalar(Node, Reads, Kills, Writes,  AllReferences);
 }
 
 
@@ -199,6 +220,27 @@ void  Green::print(raw_ostream &OS) const  {
 
 
 
+
+ Green* Green::findNode(StringRef Name, bool Recursive)  {
+   if (Name == getName())
+     return this;
+
+   if (!Recursive) {
+     for (auto Sub : this->SubStmts) {
+       if (Sub->getName() == Name)
+         return Sub;
+     }
+     return nullptr;
+   }
+
+   for (auto N : llvm::breadth_first<GCommon*> (this)) {
+     if (auto G = dyn_cast<Green>(N)) {
+       if (G->getName() == Name)
+         return G;
+     }
+  }
+   return nullptr;
+ }
 
 
 

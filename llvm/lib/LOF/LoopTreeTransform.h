@@ -1,7 +1,7 @@
 #ifndef LLVM_LOF_LOOPTREETRANFORM_H
 #define LLVM_LOF_LOOPTREETRANFORM_H
 
-#include "Green.h"
+#include "llvm/LOF/Green.h"
 #include "RedRef.h"
 
 
@@ -226,7 +226,7 @@ namespace lof {
 
       if (!Changed)
         return Node;
-      return Green::createInstruction(Op, RecreatedArgs, Node->getAssignments(), Node->getOrigRange().first, Node);
+      return Green::createInstruction( Node->getName(), Op, RecreatedArgs, Node->getAssignments(), Node->getOrigRange().first, Node);
     }
 
 

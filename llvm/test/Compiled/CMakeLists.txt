@@ -7,7 +7,7 @@ function(ensure_compile_test_target testdir testtargetname abstestpath)
   if (TARGET "${testtargetname}")
     # target already created, anly append to list of tests
     message("Adding test to ${testtargetname}: ${abstestpath}")
-    target_sources("${testtargetname}" PUBLIC "${testfile}")
+    target_sources("${testtargetname}" PUBLIC "${abstestpath}")
     return ()
   endif ()
 

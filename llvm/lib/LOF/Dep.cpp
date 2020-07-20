@@ -2,16 +2,95 @@
 #include "Red.h"
 #include "LoopTreeTransform.h"
 #include "GreenBuilder.h"
-#include "llvm/Analysis/AliasSetTracker.h"
-#include "llvm/Analysis/ScalarEvolution.h"
+#include <llvm/Analysis/AliasSetTracker.h>
+#include <llvm/Analysis/ScalarEvolution.h>
 
 #define DEBUG_TYPE "lof-dep"
 
 using namespace lof;
 
 
-namespace {
 
+SymAccessRef lof:: prevSymAccess(const RedRef& StartStmt, GSymbol* Sym, SymAccessRef::AccessKind Kind, bool FindDefs, bool FindUses) {
+  RedRef CurStmt = StartStmt;
+  auto CurGreen = cast<Green>(CurStmt.getGreen());
+  const RedRef *CurParentStmt = CurStmt.getParent();
+  auto CurParentIdx = CurStmt.getParentIdx();
+
+  if (Kind == SymAccessRef::Use)
+    goto CheckDef;
+  if (Kind == SymAccessRef::Def)
+    goto Next;
+
+  while (true) {
+  CheckDef:
+    if (FindDefs && CurGreen->hasScalarWrite(Sym))
+      return { CurStmt, Sym, SymAccessRef::Def };
+
+  CheckUse:
+    if (FindUses && CurGreen->hasScalarRead(Sym))
+      return {CurStmt, Sym, SymAccessRef::Use };
+
+  Next:
+    CurParentIdx -= 1;
+
+  CheckBeforeFirst:
+    if (CurParentIdx < 0) {
+      CurParentStmt = CurParentStmt->getParent();
+      CurParentIdx =  CurParentStmt->getGreen()->getNumChildren()-1 ;
+      goto CheckBeforeFirst;
+    }
+
+
+    CurStmt = CurParentStmt->getChild(CurParentIdx);
+    CurGreen = cast<Green>( CurStmt.getGreen());
+  }
+
+
+  return SymAccessRef{ RedRef(), Sym,  SymAccessRef::NotApplicable };
+}
+
+
+SymAccessRef lof:: nextSymAccess(const RedRef &StartStmt, GSymbol *Sym, SymAccessRef::AccessKind Kind) {
+  RedRef CurStmt = StartStmt;
+  auto CurGreen = cast<Green>(CurStmt.getGreen());
+  const RedRef *CurParentStmt = CurStmt.getParent();
+  auto CurParentIdx = CurStmt.getParentIdx();
+
+  if (Kind == SymAccessRef::Def)
+    goto Next;
+  if (Kind == SymAccessRef::Use)
+    goto CheckDef;
+
+  while (true) {
+  CheckUse:
+    if (CurGreen->hasScalarRead(Sym))
+      return {CurStmt, Sym, SymAccessRef::Use };
+
+  CheckDef:
+    if (CurGreen->hasScalarWrite(Sym))
+      return { CurStmt, Sym, SymAccessRef::Def };
+
+  Next:
+    CurParentIdx += 1;
+
+  CheckEnd:
+    if (CurParentIdx >= CurParentStmt->getNumChildren()) {
+      CurParentStmt = CurParentStmt->getParent();
+      CurParentIdx = 0;
+      goto CheckEnd;
+    }
+
+
+    CurStmt = CurParentStmt->getChild(CurParentIdx);
+    CurGreen = cast<Green> (CurStmt.getGreen());
+  }
+
+
+  return SymAccessRef{ RedRef(), Sym,  SymAccessRef::NotApplicable };
+}
+
+namespace {
   class ArrayDetector :public GreenTreeTransform {
   private:
   //  llvm:: ScalarEvolution& SE;
@@ -67,9 +146,9 @@ namespace {
       //GreenBuilder Builder{ Ctx };
       Green* NewInst;
       if (IsStore) {    
-         NewInst = Green::createInstruction(Operation(Operation::StoreArrayElt, nullptr), { BasePtr, ArrayIndex, ValArg }, {}, LLVMInst, Node );
+         NewInst = Green::createInstruction(Node->getName(), Operation(Operation::StoreArrayElt, nullptr), { BasePtr, ArrayIndex, ValArg }, {}, LLVMInst, Node );
       } else {
-         NewInst = Green::createInstruction(Operation(Operation::LoadArrayElt, nullptr), { BasePtr,ArrayIndex   }, {cast<GSymbol>( ValArg)}, LLVMInst, Node );
+         NewInst = Green::createInstruction(Node->getName(), Operation(Operation::LoadArrayElt, nullptr), { BasePtr,ArrayIndex   }, {cast<GSymbol>( ValArg)}, LLVMInst, Node );
       }
 
       return NewInst;
@@ -83,8 +162,130 @@ namespace {
 
 
 
-Green* lof:: detectArrays(LoopContext& Ctx, Green* Root) {
+Green* lof::detectArrays(LoopContext& Ctx, Green* Root) {
   ArrayDetector Detector(Ctx);
+  return cast<Green>(Detector.visit(Root));
+}
+
+
+
+
+
+namespace {
+  struct Reduction {
+    GExpr* Init;
+    GExpr* Summand;
+
+    Green* Last;
+    GSymbol* RedResult;
+  };
+
+  class ReductionDetector :public GreenTreeTransform {
+  public:
+    ReductionDetector(LoopContext &Ctx) : GreenTreeTransform(Ctx) {
+    } 
+
+
+    Green* transformLoop(Green* Node) override {
+      if (Node->isUnit())
+        return  GreenTreeTransform::transformLoop(Node);
+
+      auto NodeRoot = RedRef::createRoot(Node);
+      DenseSet<GSymbol*> Recurrences{ Node->getScalarRecurrences().begin(),  Node->getScalarRecurrences().end() };
+      SmallVector<Reduction, 4> FoundReductions;
+      DenseSet<Green*> OldReduceLast;
+
+      auto NumReds = Node->getNumEpilogueStmts();
+      for (int i = Node->getNumSubStmt() - NumReds; i < Node->getNumSubStmt(); i+=1) {
+        auto Red = Node->getSubStmt(i);
+        if (Red->getOperation().getKind() != Operation::ReduceLast)
+          continue;
+
+        auto RedResult =  Red->getAssignment(0);
+        auto RedSym = cast<GRefExpr>(Red->getArgument(0)); // TODO: Argument could have the Reduction operation as well
+        if (!RedSym)
+          continue;
+
+        auto RedChild = NodeRoot.getChild(i);
+        auto RedAcc = prevSymAccess(RedChild, RedSym, SymAccessRef::NotApplicable, true, false);
+        auto RedPHI = dyn_cast_or_null<Green>( RedAcc.Stmt.getGreen());
+        if (!RedPHI ) continue;
+        if (!RedPHI->isInstruction()) continue;
+        if (RedPHI->getOperation().getKind() != Operation::Select) continue;
+        if (RedPHI->getNumArguments() != 3) continue;
+        if (RedPHI->getArgument(0) != Node->getIsFirstIteration()) continue;
+        auto RedInit = RedPHI->getArgument(1);
+        auto RedOp = dyn_cast<GOpExpr>( RedPHI->getArgument(2));
+
+        if (!RedOp) continue;
+        auto EltOp = RedOp->getOperation();
+        if (!EltOp.isAssociative()) continue;
+        auto LHS = RedOp->getArgument(0);
+        auto RHS  = RedOp->getArgument(1);
+
+
+        GRefExpr* RedRecurrence;
+        GExpr* Summand;
+        if (isa<GRefExpr>(LHS) && Recurrences.count(cast<GRefExpr>(LHS))) {
+          RedRecurrence = cast<GRefExpr>(LHS);
+           Summand = RHS;
+        } else if (isa<GRefExpr>(RHS) && Recurrences.count(cast<GRefExpr>(RHS))) {
+          RedRecurrence = cast<GRefExpr>(RHS);
+           Summand = LHS;
+        } else
+          continue;
+
+        Reduction R;
+        R.Init = RedInit; // FIXME: Currently assumed to be 0
+        R.Last = Red;
+        R.RedResult = RedResult;
+        R.Summand = Summand;
+        FoundReductions.push_back(R);
+        OldReduceLast.insert(Red);
+      }
+
+      if (FoundReductions.empty())
+        return  GreenTreeTransform::transformLoop(Node); 
+      
+      // Rebuild node, replace ReduceLast with ReduceAdd
+      // PHI might be unused after this, dead code elimination shoud remove it
+      GreenBuilder Rebuilder(Ctx);
+
+      auto NumChildren = Node->getNumChildren();
+      for (int i = 0; i < NumChildren; i+=1) {
+        auto Child = cast<Green>( Node->getChild(i));
+        if (OldReduceLast.count(Child)) continue;
+        Child = cast<Green>(getDerived().visit(Child));
+        Rebuilder.addStmt(Node->getSubCond(i), Child);
+      }
+
+      for (auto Red : FoundReductions) {
+        auto Last = Red.Last;
+        Rebuilder.addInstruction(
+          (Twine(Last->getName()) + ".reduce").str(),
+          nullptr, 
+          Operation(Operation::ReduceAdd, nullptr), 
+          { Red.Summand }, 
+          { Red.RedResult }, 
+          Last->getOrigRange().first );
+      }
+
+      
+        auto ExecCond = Node->getExecCond();
+        GExpr*  NewExecCond = cast<GExpr>(getDerived().visit(ExecCond));
+        Rebuilder.setTransformationOf(Node);
+
+        auto Result = Rebuilder.createLoop(Node->getName(), NewExecCond, Node->getOrigRange().first, Node->getOrigRange().second ,  Node->getIsFirstIteration(), Node->getCanonicalCounter() );
+      return GreenTreeTransform::transformLoop(Result); 
+    }
+
+
+  }; // class ReductionDetector
+} // anon namespace
+
+
+Green* lof::detectReductions(LoopContext& Ctx, Green* Root) {
+  ReductionDetector Detector(Ctx);
   return cast<Green>(Detector.visit(Root));
 }
 
@@ -243,8 +444,8 @@ std::vector<Dep*>lof:: getAllDependencies(Green *Root)  {
     for (int j = 0; j < i; j++) {
       auto Dst = Reds[j];
       auto GDst = cast<Green>(Dst->getGreen());
-      assert(GSrc->hasComputedScalars());
-      assert(GDst->hasComputedScalars());
+      //assert(GSrc->hasComputedScalars());
+     // assert(GDst->hasComputedScalars());
 
       auto SrcWrites = GSrc->getScalarWrites();
       auto SrcReads = GSrc->getScalarReads();

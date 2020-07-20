@@ -1,7 +1,7 @@
 #ifndef LLVM_LOF_GREEN_H
 #define LLVM_LOF_GREEN_H
 
-#include "LLVM.h"
+#include "llvm/LOF/LLVM.h"
 #include "LOFUtils.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/DepthFirstIterator.h"
@@ -40,7 +40,7 @@ namespace llvm {
 
 
 namespace lof {
-    class  green_child_iterator :public map_index_iterator< green_child_iterator, GCommon*, GCommon*, std::ptrdiff_t, GCommon**, GCommon* > {
+    class green_child_iterator: public map_index_iterator< green_child_iterator, GCommon*, GCommon*, std::ptrdiff_t, GCommon**, GCommon* > {
     public:
       green_child_iterator(GCommon* Parent, size_t Idx) : map_index_iterator(Parent, Idx) {}
 
@@ -62,7 +62,7 @@ namespace lof {
 
       // Green as graph representing its subtree; enumerate all nodes in subtree
       using GraphRef = lof::GCommon*;
-      using  nodes_iterator = df_iterator<NodeRef, df_iterator_default_set<NodeRef>, false, GraphTraits<NodeRef>>;
+      using nodes_iterator = df_iterator<NodeRef, df_iterator_default_set<NodeRef>, false, GraphTraits<NodeRef>>;
       static inline nodes_iterator nodes_begin(lof::GCommon* G);
       static inline nodes_iterator nodes_end(lof::GCommon* G);
       static NodeRef getEntryNode(lof::GCommon* G) { return G; }
@@ -74,23 +74,29 @@ namespace lof {
     class Green;
     class GreenBuilder;
 
+    void determineScalars(GCommon *Node,  DenseSet<GSymbol*>& Reads, DenseSet<GSymbol*>& Kills, DenseSet<GSymbol*>& Writes,  DenseSet<GSymbol*>& AllReferences );
+
+
     class Operation {
     public:
       enum Kind {
         Unknown,
 
         // Do an assignment
-        Nop, 
-        
+        Nop,
+
+        // Reference to scalar variable (to replace GRefExpr)
+        ScalarRef,
+
         // Assign first value for this the preceding condition is true
         // Args are: [condition1, value1, condition2, value2, ..., fallback-value]
         Select,
-        
+
 #if 0
         // Loop meta-instructions
         LoopCounter,
         LoopIsFirst,
-#endif 
+#endif
 
         // Logical operations
         False,
@@ -106,10 +112,17 @@ namespace lof {
         // Should work with normalized loop induction variables.
         AddRecExpr,
 
+
+
         // Array accesses
         // TODO: should define a byte array range (range at each dimension? range subexpr?)
         LoadArrayElt,
         StoreArrayElt,
+
+        // Reduction operations
+        ReduceReturn,
+        ReduceLast,
+        ReduceAdd,
 
 
         // LLVM operations
@@ -121,7 +134,7 @@ namespace lof {
         MLIRAff,
         MLIRFlatAff,
 
-        // Affine expression: Requires ISL 
+        // Affine expression: Requires ISL
         ISLPwAff,
 
 
@@ -145,7 +158,7 @@ namespace lof {
 
     public:
       Operation() {  }
-      Operation(Kind K, llvm::Value* Inst, int NArgs = -1) : K(K), Inst(Inst), NArgs(-1) { 
+      Operation(Kind K, llvm::Value* Inst, int NArgs = -1) : K(K), Inst(Inst), NArgs(NArgs) {
         assertOK();
       }
 
@@ -164,6 +177,20 @@ namespace lof {
         return K != LLVMInst;
       }
 
+      bool isReduction() const {
+        switch (K)        {
+        case lof::Operation::ReduceReturn:
+        case lof::Operation::ReduceLast:
+        case lof::Operation::ReduceAdd:
+          return true;
+        default:
+          return false;
+        }
+      }
+
+      /// Used to detect reductions; currently only 'add' is supported
+      bool isAssociative() const;
+
       int getNumInputs() const {
         switch (K)        {
         case Nop:
@@ -175,6 +202,11 @@ namespace lof {
         case LoopIsFirst:
           return 0;
 #endif
+        case ReduceReturn:
+        case ReduceLast:
+        case ReduceAdd:
+          return 1;
+
         case LLVMInst:
         case LLVMSpeculable:
           if (auto C = dyn_cast<llvm::Constant>(Inst))
@@ -211,6 +243,12 @@ namespace lof {
         case LoopIsFirst:
           return 1;
 #endif
+        case ReduceReturn :
+          return 1;
+        case ReduceLast:
+        case ReduceAdd:
+          return 1;
+
         case LLVMInst:
         case LLVMSpeculable:
           if (Inst->getType()->isVoidTy())
@@ -279,7 +317,7 @@ namespace lof {
               OS << "llvm::Inst";
             break;
           case lof::Operation::LLVMSpeculable:
-            if (Inst) {     
+            if (Inst) {
               OS << "(Speculable) ";
               Inst->print(OS);
             }            else
@@ -296,12 +334,16 @@ namespace lof {
           }
         }
 
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+        LLVM_DUMP_METHOD void dump() const;
+#endif
     }; // class Operation
 
 
 
 
-     
+
 
 
 
@@ -341,21 +383,11 @@ namespace lof {
 
 
     public:
-      // TODO: whether something is read, killed or written depends on conditions; Current idea: DenseMap to conditions/GreenNode when this happens 
+      // TODO: whether something is read, killed or written depends on conditions; Current idea: DenseMap to conditions/GreenNode when this happens
       // TODO: Use SetVector
-      void determineScalars(DenseSet<GSymbol*>& Reads, DenseSet<GSymbol*>& Kills, DenseSet<GSymbol*>& Writes,  DenseSet<GSymbol*>& AllReferences );
-      
-#if 0
-      DenseSet<GSymbol*> reads() {
-        DenseSet<GSymbol*> Reads;
-        DenseSet<GSymbol*> Kills;
-        DenseSet<GSymbol*> Writes;
-        determineScalars(Reads, Kills,Writes );
-        return Reads;
-      }
-      DenseSet<GSymbol*> kills() {}
-      DenseSet<GSymbol*> writes() {}
-#endif
+   //  void determineScalars(DenseSet<GSymbol*>& Reads, DenseSet<GSymbol*>& Kills, DenseSet<GSymbol*>& Writes,  DenseSet<GSymbol*>& AllReferences );
+
+
 
     private:
       Red* RedRoot = nullptr;
@@ -385,7 +417,9 @@ namespace lof {
 
        static GSymbol* createRef(GSymbol* Sym) { assert(Sym); return Sym; }
        static GOpExpr* createOp(Operation Op, ArrayRef<GExpr*> Args);
-    };
+    }; // class GExpr
+
+
 
     class GSymbol : public GExpr {
     public:
@@ -460,6 +494,9 @@ namespace lof {
     using GRefExpr = GSymbol;
 
 
+
+
+
     /// Speculable, single result operation
     class GOpExpr : public GExpr {
     private:
@@ -470,6 +507,7 @@ namespace lof {
       const Operation& getOperation() const { return Op; }
       ArrayRef<GExpr*> args() const { return Args; }
        ArrayRef<GExpr*> getArguments() const { return Args; }
+       GExpr* getArgument(size_t Pos) const { return Args[Pos]; }
        size_t getNumArguments() const { return Args.size(); }
 
     public:
@@ -561,7 +599,14 @@ namespace lof {
       //bool IsFloating = false;
 
 
-  
+    private:
+      std::string Name;
+    public:
+      StringRef getName() const { return Name; }
+
+
+
+      Green* findNode(StringRef Name, bool Recursive= true) ;
 
 
 
@@ -578,7 +623,7 @@ namespace lof {
 
 
     private:
-      /// Loop: Condition for executing first / another iterations 
+      /// Loop: Condition for executing first / another iterations
       /// Stmt (Instruction or Sequence): Not yet used, but might also be used as execution condition (in addition to the parent's ChildConds)
       GExpr* ExecCond=nullptr;
     public:
@@ -590,16 +635,25 @@ namespace lof {
 
 
     private:
-      Optional< SmallSetVector<GSymbol*, 4> > ScalarReads;
-      Optional< SmallSetVector<GSymbol*, 4>> ScalarKills;
-      Optional< SmallSetVector<GSymbol*, 4>> ScalarWrites;
+      SmallSetVector<GSymbol*, 4> ScalarReads;
+      SmallSetVector<GSymbol*, 4> ScalarKills;
+      SmallSetVector<GSymbol*, 4> ScalarWrites;
+      SmallSetVector<GSymbol*, 4> ScalarRecurrences;
     public:
-       ArrayRef<GSymbol*>  getScalarReads() const { return ScalarReads.getValue() .getArrayRef() ; }
-       ArrayRef<GSymbol*>  getScalarKills() const { return ScalarKills.getValue() .getArrayRef() ;  }
-       ArrayRef<GSymbol*> getScalarWrites() const { return ScalarWrites.getValue() .getArrayRef() ;   }
-      bool hasComputedScalars() const {
-        return ScalarReads.hasValue() && ScalarKills.hasValue() && ScalarWrites.hasValue();
-      }
+       ArrayRef<GSymbol*> getScalarReads() const { return ScalarReads.getArrayRef(); }
+       ArrayRef<GSymbol*> getScalarKills() const { return ScalarKills.getArrayRef(); }
+       ArrayRef<GSymbol*> getScalarWrites() const { return ScalarWrites.getArrayRef(); }
+       ArrayRef<GSymbol*> getScalarRecurrences() const { return ScalarRecurrences.getArrayRef(); }
+
+
+       bool hasScalarRead(GSymbol* Sym) const { return ScalarReads.count(Sym); }
+       bool hasScalarWrite(GSymbol* Sym) const { return ScalarWrites.count(Sym); }
+       bool hasScalarAccess(GSymbol* Sym) const { return hasScalarRead(Sym) || hasScalarWrite(Sym); }
+
+     // bool hasComputedScalars() const {
+     //   return ScalarReads.hasValue() && ScalarKills.hasValue() && ScalarWrites.hasValue();
+     // }
+
 
     private:
       SmallVector<GExpr*, 8> ChildConds;
@@ -625,17 +679,14 @@ namespace lof {
       Green* getTransformationOf() const { return TransformationOf; }
 
     private:
-      Green(GExpr *ExecCond, ArrayRef<Green*> SubStmts ,   ArrayRef<GExpr*> Conds ,  bool IsLooping,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, Optional< ArrayRef<GSymbol*>> ScalarReads,  Optional< ArrayRef<GSymbol*>> ScalarKills, Optional< ArrayRef<GSymbol*>> ScalarWrites,  GSymbol* LoopIsFirst, GSymbol *CanonicalCounter, Green*TransformationOf) : 
-        ExecCond(ExecCond), SubStmts(SubStmts.begin(), SubStmts.end()), ChildConds(Conds.begin(), Conds.end()), IsLoop(IsLooping), OrigBegin(OrigBegin), OrigEnd(OrigEnd), DefinedInside{CanonicalCounter, LoopIsFirst} {
-        if (ScalarReads.hasValue()) {
-          this->  ScalarReads.emplace( ScalarReads.getValue().begin() , ScalarReads.getValue().end());
-        }
-        if (ScalarKills.hasValue()) {
-          this->  ScalarKills.emplace( ScalarKills.getValue().begin() , ScalarKills.getValue().end());
-        }
-        if (ScalarWrites.hasValue()) {
-          this->  ScalarWrites.emplace( ScalarWrites.getValue().begin() , ScalarWrites.getValue().end());
-        }
+      Green(StringRef Name, GExpr *ExecCond, ArrayRef<Green*> SubStmts ,   ArrayRef<GExpr*> Conds ,  bool IsLooping,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd,  ArrayRef<GSymbol*> ScalarReads,   ArrayRef<GSymbol*> ScalarKills,  ArrayRef<GSymbol*> ScalarWrites, ArrayRef<GSymbol*> ScalarRecurrences,  GSymbol* LoopIsFirst, GSymbol *CanonicalCounter, Green*TransformationOf):
+     Name(Name),    ExecCond(ExecCond), SubStmts(SubStmts.begin(), SubStmts.end()), ChildConds(Conds.begin(), Conds.end()), IsLoop(IsLooping), OrigBegin(OrigBegin), OrigEnd(OrigEnd), DefinedInside{CanonicalCounter, LoopIsFirst} {
+
+        this->  ScalarReads.insert ( ScalarReads.begin() , ScalarReads.end());
+        this->  ScalarKills.insert( ScalarKills.begin() , ScalarKills.end());
+        this->  ScalarWrites.insert( ScalarWrites.begin() , ScalarWrites.end());
+        this->  ScalarRecurrences.insert( ScalarRecurrences.begin() , ScalarRecurrences.end());
+
 
         this->Staging = false;
         assertOK();
@@ -646,27 +697,38 @@ namespace lof {
       Operation Op;
       SmallVector <GExpr*, 1> Arguments;
       SmallVector <GSymbol*, 1> Assignments;
-     
+
     public:
       size_t getNumArguments() const { assert(isInstruction()); return Arguments.size(); }
       ArrayRef<GExpr*> getArguments() const { assert(isInstruction());return Arguments; }
+      GExpr* getArgument(size_t Pos) const { return  Arguments[Pos]; }
 
       size_t getNumAssignments() const { assert(isInstruction());return Assignments.size(); }
       ArrayRef<GSymbol*> getAssignments() const {assert(isInstruction()); return Assignments; }
-
+      GSymbol* getAssignment(size_t Pos) const { return Assignments[Pos]; }
 
     private:
-      Green(Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments,llvm::Instruction *OrigBegin,llvm:: Instruction *OrigEnd, llvm::Loop *OrigLoop,  Green *TransformationOf): Op(Op) , Arguments(Arguments.begin(), Arguments.end()), Assignments(Assignments.begin(), Assignments.end()), OrigBegin(OrigBegin), OrigEnd(OrigEnd), OrigLoop(OrigLoop), TransformationOf(TransformationOf) {
+      Green( StringRef Name, Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments,llvm::Instruction *OrigBegin,llvm:: Instruction *OrigEnd, llvm::Loop *OrigLoop,  Green *TransformationOf ):
+        Name(Name),Op(Op) , Arguments(Arguments.begin(), Arguments.end()), Assignments(Assignments.begin(), Assignments.end()), OrigBegin(OrigBegin), OrigEnd(OrigEnd), OrigLoop(OrigLoop), TransformationOf(TransformationOf) {
+
+        DenseSet<GSymbol*> Reads,Kills,Writes,AllRefs;
+        for (auto A : Arguments) {
+          determineScalars(A, Reads, Kills, Writes, AllRefs);
+        }
+        this->ScalarReads.insert(Reads.begin(), Reads.end());
+        this->ScalarWrites.insert(Assignments.begin(), Assignments.end());
+        this->ScalarKills = this->ScalarWrites;
+
         this->Staging = false;
         assertOK();
       }
 
     public:
-     static  Green* createInstruction(Operation Op,  ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments, llvm::Instruction *OrigInst,  Green *TransformationOf) {
+     static Green* createInstruction(StringRef Name, Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments, llvm::Instruction *OrigInst, Green *TransformationOf) {
        llvm::Instruction* OrigEnd = nullptr;
-       if (OrigInst)
-         OrigEnd = OrigInst->getNextNode();
-        return new Green(Op, Arguments, Assignments,OrigInst,OrigEnd,nullptr, TransformationOf);
+        if (OrigInst)
+          OrigEnd = OrigInst->getNextNode();
+        return new Green( Name,Op, Arguments, Assignments,OrigInst,OrigEnd, nullptr, TransformationOf);
       }
       bool isInstruction() const override  { return Op.isValid(); }
 
@@ -764,9 +826,55 @@ public:
 
       ArrayRef<Green*> getSubStmts() const {
         return SubStmts;
-      } 
+      }
       Green* getSubStmt(int i) const { return SubStmts[i]; }
+      auto getNumSubStmt() const { return SubStmts.size(); }
       GExpr* getSubCond(int i) const { return ChildConds[i]; }
+
+      int getNumPrologueStmts() const {
+        if (!isLoop())
+          return 0;
+        for (auto i = 0; i < SubStmts.size(); i += 1) {
+          if (!SubStmts[i]->isInstruction())
+            return i;
+          if (SubStmts[i]->getOperation().getKind() != Operation::Select)
+            return i;
+        }
+        return SubStmts.size();
+      }
+
+      int getNumEpilogueStmts() const {
+        if (!isLoop())
+          return 0;
+        auto NumSubStmts = SubStmts.size();
+        for (int i = NumSubStmts-1; i >= 0 ; i -= 1) {
+          if (!SubStmts[i]->isInstruction())
+            return NumSubStmts - (i + 1);
+          if (!SubStmts[i]->getOperation().isReduction())
+            return NumSubStmts - (i + 1);
+        }
+        return NumSubStmts;
+      }
+
+
+      auto getPrologueStmts() const {
+        auto NumProglogue = getNumPrologueStmts();
+        return getSubStmts().slice(0,  NumProglogue );
+      }
+
+      auto getMainSubStmts() const {
+        auto NumTotal = getNumSubStmt();
+        auto NumProglogue = getNumPrologueStmts();
+        auto NumEpilogie = getNumEpilogueStmts();
+        return getSubStmts().slice(NumProglogue,NumTotal -  NumProglogue - NumEpilogie);
+      }
+
+      auto getEpilogueStmts() const {
+        auto NumTotal = getNumSubStmt();
+        auto NumEpilogue = getNumEpilogueStmts();
+        return getSubStmts().slice(NumTotal - NumEpilogue,NumEpilogue);
+      }
+
 
 
       size_t getNumChildren() const override  {
@@ -775,7 +883,7 @@ public:
           return Arguments.size();
         }
         assert(Arguments.empty());
-         return SubStmts.size(); 
+         return SubStmts.size();
        }
        ArrayRef<GCommon*> getChildren() const {
          if (isInstruction()) {
@@ -785,7 +893,7 @@ public:
          return ArrayRef<GCommon*>(reinterpret_cast<GCommon*const*> (SubStmts.data()), SubStmts.size());
        }
        GCommon* getChild(int i) const { return getChildren()[i]; }
-      
+
 
      auto children() const {
       // return make_range( green_child_iterator(this, 0), green_child_iterator(this, Children.size())  );
@@ -800,7 +908,7 @@ public:
       auto descententsBreadtFirst() {
         return llvm:: breadth_first(this);
       }
-#endif 
+#endif
 
       //LLVM_DUMP_METHOD void dump() const;
      // void print(raw_ostream& OS) const;
@@ -821,21 +929,27 @@ public:
                 OS << "???";
               }
 
+              if (!Name.empty()) {
+                OS << " '" << Name << "' ";
+              }
+
               auto PrintSymbolList = [&OS](auto Name, auto X) {
-                if (X) {
+                //if (X) {
                   OS << " " << Name << "=[";
-                  for (auto A : llvm::enumerate(X.getValue())) {
+                  for (auto A : llvm::enumerate(X)) {
                     if (A.index() > 0)
                       OS << ", ";
                     A.value()->printReprName(OS);
                   }
                   OS << "]";
-                }
+                //}
               };
 
               PrintSymbolList("ScalarReads", ScalarReads);
-              PrintSymbolList("ScalarKills", ScalarKills);
+             // PrintSymbolList("ScalarKills", ScalarKills);
               PrintSymbolList("ScalarWrites", ScalarWrites);
+              if (isLoop())
+                PrintSymbolList("ScalarRecurrences", ScalarRecurrences);
             }
 
     }; // class Green
@@ -903,7 +1017,7 @@ public:
             }
           }
           OS << '\n';
-        
+
         Indent += 1;
         if (Node->isContainer()) {
           auto G = cast<Green>(Node);
@@ -920,7 +1034,6 @@ public:
               Indent -= 1;
             }
           }
-          return;
         } else if (Node->isInstruction()) {
           if (!OnlyStmts) {
             auto G = cast<Green>(Node);
@@ -931,7 +1044,7 @@ public:
               dumpNode(Arg, "Arg");
             }
           }
-      
+
         } else if (isa<GOpExpr>(Node)) {
           if (!OnlyStmts) {
             auto Expr = cast<GOpExpr>(Node);
@@ -940,9 +1053,7 @@ public:
             }
           }
 
-        }
-        else {
-
+        } else {
           for (auto Child : Node->children()) {
             if (OnlyStmts && !Child->isStmt())
               continue;
@@ -963,10 +1074,6 @@ public:
       }
 
     }; // class GreenDumper
-
-
-
-
 
 
   } // namespace lof

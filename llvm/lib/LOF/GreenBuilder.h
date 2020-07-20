@@ -1,8 +1,8 @@
 #ifndef LLVM_LOF_GREEN_BUILDER_H
 #define LLVM_LOF_GREEN_BUILDER_H
 
-#include "Green.h"
-#include "LOFUtils.h"
+#include "llvm/LOF/Green.h"
+#include "llvm/LOF/LOFUtils.h"
 #include "LoopContext.h"
 
   namespace lof {
@@ -130,10 +130,24 @@
 #endif
 
 
+#if 0
+      template<typename T> 
+      static T** unconstify(T* const* Arg) {
+        return reinterpret_cast<T**>(Arg);
+      }
+#endif 
+
+      void prepend(Green* SubStmt) {
+        Conds.insert(Conds.begin(), Ctx.getTrue() );
+        Children.insert(Children.begin(), SubStmt);
+      }
+
       void addStmt(GExpr* Cond, Green* SubStmt) {
+        if (!Cond) Cond = Ctx.getTrue();
         Conds.push_back(Cond);
         Children.push_back(SubStmt);
       }
+
 #if 0
       std::vector<GVal*> addStmt(Green* SubStmt, ArrayRef<GVal*> Operands) {
         if (SubStmt->isExpr()) {
@@ -186,15 +200,15 @@
       }
 
 
-      Green* addInstruction(GExpr* Cond, Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments, llvm::Instruction* OrigInst) {
-        auto Result = Green::createInstruction(Op, Arguments, Assignments, OrigInst, nullptr);
+      Green* addInstruction( StringRef Name, GExpr* Cond, Operation Op, ArrayRef<GExpr*> Arguments, ArrayRef<GSymbol*> Assignments, llvm::Instruction* OrigInst) {
+        auto Result = Green::createInstruction(Name, Op, Arguments, Assignments, OrigInst, nullptr);
         addStmt(Cond, Result);
         return Result;
       }
 
 
-      Green* addAssignment(GExpr* Cond, GSymbol* Target, GExpr*Val ) {
-        return addInstruction(Cond, Operation(Operation::Nop, nullptr), { Val }, {Target}, nullptr);
+      Green* addAssignment( StringRef Name, GExpr* Cond, GSymbol* Target, GExpr*Val ) {
+        return addInstruction(Name, Cond, Operation(Operation::Nop, nullptr), { Val }, {Target}, nullptr);
     }
 
 #if 0
@@ -204,59 +218,98 @@
       }
 #endif
 
-      Green* createStmt(llvm::Instruction *OrigBegin,llvm:: Instruction *OrigEnd) {
-        return finish(GOpExpr::createTrueExpr() , false, OrigBegin,OrigEnd,nullptr,nullptr);
+      Green* createStmt(StringRef Name,llvm::Instruction *OrigBegin,llvm:: Instruction *OrigEnd) {
+        return finish(Name, GOpExpr::createTrueExpr() , false, OrigBegin,OrigEnd,nullptr,nullptr);
       }
 
 
       // TODO: Parameters defining number of iterations
-      Green* createLoop(GExpr *ExecCond,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, GSymbol *LoopIsFirst, GSymbol *LoopCounter) {
+      Green* createLoop(StringRef Name, GExpr *ExecCond,llvm:: Instruction *OrigBegin,llvm:: Instruction *OrigEnd, GSymbol *LoopIsFirst, GSymbol *LoopCounter) {
         if (!LoopIsFirst)
           LoopIsFirst = GSymbol::createFromScratch("isfirst", Ctx.getBoolType());
-        if (!LoopCounter)
-          LoopCounter = GSymbol::createFromScratch("iv", Ctx.getGenericIntType());
-        return finish(ExecCond,true,OrigBegin,OrigEnd,LoopIsFirst, LoopCounter);
+        //if (!LoopCounter)
+        //  LoopCounter = GSymbol::createFromScratch("iv", Ctx.getGenericIntType());
+        return finish(Name,ExecCond,true,OrigBegin,OrigEnd,LoopIsFirst, LoopCounter);
       }
 
 
       private:
-        Optional<SmallVector<GSymbol*,4>> ScalarReads =None;
+        bool UserDefined = false;
+        SmallVector<GSymbol*,4> ScalarReads;
+        SmallVector<GSymbol*,4> ScalarKills ;
+        SmallVector<GSymbol*,4> ScalarWrites;
+        SmallVector<GSymbol*,4> ScalarRecurrences;
+
         public:
-      void setScalarReads(ArrayRef<GSymbol*> Reads) {
-        ScalarReads .emplace( Reads.begin(), Reads.end() );
-      }
+    //  void setScalarReads(ArrayRef<GSymbol*> Reads) {
+    //    ScalarReads .emplace( Reads.begin(), Reads.end() );
+    //  }
 
            private:
-             Optional<SmallVector<GSymbol*,4>> ScalarKills =None;
+        
         public:
-          void setScalarKills(ArrayRef<GSymbol*> Kills) {
-            ScalarKills .emplace( Kills.begin(), Kills.end());
-          }
+          //void setScalarKills(ArrayRef<GSymbol*> Kills) {
+         //   ScalarKills .emplace( Kills.begin(), Kills.end());
+          //}
 
 
         private:
-          Optional<SmallVector<GSymbol*,4>> ScalarWrites =None;
+  
         public:
-          void setScalarWrites(ArrayRef<GSymbol*> Writes) {
-            ScalarWrites .emplace( Writes.begin(), Writes.end());
-          }
+         // void setScalarWrites(ArrayRef<GSymbol*> Writes) {
+        //    ScalarWrites .emplace( Writes.begin(), Writes.end());
+         // }
+
+
+          void    setScalarReadKillsWrites( ArrayRef<GSymbol*>Reads ,ArrayRef<GSymbol*>Kills, ArrayRef<GSymbol*>Writes , ArrayRef<GSymbol*>Recurrences) {
+            UserDefined = true;
+            ScalarReads.clear();
+            ScalarReads .append( Reads.begin(), Reads.end());
+            ScalarKills.clear();
+            ScalarKills .append( Kills.begin(), Kills.end());
+            ScalarWrites.clear();
+            ScalarWrites .append( Writes.begin(), Writes.end());
+            ScalarRecurrences.clear();
+            ScalarRecurrences .append( Recurrences.begin(), Recurrences.end());
+       }
 
 
           private:
             Green* TransformationOf = nullptr;
           public:
-            void setTransformationOf( Green* Base) {
+            // TODO: Also store information about which (relative) instance this represents
+            // use (partially expanded) RedTree for this?
+            void setTransformationOf(Green* Base) {
               TransformationOf = Base;
             }
 
 
       private:
-        Green* finish(GExpr *ExecCond, bool IsLooping, llvm::Instruction *OrigBegin, llvm::Instruction *OrigEnd,GSymbol *LoopIsFirst, GSymbol* CanonicalCounter) {
-         
-         return new Green(ExecCond, Children, Conds, IsLooping, OrigBegin, OrigEnd, 
-           make_optional_ArrayRef<GSymbol*>(ScalarReads),
-           make_optional_ArrayRef<GSymbol*>(ScalarKills),
-           make_optional_ArrayRef<GSymbol*>(ScalarKills), LoopIsFirst, CanonicalCounter, TransformationOf);
+        Green* finish(StringRef Name, GExpr *ExecCond, bool IsLooping, llvm::Instruction *OrigBegin, llvm::Instruction *OrigEnd,GSymbol *LoopIsFirst, GSymbol* CanonicalCounter) {
+          if (!UserDefined) {
+            ScalarReads.clear();
+            ScalarKills.clear();
+            ScalarWrites.clear();
+            ScalarRecurrences.clear();
+
+            for (auto SubStmt : Children) {
+              auto SubStmtScalarReads = SubStmt->getScalarReads();
+              ScalarReads.append(SubStmtScalarReads.begin(), SubStmtScalarReads.end());
+
+              auto SubStmtScalarKills = SubStmt->getScalarKills();
+              ScalarKills.append(SubStmtScalarKills.begin(), SubStmtScalarKills.end());
+
+              auto SubStmtScalarWrites = SubStmt->getScalarWrites();
+              ScalarWrites.append(SubStmtScalarWrites.begin(), SubStmtScalarWrites.end());
+
+              //TODO: Determine recurrences
+            }
+          }
+
+         return new Green(Name, ExecCond, Children, Conds, IsLooping, OrigBegin, OrigEnd, 
+           ScalarReads,
+           ScalarKills,
+           ScalarWrites,ScalarRecurrences, LoopIsFirst, CanonicalCounter, TransformationOf);
         }
     };
 

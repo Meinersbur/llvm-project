@@ -342,8 +342,9 @@ cl::opt<std::string> CSProfileGenFile(
 
 
 static std::unique_ptr<Module>
-parseIntegratedIRFile(StringRef Filename, StringRef Def, SMDiagnostic &Err, LLVMContext &Context, DataLayoutCallbackTy DataLayoutCallback) {
-  ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =    MemoryBuffer::getFile(Filename);
+parseIntegratedIRFile(StringRef IR, SMDiagnostic &Err, LLVMContext &Context, DataLayoutCallbackTy DataLayoutCallback) {
+#if 0
+  ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =   MemoryBuffer::getFile(Filename);
   if (std::error_code EC = FileOrErr.getError()) {
     Err = SMDiagnostic(Filename, SourceMgr::DK_Error, "Could not open input file: " + EC.message());
     return nullptr;
@@ -362,8 +363,9 @@ parseIntegratedIRFile(StringRef Filename, StringRef Def, SMDiagnostic &Err, LLVM
 
     // .str() because the parser requires the end to be null-terminated.
     auto ModuleStr = Haystack.substr(start, elsepos - start).str();
+#endif
 
-    MemoryBufferRef F(ModuleStr,  (Twine() + FileOrErr.get()->getBufferIdentifier() + ":" + Def).str());
+    MemoryBufferRef F(IR,  "-");
     return parseAssembly(F, Err, Context, nullptr, DataLayoutCallback);
 }
 
@@ -580,7 +582,7 @@ struct TimeTracerRAII {
 };
 #endif
 
-std::unique_ptr<ModuleResult> run_opt(StringRef FileName, StringRef Def, ArrayRef<const char*> Args) {
+std::unique_ptr<ModuleResult> run_opt(StringRef IR, ArrayRef<const char*> Args) {
   bool AnalyzeOnly = false;
   bool NoOutput = true;
   bool Force = false;
@@ -617,7 +619,8 @@ std::unique_ptr<ModuleResult> run_opt(StringRef FileName, StringRef Def, ArrayRe
   initializeAggressiveInstCombine(Registry);
   initializeInstrumentation(Registry);
   initializeTarget(Registry);
-  initializeLoopOptimizationFrameworkPass(Registry);
+  initializeLoopFrameworkOptimizerPass(Registry);
+  initializeLoopFrameworkAnalyzerPass(Registry);
 
   // For codegen passes, only passes that do IR to IR transformation are
   // supported.
@@ -691,7 +694,7 @@ std::unique_ptr<ModuleResult> run_opt(StringRef FileName, StringRef Def, ArrayRe
     llvm_unreachable("There is no version of parseAssemblyFileWithIndexNoUpgradeDebugInfo taking a raw string");
    // M = parseAssemblyFileWithIndexNoUpgradeDebugInfo(InputFilename, Err, Context, nullptr, SetDataLayout).Mod;
   }  else
-    M = parseIntegratedIRFile(FileName, Def, Err, Context,SetDataLayout );
+    M = parseIntegratedIRFile(IR, Err, Context,SetDataLayout );
 
 
   if (!M) {

@@ -1,7 +1,7 @@
 #ifndef LLVM_LOF_REDREF_H
 #define LLVM_LOF_REDREF_H
 
-#include "Green.h"
+#include "llvm/LOF/Green.h"
 
 
 namespace lof {
@@ -16,7 +16,7 @@ namespace lof {
       /// Only for assert builds?
       mutable bool Fix = false;
 
-      GCommon*G=nullptr;
+      GCommon* G=nullptr;
       const RedRef* Parent=nullptr;
       size_t ParentIdx=-1;
 
@@ -26,15 +26,14 @@ namespace lof {
 
 
 
-
-
        /// A Red tree, but using stack objects.
        /// Must ensure that the parent Red node does not go out of scope while still using any of its children!
        /// Useful for recursive algorithm, but impractical to attach additional analysis to it.
     class RedRef : public RedRefImpl {
     public:
-      RedRef() :  RedRefImpl (nullptr, nullptr, -1) {}
+      RedRef() :  RedRefImpl(nullptr, nullptr, -1) {}
 
+#if 0
       /// No copy ctor to prevent accidental invalidation of That.
       RedRef(const RedRef& That) = delete;
       void operator =(const RedRef& That) = delete;
@@ -48,6 +47,7 @@ namespace lof {
       void operator =(RedRef&&That) {
         assert(!Fix && "Cannot overwrite already referenced Parent");
       }
+#endif 
 
     private:
       /// Create a root without any parent.
@@ -148,6 +148,7 @@ namespace lof {
     public:
       bool isRoot() const { return Parent == nullptr; }
       const RedRef *getParent() const { return Parent; }
+      auto getParentIdx() const { return ParentIdx; }
       auto getGreen() const { return G; }
 
       auto getCondInParent() const {

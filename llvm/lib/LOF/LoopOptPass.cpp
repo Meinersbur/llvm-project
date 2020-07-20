@@ -1,5 +1,5 @@
 #include "llvm/LOF/LoopOptPass.h"
-#include "LoopOpt.h"
+#include "llvm/LOF/LoopOpt.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
@@ -24,12 +24,13 @@
 #include <algorithm>
 #include <cassert>
 #include <string>
+#include <utility>
 
 using namespace llvm;
 using namespace lof;
 
 namespace {
-class LoopOptimizationFramework : public FunctionPass {
+class LoopFrameworkOptimizer : public FunctionPass {
 private:
   std::unique_ptr<LoopOptimizer> lo;
 
@@ -37,8 +38,8 @@ public:
   static char ID;
 
   // TODO: Make a SCC pass since it may outline functions
-  LoopOptimizationFramework() : FunctionPass(ID) {
-    initializeLoopOptimizationFrameworkPass(*PassRegistry::getPassRegistry());
+  LoopFrameworkOptimizer() : FunctionPass(ID) {
+    initializeLoopFrameworkOptimizerPass(*PassRegistry::getPassRegistry());
   }
 
   /// @name FunctionPass interface
@@ -80,16 +81,96 @@ public:
 
 } // namespace
 
-char LoopOptimizationFramework::ID = 0;
+char LoopFrameworkOptimizer::ID = 0;
 
-INITIALIZE_PASS_BEGIN(LoopOptimizationFramework, "lof", "Loop Optimization Framework", false, false)
+INITIALIZE_PASS_BEGIN(LoopFrameworkOptimizer, "lof-opt", "Loop Optimization Framework -- Optimizer", false, false)
 INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(OptimizationRemarkEmitterWrapperPass)
-INITIALIZE_PASS_END(LoopOptimizationFramework, "lof", "Loop Optimization Framework", false, false)
+INITIALIZE_PASS_END(LoopFrameworkOptimizer, "lof-opt", "Loop Optimization Framework -- Optimizer", false, false)
 
-llvm::Pass* llvm::createLoopOptimizationFrameworkPass() {
-  return new LoopOptimizationFramework();
+
+llvm::Pass* llvm::createLoopFrameworkOptimizerPass() {
+  return new LoopFrameworkOptimizer();
 }
+
+
+
+
+
+
+
+
+
+
+
+namespace {
+  class LoopFrameworkAnalyzer : public FunctionPass {
+  private:
+    std::vector<std::unique_ptr<lof::LoopOptimizer>> *List;
+
+  public:
+    static char ID;
+    LoopFrameworkAnalyzer() : FunctionPass(ID), List(new  std::vector<std::unique_ptr<lof::LoopOptimizer> > ()) { }
+
+    // TODO: Make a SCC pass since it may outline functions
+    LoopFrameworkAnalyzer(std::vector<std::unique_ptr<lof::LoopOptimizer>> &List) : FunctionPass(ID) , List(&List){
+      initializeLoopFrameworkAnalyzerPass(*PassRegistry::getPassRegistry());
+    }
+
+    /// @name FunctionPass interface
+    //@{
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
+      AU.addRequired<LoopInfoWrapperPass>();
+      AU.addRequired<ScalarEvolutionWrapperPass>();
+      AU.addRequired<DominatorTreeWrapperPass>();
+      AU.addRequired<OptimizationRemarkEmitterWrapperPass>();
+      AU.addRequired<AAResultsWrapperPass>();
+
+      // Required since transitive
+      // AU.addPreserved<ScalarEvolutionWrapperPass>();
+    }
+
+    void releaseMemory() override { }
+
+    bool runOnFunction(Function &F) override {
+      auto LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
+      auto SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
+
+      std::unique_ptr<LoopOptimizer> LOF{ createLoopOptimizer(&F, LI, SE) };
+
+      // Uses LI, might be deallocated when accessing List, so ensure the loop graph is created now
+      LOF->getOriginalRoot();
+
+      List->push_back(std::move(LOF));
+      return false;
+    }
+
+    void print(raw_ostream &OS, const Module *) const override {
+      OS << "Generated graphs:\n";
+      for (auto &L : *List) {
+        if (!L) continue;
+        L->print(OS);
+      }
+    }
+    //@}
+  };
+
+} // namespace
+
+char LoopFrameworkAnalyzer::ID = 0;
+
+INITIALIZE_PASS_BEGIN(LoopFrameworkAnalyzer, "lof-analyze", "Loop Optimization Framework -- Analyzer", false, true)
+INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(OptimizationRemarkEmitterWrapperPass)
+INITIALIZE_PASS_END(LoopFrameworkAnalyzer, "lof-analyze", "Loop Optimization Framework -- Analyzer", false, true)
+
+Pass* llvm::createLoopFrameworkAnalyzerPass(std::vector<std::unique_ptr< lof::LoopOptimizer>> &List) {
+  return new LoopFrameworkAnalyzer(List);
+}
+

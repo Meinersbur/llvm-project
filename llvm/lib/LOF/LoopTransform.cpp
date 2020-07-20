@@ -25,7 +25,7 @@ namespace {
         auto NumSeq = Seq.size();
 
         for (int f = 0; f < Factor; f += 1) {
-          Builder.addAssignment(Ctx.getTrue(), OrigCounter, UnrolledCounters[f]);
+          Builder.addAssignment(StringRef(),  Ctx.getTrue(), OrigCounter, UnrolledCounters[f]);
           for (int i = 0; i < NumSeq; i += 1) {
             auto C = Seq[i];
             auto Cond = SeqCond[i];
@@ -66,7 +66,7 @@ namespace {
       jamBuilder(G, Builder);
 
       // Copy loop
-      return Builder.createLoop( Builder.getTrue(), G->getOrigRange().first, G->getOrigRange().second, G->getIsFirstIteration(), G->getCanonicalCounter() );
+      return Builder.createLoop(StringRef(), Builder.getTrue(), G->getOrigRange().first, G->getOrigRange().second, G->getIsFirstIteration(), G->getCanonicalCounter() );
     }
 
      Green* unroll(Green *G) {
@@ -84,7 +84,7 @@ namespace {
 
       
        jamBuilder(G, Builder);
-       return Builder.createLoop(Builder.getTrue(), G->getOrigRange().first, G->getOrigRange().second,  NewIsFirst, NewCnt);
+       return Builder.createLoop(StringRef(), Builder.getTrue(), G->getOrigRange().first, G->getOrigRange().second,  NewIsFirst, NewCnt);
      }
 
   }; //  class UnrollAndJamTransformer

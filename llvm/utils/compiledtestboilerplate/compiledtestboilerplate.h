@@ -258,4 +258,4 @@ struct ModuleResult {
    }
 };
 
-std::unique_ptr<ModuleResult> run_opt(llvm::StringRef FileName, llvm::StringRef Def, llvm::ArrayRef<const char*> Args);
+std::unique_ptr<ModuleResult> run_opt(llvm::StringRef IR, llvm::ArrayRef<const char*> Args);

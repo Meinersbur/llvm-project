@@ -1,16 +1,14 @@
 #ifndef LLVM_LOF_LOOPTREECODEGEN_H
 #define LLVM_LOF_LOOPTREECODEGEN_H
 
-#include "Green.h"
+#include "llvm/LOF/Green.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 
-
   namespace lof {
-
     class GreenCodeGen {
-      using BuilderTy =llvm:: IRBuilder<>;
+      using BuilderTy = llvm::IRBuilder<>;
     private:
       Green* Root;
       llvm::  Module* M;
@@ -22,8 +20,8 @@
 
       void emitSequence(Green* G, BuilderTy& Builder);
       void emitLoop(Green* G, BuilderTy& Builder);
-      llvm:: Value*emitOperation(const  Operation& Op, ArrayRef<GExpr*> Arguments, BuilderTy& Builder, bool IsExpr);
-      llvm::  Value*emitExpr(GExpr* G, BuilderTy& Builder);
+      llvm::Value*emitOperation(const  Operation& Op, ArrayRef<GExpr*> Arguments, BuilderTy& Builder, bool IsExpr);
+      llvm::Value*emitExpr(GExpr* G, BuilderTy& Builder);
       void emitInstruction(Green* G, BuilderTy& Builder);
       void emitGreen(GCommon* G, BuilderTy& Builder);
 

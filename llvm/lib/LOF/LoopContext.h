@@ -1,7 +1,7 @@
 #ifndef LLVM_LOF_LOOPCONTEXT_H
 #define LLVM_LOF_LOOPCONTEXT_H
 
-#include "Green.h"
+#include "llvm/LOF/Green.h"
 
 namespace llvm {
   class LLVMContext;
@@ -55,7 +55,9 @@ namespace llvm {
       // TODO: Canonicalize and intern expressions (like ScalarEvolution)
       GOpExpr* getConst(int Val);
       
-    }; // class LoopContext
 
+      GSymbol* createSymbol(StringRef Name,llvm:: Type* Ty);
+
+    }; // class LoopContext
   } // namespace lof
 #endif /* LLVM_LOF_LOOPCONTEXT_H */

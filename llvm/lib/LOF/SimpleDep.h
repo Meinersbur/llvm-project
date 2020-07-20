@@ -1,12 +1,10 @@
 #ifndef LLVM_LOF_SIMPLEDEP_H
 #define LLVM_LOF_SIMPLEDEP_H
 
+#include "llvm/LOF/Green.h"
 #include "Dep.h"
-#include "Green.h"
-
 
   namespace lof {
-
     class SimpleDep : public Dep {
     private:
     public:

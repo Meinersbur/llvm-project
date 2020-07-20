@@ -99,14 +99,14 @@ void GreenCodeGen:: replaceOrig(Green *Orig) {
 
 
 std::tuple<Function*, std::vector<GSymbol*>, std::vector<GSymbol*>> GreenCodeGen::emitAsFunction() {
-  DenseSet<GSymbol*> Reads;
-  DenseSet<GSymbol*> Kills;
-  DenseSet<GSymbol*> Writes;
-  DenseSet<GSymbol*> AllReferences;
-  Root->determineScalars(Reads, Kills, Writes, AllReferences);
-  for (auto R : Reads) {
-    assert(!Writes.count(R) && "Requiring SSA");
-  }
+auto  Reads = Root->getScalarReads();
+auto Kills = Root->getScalarKills();
+auto  Writes = Root->getScalarWrites();
+ // DenseSet<GSymbol*> AllReferences;
+  //Root->determineScalars(Reads, Kills, Writes, AllReferences);
+ // for (auto R : Reads) {
+  //  assert(!Writes.count(R) && "Requiring SSA");
+ // }
 
   DenseSet<GSymbol*> Outside;
   Outside.insert(Reads.begin(), Reads.end() );

@@ -34,3 +34,6 @@ GOpExpr* LoopContext::getConst(int Val) {
   return  GOpExpr::createOp (Operation(Operation::LLVMSpeculable, C), {  });
 }
 
+GSymbol* LoopContext::createSymbol(StringRef Name, llvm::Type *Ty) {
+  return GSymbol::createFromScratch(Name, Ty);
+}

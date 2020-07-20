@@ -1,7 +1,7 @@
 #ifndef LLVM_LOF_LOOPTRANSFORM_H
 #define LLVM_LOF_LOOPTRANSFORM_H
 
-#include "Green.h"
+#include "llvm/LOF/Green.h"
 #include "LoopContext.h"
 
 namespace lof {

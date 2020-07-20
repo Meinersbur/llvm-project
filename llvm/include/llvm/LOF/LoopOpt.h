@@ -9,10 +9,18 @@ namespace llvm {
 } // namespace llvm
 
 
+
+
 namespace lof {
+  class Green;
+
 class LoopOptimizer {
 public:
   virtual ~LoopOptimizer() {}
+
+  virtual Green *getOriginalRoot()=0;
+  virtual Green* normalize(Green* Root) = 0;
+
   virtual bool optimize() = 0;
   virtual void print(llvm::raw_ostream &OS) = 0;
 };

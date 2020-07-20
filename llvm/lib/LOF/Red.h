@@ -1,7 +1,7 @@
 #ifndef LLVM_LOF_RED_H
 #define LLVM_LOF_RED_H
 
-#include "Green.h"
+#include "llvm/LOF/Green.h"
 
 namespace lof {
   class Red;

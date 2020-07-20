@@ -2,14 +2,37 @@
 #define LLVM_LOF_DEP_H
 
 #include "llvm/ADT/ArrayRef.h"
-#include "Green.h"
+#include "llvm/LOF/Green.h"
+#include "RedRef.h"
+#include <limits>
 
 
 namespace lof {
 
+  struct SymAccessRef {
+    enum AccessKind {
+      NotApplicable,
+      Def,
+      Use
+    };
+
+    RedRef Stmt;
+    GSymbol* Sym;
+    AccessKind Kind;
+  };
+
+
+  SymAccessRef prevSymAccess(const RedRef& StartStmt, GSymbol* Sym, SymAccessRef::AccessKind Kind,bool FindDefs,  bool FindUses);
+
+
+
+  SymAccessRef nextSymAccess(const RedRef& StartStmt, GSymbol* Sym, SymAccessRef::AccessKind Kind);
+
+
   void computeReachableDefs(Red* Root);
 
-    enum class DepKind {
+
+  enum class DepKind {
       Unknown = 0,
 
       Mem = 0b01,  // Load/Store dependency
@@ -55,7 +78,7 @@ namespace lof {
 
 
     Green* detectArrays(LoopContext& Ctx, Green *Root);
-
+    Green* detectReductions(LoopContext& Ctx, Green *Root);
 
     std::vector<Dep*> getAllDependencies(Green *Root);
     bool checkDependencies(Green* NewRoot, ArrayRef<Dep*> Deps);

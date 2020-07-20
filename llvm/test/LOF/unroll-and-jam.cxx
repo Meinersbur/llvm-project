@@ -1,4 +1,22 @@
-#ifdef IR
+#include "compiledtestboilerplate.h"
+#include <llvm/LOF/LoopOpt.h>
+#include <llvm/LOF/Green.h>
+#include <llvm/Support/MemoryBuffer.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/AsmParser/Parser.h>
+#include <llvm/Support/SourceMgr.h>
+#include <llvm/IR/DiagnosticPrinter.h>
+#include <llvm/LOF/LoopOptPass.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/IR/Dominators.h>
+#include <llvm/Analysis/LoopInfo.h>
+#include <llvm/Analysis/ScalarEvolution.h>
+#include "gtest/gtest.h"
+using namespace llvm;
+
+
+static const char* IR = R"IR(
 define void @test1(i32 %I, i32 %J, i32* noalias nocapture %A, i32* noalias nocapture readonly %B) #0 {
 entry:
   %cmp = icmp ne i32 %J, 0
@@ -45,26 +63,68 @@ for.end:
 !8 = !{!"Simple C/C++ TBAA"}
 !9 = !{!10, !10, i64 0}
 !10 = !{!"short", !7, i64 0}
-
-#else /* IR */
-
+)IR";
 
 
-#include "compiledtestboilerplate.h"
 
-#include <llvm/Support/MemoryBuffer.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/LegacyPassManager.h>
-#include <llvm/AsmParser/Parser.h>
-#include <llvm/LOF/LoopOptPass.h>
-#include "gtest/gtest.h"
-using namespace llvm;
- 
 
+
+static std::unique_ptr<Module> parseAssembly(const char *Assembly, LLVMContext &Context) {
+ llvm::SMDiagnostic Error;
+  std::unique_ptr<Module> M = parseAssemblyString(Assembly, Error, Context);
+
+  if (!M) {
+    std::string ErrMsg;
+    raw_string_ostream OS(ErrMsg);
+    Error.print("", OS);
+    report_fatal_error(OS.str());
+  }
+
+  assert(M && !verifyModule(*M, &errs()));
+  return M;
+}
 
 
 
 TEST(UnrollAndJamTest, LOFConversion) {
+  LLVMContext Context;
+
+  auto M = parseAssembly(IR, Context);
+
+#if 0
+  //LoopInfoWrapperPass LIWrap{};
+  //LIWrap.runOnFunction();
+
+  for (auto &F : M->functions()) {
+    DominatorTree DT{};
+    DT.recalculate(F);
+
+    LoopInfo LI{  };
+    LI.analyze(DT);
+
+    ScalarEvolution SE{};
+
+    / LoopOptimizer *createLoopOptimizer(llvm::Function *Func,llvm:: LoopInfo *LI, llvm::ScalarEvolution *SE);
+  }
+#endif
+
+
+
+  std::vector<std::unique_ptr<lof::LoopOptimizer>> LOFs;
+
+  auto MPM = new llvm::legacy::PassManager();
+  MPM->add(createLoopFrameworkAnalyzerPass(LOFs));
+  MPM->run(*M.get());
+
+  for (auto &LOF : LOFs) {
+    auto Root = LOF->getOriginalRoot();
+    Root->dump();
+
+    auto Normalized = LOF->normalize(Root);
+    Normalized->dump();
+  }
+
+
 #if 0
   LLVMContext Context;
   std::unique_ptr<Module> M = getModule(Context, __FILE__, "IR");
@@ -80,6 +140,4 @@ TEST(UnrollAndJamTest, LOFConversion) {
 }
 
 
-
-#endif /* IR */
 

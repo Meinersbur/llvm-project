@@ -1,6 +1,6 @@
-#include "LoopOpt.h"
+#include "llvm/LOF/LoopOpt.h"
 #include "llvm/ADT/PostOrderIterator.h"
-#include "Green.h"
+#include "llvm/LOF/Green.h"
 #include "GreenBuilder.h"
 #include "LoopTreeConverter.h"
 #include "LoopTreeCodegen.h"
@@ -26,14 +26,14 @@ using namespace lof;
 
 #define DEBUG_TYPE "lof-loopopt"
 
+
+
 namespace {
-
-
   class UnrollAllOutermostLoops final : public GreenTreeTransform  {
   private:
     int Factor;
   public:
-    UnrollAllOutermostLoops(LoopContext& Ctx, int Factor) : GreenTreeTransform(Ctx), Factor(Factor) {}
+    UnrollAllOutermostLoops(LoopContext& Ctx, int Factor) : GreenTreeTransform(Ctx), Factor(Factor) { }
 
     static GCommon * run(LoopContext& Ctx, GCommon *Root, int Factor) {
       UnrollAllOutermostLoops Transformer(Ctx,Factor);
@@ -58,23 +58,35 @@ private:
 public:
   LoopOptimizerImpl(Function *Func, LoopInfo *LI, ScalarEvolution *SE)
       : Func(Func), LI(LI), SE(SE) {
-  
+
     Ctx = new LoopContext( Func->getContext() );
   }
 
 
-  Green* buildOriginalLoopTree() {
-    GreenConverter Converter(*Ctx, Func, LI );
-    return Converter.build();
+
+  Green* OrigTree = nullptr;
+   Green *getOriginalRoot() override  {
+     if (!OrigTree) {
+       GreenConverter Converter(*Ctx, Func, LI);
+     OrigTree =  Converter.build();
+     }
+     return OrigTree;
   }
 
 
+   Green* normalize(Green* Root) override {
+     auto Result = detectArrays(*Ctx, OrigTree);
+     auto DetRed = detectReductions(*Ctx, Result);
+     return DetRed;
+   }
+
+
   bool optimize() override {
-    auto OrigTree = buildOriginalLoopTree();
+    auto OrigTree = getOriginalRoot();
     OrigTree->dump();
     OrigTree->asRedRoot()->dump();
 
-    OrigTree = detectArrays(*Ctx, OrigTree);
+    OrigTree = normalize( OrigTree);
     OrigTree->dump();
 
     computeReachableDefs(OrigTree->asRedRoot());
@@ -134,5 +146,3 @@ public:
 LoopOptimizer *lof::createLoopOptimizer(Function *Func, LoopInfo *LI,  ScalarEvolution *SE) {
   return new LoopOptimizerImpl(Func, LI, SE);
 }
-
-
