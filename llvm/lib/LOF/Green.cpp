@@ -1,46 +1,48 @@
 #include "llvm/LOF/Green.h"
-#include "Red.h"
 #include "LoopContext.h"
+#include "Red.h"
+#include "llvm/ADT/BreadthFirstIterator.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/instructions.h"
-#include "llvm/ADT/BreadthFirstIterator.h"
 
 using namespace lof;
-
 
 void Operation::assertOK() const {
   switch (K) {
   case Operation::Unknown:
-    assert(Inst==nullptr);
+    assert(Inst == nullptr);
     return;
   case Operation::Nop:
-    assert(Inst==nullptr); // There is no "nop" LLVM instruction
+    assert(Inst == nullptr); // There is no "nop" LLVM instruction
     break;
   case Operation::Select:
-    assert(NArgs >= 1); // with just a fallback-value, it's effectively like nop (maybe we don't need the Nop kind)
-    assert(NArgs % 2 ==1);
+    assert(NArgs >= 1); // with just a fallback-value, it's effectively like nop
+                        // (maybe we don't need the Nop kind)
+    assert(NArgs % 2 == 1);
     break;
-     
+
   case Operation::ReduceReturn:
   case Operation::ReduceLast:
   case Operation::ReduceAdd:
-    assert(Inst==nullptr);
+    assert(Inst == nullptr);
     break;
 
   case Operation::LLVMSpeculable:
   case Operation::LLVMInst:
     assert(Inst);
     if (!Inst->getType()->isVoidTy()) {
-      assert(llvm::PointerType::isValidElementType(Inst->getType()) && "Must be allocatable");
+      assert(llvm::PointerType::isValidElementType(Inst->getType()) &&
+             "Must be allocatable");
     }
-    assert(!isa<llvm::PHINode>(Inst)&& "PHIs are not regular operation");
-    if (auto I = dyn_cast <llvm::Instruction>(Inst)) {
-      assert( !cast<llvm::Instruction>(I)->isTerminator() && "Operations don't cover control-flow");
+    assert(!isa<llvm::PHINode>(Inst) && "PHIs are not regular operation");
+    if (auto I = dyn_cast<llvm::Instruction>(Inst)) {
+      assert(!cast<llvm::Instruction>(I)->isTerminator() &&
+             "Operations don't cover control-flow");
     }
     break;
   case Operation::LoadArrayElt:
-    case Operation::StoreArrayElt:
-      break;
+  case Operation::StoreArrayElt:
+    break;
   case Operation::True:
     if (Inst) {
       auto C = cast<llvm::ConstantInt>(Inst);
@@ -60,16 +62,16 @@ void Operation::assertOK() const {
     break;
   case Operation::Conjuction:
     if (Inst) {
-      auto O = cast<llvm::BinaryOperator >(Inst);
+      auto O = cast<llvm::BinaryOperator>(Inst);
       assert(O->getType()->isIntegerTy(1));
-      assert(O->getOpcode() == llvm::Instruction::And );
+      assert(O->getOpcode() == llvm::Instruction::And);
     }
     break;
   case Operation::Disjunction:
     if (Inst) {
-      auto O = cast<llvm::BinaryOperator >(Inst);
+      auto O = cast<llvm::BinaryOperator>(Inst);
       assert(O->getType()->isIntegerTy(1));
-      assert(O->getOpcode() == llvm::Instruction::Or );
+      assert(O->getOpcode() == llvm::Instruction::Or);
     }
     break;
   case Operation::Add:
@@ -79,27 +81,30 @@ void Operation::assertOK() const {
   }
 }
 
-
-bool Operation:: isAssociative() const {
-  if (K != LLVMSpeculable) return false;
+bool Operation::isAssociative() const {
+  if (K != LLVMSpeculable)
+    return false;
   auto LLVMOp = llvm::dyn_cast<llvm::BinaryOperator>(Inst);
-  if (!LLVMOp) return false;
+  if (!LLVMOp)
+    return false;
   return LLVMOp->getOpcode() == llvm::BinaryOperator::Add;
 }
 
-
 #ifndef NDEBUG
-LLVM_DUMP_METHOD void Operation:: dump() const { printLine(llvm::errs()); llvm::errs() << '\n'; }
+LLVM_DUMP_METHOD void Operation::dump() const {
+  printLine(llvm::errs());
+  llvm::errs() << '\n';
+}
 #endif
 
-
-GOpExpr* GExpr:: createOp(Operation Op, ArrayRef<GExpr*> Args) { 
-  return GOpExpr::create(Op,Args);
+GOpExpr *GExpr::createOp(Operation Op, ArrayRef<GExpr *> Args) {
+  return GOpExpr::create(Op, Args);
 }
 
-
-
-static void visitDetermineScalar(GCommon* G, DenseSet<GSymbol*>& Reads, DenseSet<GSymbol*>& Kills, DenseSet<GSymbol*>& Writes,  DenseSet<GSymbol*>& AllReferences) {
+static void visitDetermineScalar(GCommon *G, DenseSet<GSymbol *> &Reads,
+                                 DenseSet<GSymbol *> &Kills,
+                                 DenseSet<GSymbol *> &Writes,
+                                 DenseSet<GSymbol *> &AllReferences) {
   if (auto Ref = dyn_cast<GSymbol>(G)) {
     Reads.insert(Ref);
     AllReferences.insert(Ref);
@@ -113,24 +118,24 @@ static void visitDetermineScalar(GCommon* G, DenseSet<GSymbol*>& Reads, DenseSet
 
   auto Stmt = cast<Green>(G);
 
- // if ( Stmt->hasComputedScalars()) {
-    auto StmtReads = Stmt->getScalarReads();
-    Reads.insert(StmtReads.begin(), StmtReads.end());
+  // if ( Stmt->hasComputedScalars()) {
+  auto StmtReads = Stmt->getScalarReads();
+  Reads.insert(StmtReads.begin(), StmtReads.end());
 
-    auto StmtKills = Stmt->getScalarKills();
-    Kills.insert(StmtKills.begin(), StmtKills.end());
+  auto StmtKills = Stmt->getScalarKills();
+  Kills.insert(StmtKills.begin(), StmtKills.end());
 
-    auto StmtWrites = Stmt->getScalarWrites();
-    Writes.insert(StmtWrites.begin(), StmtWrites.end());
+  auto StmtWrites = Stmt->getScalarWrites();
+  Writes.insert(StmtWrites.begin(), StmtWrites.end());
 
-    // TODO: Still need AllReferences?
-    return;
- // }
+  // TODO: Still need AllReferences?
+  return;
+  // }
 
-if (Stmt->isInstruction()) {
+  if (Stmt->isInstruction()) {
     auto Op = Stmt->getOperation();
     for (auto A : Stmt->getArguments()) {
-      visitDetermineScalar(A, Reads, Kills, Writes,AllReferences);
+      visitDetermineScalar(A, Reads, Kills, Writes, AllReferences);
     }
     for (auto A : Stmt->getAssignments()) {
       Writes.insert(A);
@@ -138,25 +143,23 @@ if (Stmt->isInstruction()) {
       AllReferences.insert(A);
     }
     return;
-  }  
+  }
 
-if (Stmt->isStmt()) {
-    for (auto C : Stmt->children()) 
-      visitDetermineScalar(C, Reads, Kills, Writes,AllReferences);
+  if (Stmt->isStmt()) {
+    for (auto C : Stmt->children())
+      visitDetermineScalar(C, Reads, Kills, Writes, AllReferences);
     return;
-  }   
+  }
 
   llvm_unreachable("unhandled");
 }
 
-
-
-void lof::determineScalars(GCommon *Node, DenseSet<GSymbol*>& Reads, DenseSet<GSymbol*>& Kills, DenseSet<GSymbol*>& Writes,  DenseSet<GSymbol*>& AllReferences) {
-  visitDetermineScalar(Node, Reads, Kills, Writes,  AllReferences);
+void lof::determineScalars(GCommon *Node, DenseSet<GSymbol *> &Reads,
+                           DenseSet<GSymbol *> &Kills,
+                           DenseSet<GSymbol *> &Writes,
+                           DenseSet<GSymbol *> &AllReferences) {
+  visitDetermineScalar(Node, Reads, Kills, Writes, AllReferences);
 }
-
-
-
 
 #if 0
  Green* Green::createNotExpr(Green* Subexpr) {
@@ -186,7 +189,6 @@ void lof::determineScalars(GCommon *Node, DenseSet<GSymbol*>& Reads, DenseSet<GS
   }
 #endif
 
-
 #if 0
 LLVM_DUMP_METHOD void Green::dump() const {
   print(llvm::errs());
@@ -198,9 +200,7 @@ void  Green::print(raw_ostream &OS) const  {
 }
 #endif
 
-
-
- GCommon*  lof:: green_child_iterator ::operator*() const {
+GCommon *lof::green_child_iterator ::operator*() const {
   if (auto Stmt = dyn_cast<Green>(Container)) {
     return Stmt->getChildren()[Idx];
   }
@@ -210,44 +210,36 @@ void  Green::print(raw_ostream &OS) const  {
   llvm_unreachable("unknown type or has no children");
 }
 
+Red *GCommon::asRedRoot() {
+  if (!RedRoot)
+    RedRoot = Red::createRoot(this);
+  return RedRoot;
+}
 
+Green *Green::findNode(StringRef Name, bool Recursive) {
+  if (Name == getName())
+    return this;
 
- Red* GCommon:: asRedRoot()  {
-   if (!RedRoot) 
-     RedRoot = Red::createRoot(this);
-   return RedRoot;
- }
-
-
-
-
- Green* Green::findNode(StringRef Name, bool Recursive)  {
-   if (Name == getName())
-     return this;
-
-   if (!Recursive) {
-     for (auto Sub : this->SubStmts) {
-       if (Sub->getName() == Name)
-         return Sub;
-     }
-     return nullptr;
-   }
-
-   for (auto N : llvm::breadth_first<GCommon*> (this)) {
-     if (auto G = dyn_cast<Green>(N)) {
-       if (G->getName() == Name)
-         return G;
-     }
+  if (!Recursive) {
+    for (auto Sub : this->SubStmts) {
+      if (Sub->getName() == Name)
+        return Sub;
+    }
+    return nullptr;
   }
-   return nullptr;
- }
 
-
-
+  for (auto N : llvm::breadth_first<GCommon *>(this)) {
+    if (auto G = dyn_cast<Green>(N)) {
+      if (G->getName() == Name)
+        return G;
+    }
+  }
+  return nullptr;
+}
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
- void GCommon::dump() const {
-   GreenDumper Dumper(llvm::errs());
-   Dumper.dump(const_cast<GCommon*>( this));
- }
+void GCommon::dump() const {
+  GreenDumper Dumper(llvm::errs());
+  Dumper.dump(const_cast<GCommon *>(this));
+}
 #endif

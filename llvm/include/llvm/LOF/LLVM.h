@@ -9,8 +9,7 @@
 // Forward declarations.
 namespace llvm {
 // String types
-template <unsigned N>
-class SmallString;
+template <unsigned N> class SmallString;
 class StringRef;
 class StringLiteral;
 class Twine;
@@ -22,41 +21,26 @@ template <typename KeyT, typename ValueT> struct DenseMapPair;
 } // namespace detail
 template <typename KeyT, typename ValueT, typename KeyInfoT, typename BucketT>
 class DenseMap;
-template <typename T>
-struct DenseMapInfo;
-template <typename ValueT, typename ValueInfoT>
-class DenseSet;
+template <typename T> struct DenseMapInfo;
+template <typename ValueT, typename ValueInfoT> class DenseSet;
 class MallocAllocator;
-template <typename T>
-class MutableArrayRef;
-template <typename T>
-class Optional;
-template <typename... PT>
-class PointerUnion;
-template <typename T, unsigned N>
-class SmallPtrSet;
-template <typename T>
-class SmallPtrSetImpl;
-template <typename T, unsigned N>
-class SmallVector;
-template <typename T>
-class SmallVectorImpl;
-template <typename T, unsigned N>
-class SmallSetVector;
-template <typename AllocatorTy>
-class StringSet;
-template <typename T>
-class TinyPtrVector;
-template <typename T, typename ResultT>
-class TypeSwitch;
+template <typename T> class MutableArrayRef;
+template <typename T> class Optional;
+template <typename... PT> class PointerUnion;
+template <typename T, unsigned N> class SmallPtrSet;
+template <typename T> class SmallPtrSetImpl;
+template <typename T, unsigned N> class SmallVector;
+template <typename T> class SmallVectorImpl;
+template <typename T, unsigned N> class SmallSetVector;
+template <typename AllocatorTy> class StringSet;
+template <typename T> class TinyPtrVector;
+template <typename T, typename ResultT> class TypeSwitch;
 
 // Other common classes.
 class APInt;
 class APFloat;
-template <typename Fn>
-class function_ref;
-template <typename IteratorT>
-class iterator_range;
+template <typename Fn> class function_ref;
+template <typename IteratorT> class iterator_range;
 class raw_ostream;
 } // end namespace llvm
 
@@ -94,9 +78,9 @@ using llvm::Optional;
 using llvm::PointerUnion;
 using llvm::SmallPtrSet;
 using llvm::SmallPtrSetImpl;
+using llvm::SmallSetVector;
 using llvm::SmallVector;
 using llvm::SmallVectorImpl;
-using llvm::SmallSetVector;
 using llvm::TinyPtrVector;
 template <typename T, typename ResultT = void>
 using TypeSwitch = llvm::TypeSwitch<T, ResultT>;
@@ -104,8 +88,7 @@ using TypeSwitch = llvm::TypeSwitch<T, ResultT>;
 // Other common classes.
 using llvm::APFloat;
 using llvm::APInt;
-template <typename Fn>
-using function_ref = llvm::function_ref<Fn>;
+template <typename Fn> using function_ref = llvm::function_ref<Fn>;
 using llvm::iterator_range;
 using llvm::raw_ostream;
 

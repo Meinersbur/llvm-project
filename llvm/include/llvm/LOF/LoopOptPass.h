@@ -6,17 +6,18 @@
 #include <vector>
 
 namespace lof {
-  class LoopOptimizer;
+class LoopOptimizer;
 }
 
 namespace llvm {
-  class Pass;
+class Pass;
 
-  void initializeLoopFrameworkOptimizerPass(PassRegistry &);
-  Pass* createLoopFrameworkOptimizerPass();
+void initializeLoopFrameworkOptimizerPass(PassRegistry &);
+Pass *createLoopFrameworkOptimizerPass();
 
-  void initializeLoopFrameworkAnalyzerPass(PassRegistry &);
-  Pass* createLoopFrameworkAnalyzerPass(std::vector<std::unique_ptr< lof::LoopOptimizer>> &);
+void initializeLoopFrameworkAnalyzerPass(PassRegistry &);
+Pass *createLoopFrameworkAnalyzerPass(
+    std::vector<std::unique_ptr<lof::LoopOptimizer>> &);
 } // namespace llvm
 
 #endif /* LLVM_LOF_LOOPOPTPASS_H */

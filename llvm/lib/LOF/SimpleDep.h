@@ -1,26 +1,25 @@
 #ifndef LLVM_LOF_SIMPLEDEP_H
 #define LLVM_LOF_SIMPLEDEP_H
 
-#include "llvm/LOF/Green.h"
 #include "Dep.h"
+#include "llvm/LOF/Green.h"
 
-  namespace lof {
-    class SimpleDep : public Dep {
-    private:
-    public:
-    }; // class SimpleDep
+namespace lof {
+class SimpleDep : public Dep {
+private:
+public:
+}; // class SimpleDep
 
+class SimpleDepAnalysis {
+private:
+  Green *Stmt;
 
-    class SimpleDepAnalysis {
-    private:
-      Green* Stmt;
-    public:
-      SimpleDepAnalysis(Green *Stmt): Stmt(Stmt) {}
+public:
+  SimpleDepAnalysis(Green *Stmt) : Stmt(Stmt) {}
 
-      void analyze() {}
+  void analyze() {}
 
-    }; // class SimpleDepAnalysis
+}; // class SimpleDepAnalysis
 
-
-  } // namespace lof
+} // namespace lof
 #endif /* LLVM_LOF_SIMPLEDEP_H */

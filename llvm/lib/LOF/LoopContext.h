@@ -4,10 +4,10 @@
 #include "llvm/LOF/Green.h"
 
 namespace llvm {
-  class LLVMContext;
+class LLVMContext;
 } // namespace llvm
 
-  namespace lof {
+namespace lof {
 
 #if 0
     struct ExprValInfo {
@@ -16,14 +16,14 @@ namespace llvm {
     static  GExpr* getEmptyKey() { return DenseMapInfo<GExpr*>::getEmptyKey(); }
     static GExpr* getTombstoneKey() { return DenseMapInfo<GExpr*>::getTombstoneKey(); }
     }; // ExprValInfo
-#endif 
+#endif
 
-    class LoopContext {
-    private:
-      llvm::LLVMContext& LLVMCtx;
+class LoopContext {
+private:
+  llvm::LLVMContext &LLVMCtx;
 
-      GOpExpr* FalseExpr;
-      GOpExpr* TrueExpr;
+  GOpExpr *FalseExpr;
+  GOpExpr *TrueExpr;
 
 #if 0
       llvm::DenseSet<GExpr*, ExprValInfo> Expressions;
@@ -33,31 +33,26 @@ namespace llvm {
         auto It =  Expressions.insert(E);
         return *It.first;
       }
-#endif 
+#endif
 
-    public:
-      LoopContext() = delete;
-      LoopContext(llvm::LLVMContext& LLVMCtx);
+public:
+  LoopContext() = delete;
+  LoopContext(llvm::LLVMContext &LLVMCtx);
 
-      llvm::LLVMContext& getLLVMContext() const { return LLVMCtx; }
-      llvm::Type* getBoolType() const { return llvm::Type::getInt1Ty(LLVMCtx); }
-      llvm::Type* getGenericIntType() const { return nullptr; }
+  llvm::LLVMContext &getLLVMContext() const { return LLVMCtx; }
+  llvm::Type *getBoolType() const { return llvm::Type::getInt1Ty(LLVMCtx); }
+  llvm::Type *getGenericIntType() const { return nullptr; }
 
+  GOpExpr *getFalse() const { return FalseExpr; }
+  GOpExpr *getTrue() const { return TrueExpr; }
 
+public:
+  // Currently relies on LLVMContext
+  // TODO: Canonicalize and intern expressions (like ScalarEvolution)
+  GOpExpr *getConst(int Val);
 
-      GOpExpr * getFalse() const { return FalseExpr; }
-      GOpExpr *getTrue() const { return TrueExpr; }
+  GSymbol *createSymbol(StringRef Name, llvm::Type *Ty);
 
-
-
-    public:
-      // Currently relies on LLVMContext
-      // TODO: Canonicalize and intern expressions (like ScalarEvolution)
-      GOpExpr* getConst(int Val);
-      
-
-      GSymbol* createSymbol(StringRef Name,llvm:: Type* Ty);
-
-    }; // class LoopContext
-  } // namespace lof
+}; // class LoopContext
+} // namespace lof
 #endif /* LLVM_LOF_LOOPCONTEXT_H */

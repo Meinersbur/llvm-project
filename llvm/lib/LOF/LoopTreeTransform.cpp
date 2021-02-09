@@ -3,15 +3,14 @@
 
 using namespace lof;
 
-
-Green* GreenTreeTransform::transfromStmtOrLoop(Green* Node, bool IsLoop) {
+Green *GreenTreeTransform::transfromStmtOrLoop(Green *Node, bool IsLoop) {
   assert(IsLoop == Node->isLoop());
 
-  SmallVector<Green*, 8> RecreatedChildren;
-  SmallVector<GExpr*, 8> RecreatedConds;
+  SmallVector<Green *, 8> RecreatedChildren;
+  SmallVector<GExpr *, 8> RecreatedConds;
   bool Changed = false;
   auto NumChildren = Node->getNumChildren();
-  for (int i = 0; i < NumChildren;i+=1) {
+  for (int i = 0; i < NumChildren; i += 1) {
     auto Child = Node->getChild(i);
     auto Cond = Node->getSubCond(i);
     auto New = getDerived().visit(Child);
@@ -22,7 +21,7 @@ Green* GreenTreeTransform::transfromStmtOrLoop(Green* Node, bool IsLoop) {
       Changed = true;
   }
 
-  GExpr* NewExecCond;
+  GExpr *NewExecCond;
   if (IsLoop) {
     auto ExecCond = Node->getExecCond();
     NewExecCond = cast<GExpr>(getDerived().visit(ExecCond));
@@ -39,7 +38,7 @@ Green* GreenTreeTransform::transfromStmtOrLoop(Green* Node, bool IsLoop) {
   for (int i = 0; i < NumChildren; i += 1) {
     Builder.addStmt(RecreatedConds[i], RecreatedChildren[i]);
   }
-  
+
 #if 0
   if (Node->hasComputedScalars()) {
     // Needs recomputed?
@@ -50,6 +49,10 @@ Green* GreenTreeTransform::transfromStmtOrLoop(Green* Node, bool IsLoop) {
 #endif
 
   if (IsLoop)
-    return Builder.createLoop(Node->getName(), NewExecCond, Node->getOrigRange().first, Node->getOrigRange().second ,  Node->getIsFirstIteration(), Node->getCanonicalCounter() );
-  return Builder.createStmt(Node->getName(), Node->getOrigRange().first, Node->getOrigRange().second);
+    return Builder.createLoop(
+        Node->getName(), NewExecCond, Node->getOrigRange().first,
+        Node->getOrigRange().second, Node->getIsFirstIteration(),
+        Node->getCanonicalCounter());
+  return Builder.createStmt(Node->getName(), Node->getOrigRange().first,
+                            Node->getOrigRange().second);
 }

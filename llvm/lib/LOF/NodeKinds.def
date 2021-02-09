@@ -1,7 +1,6 @@
 
 // NOTE: NO INCLUDE GUARD DESIRED!
 
-
 #ifndef HANDLE_NODE
 #define HANDLE_NODE(ShortName, LongName)
 #endif
@@ -10,39 +9,34 @@
 #define HANDLE_SUBKIND(ShortName, LongName, First, Last)
 #endif
 
-
-HANDLE_NODE(Root,Root)
-HANDLE_NODE(Sequence,Sequence)
+HANDLE_NODE(Root, Root)
+HANDLE_NODE(Sequence, Sequence)
 
 // Blocks
-HANDLE_NODE(Stmt,Statement)
-HANDLE_NODE(Loop,Loop)
+HANDLE_NODE(Stmt, Statement)
+HANDLE_NODE(Loop, Loop)
 HANDLE_SUBKIND(Block, Block, Stmt, Loop)
 
 // Instructions
-HANDLE_NODE(Set,SetRegister)
-HANDLE_NODE(Load,LoadMem)
-HANDLE_NODE(Store,StoreMem)
-HANDLE_NODE(Call,Call)
+HANDLE_NODE(Set, SetRegister)
+HANDLE_NODE(Load, LoadMem)
+HANDLE_NODE(Store, StoreMem)
+HANDLE_NODE(Call, Call)
 HANDLE_SUBKIND(Inst, Instuction, Set, Call)
 
 // Expressions
-HANDLE_NODE(Const,Constant) // Constant/Literal
-HANDLE_NODE(LiteralTrue,LiteralTrue)
-HANDLE_NODE(LiteralFalse,LiteralFalse)
-HANDLE_NODE(Arg,Argument)   // Function argument or global
-HANDLE_NODE(Reg,ReadRegister)   // Register/Value read
-HANDLE_NODE(Ctrl,Control) // Atom; Whether a previous BB has been executed
-HANDLE_NODE(GEP,GetElementPtr)
-HANDLE_NODE(ICmp,IntegerCompare)
-HANDLE_NODE(LogicOr,LogicalOr)
-HANDLE_NODE(LogicAnd,LogicalAnd)
-//HANDLE_NODE(Op,Operation) // Operation
+HANDLE_NODE(Const, Constant) // Constant/Literal
+HANDLE_NODE(LiteralTrue, LiteralTrue)
+HANDLE_NODE(LiteralFalse, LiteralFalse)
+HANDLE_NODE(Arg, Argument)     // Function argument or global
+HANDLE_NODE(Reg, ReadRegister) // Register/Value read
+HANDLE_NODE(Ctrl, Control)     // Atom; Whether a previous BB has been executed
+HANDLE_NODE(GEP, GetElementPtr)
+HANDLE_NODE(ICmp, IntegerCompare)
+HANDLE_NODE(LogicOr, LogicalOr)
+HANDLE_NODE(LogicAnd, LogicalAnd)
+// HANDLE_NODE(Op,Operation) // Operation
 HANDLE_SUBKIND(Expr, Expression, Const, LogicAnd)
-
-
-
-
 
 #undef HANDLE_NODE
 #undef HANDLE_SUBKIND
