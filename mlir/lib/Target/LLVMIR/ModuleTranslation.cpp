@@ -94,8 +94,19 @@ llvm::Constant *ModuleTranslation::getLLVMConstant(llvm::Type *llvmType,
     return llvm::ConstantInt::get(llvmType, intAttr.getValue());
   if (auto floatAttr = attr.dyn_cast<FloatAttr>())
     return llvm::ConstantFP::get(llvmType, floatAttr.getValue());
-  if (auto funcAttr = attr.dyn_cast<FlatSymbolRefAttr>())
-    return functionMapping.lookup(funcAttr.getValue());
+  if (auto funcAttr = attr.dyn_cast<FlatSymbolRefAttr>()) {
+    auto constant = functionMapping.lookup(funcAttr.getValue());
+    if (constant)
+      return constant;
+    auto module = llvm::cast<mlir::ModuleOp>(mlirModule);
+    auto function = module.lookupSymbol<LLVM::LLVMFuncOp>(funcAttr.getRootReference());
+    if (!function)
+      return constant;
+     llvm::FunctionCallee llvmFuncCst = llvmModule->getOrInsertFunction(
+                    function.getName(),
+                            cast<llvm::FunctionType>(function.getType().getUnderlyingType()));
+    return cast<llvm::Constant>(llvmFuncCst.getCallee());
+  }
   if (auto splatAttr = attr.dyn_cast<SplatElementsAttr>()) {
     auto *sequentialType = cast<llvm::SequentialType>(llvmType);
     auto elementType = sequentialType->getElementType();
@@ -117,6 +128,23 @@ llvm::Constant *ModuleTranslation::getLLVMConstant(llvm::Type *llvmType,
       SmallVector<llvm::Constant *, 8> constants(numElements, child);
       return llvm::ConstantArray::get(arrayType, constants);
     }
+  }
+
+  // CTT BEGIN
+  // TODO: upstream
+  if (auto arrAttr = attr.dyn_cast<ArrayAttr>()) {
+    SmallVector<llvm::Constant *, 8> constants;
+    auto ArrType = cast<llvm::ArrayType>(llvmType);
+    auto elementType = ArrType->getElementType();
+    auto numElements = arrAttr.size();
+    constants.reserve(arrAttr.size());
+    for (auto n : arrAttr.getValue()) {
+      constants.push_back(getLLVMConstant(elementType, n, loc));
+      if (!constants.back())
+        return nullptr;
+    }
+    auto arrayType = llvm::ArrayType::get(elementType, numElements);
+    return llvm::ConstantArray::get(arrayType, constants);
   }
 
   if (auto elementsAttr = attr.dyn_cast<ElementsAttr>()) {

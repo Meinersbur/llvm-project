@@ -62,6 +62,7 @@ tool_dirs = [config.clang_tools_dir, config.llvm_tools_dir]
 
 tools = [
     'c-index-test', 'clang-diff', 'clang-format', 'clang-tblgen', 'opt', 'llvm-ifs',
+    ToolSubst('%cml', command=FindTool('cml'), unresolved='fatal'),
     ToolSubst('%clang_extdef_map', command=FindTool(
         'clang-extdef-mapping'), unresolved='ignore'),
 ]

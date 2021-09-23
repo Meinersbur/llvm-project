@@ -1751,6 +1751,15 @@ LLVMType LLVMType::getFunctionTy(LLVMType result, ArrayRef<LLVMType> params,
                                    isVarArg);
   });
 }
+
+// CTT: Opaque type should be created without body
+LLVMType LLVMType::getOpaqueStructTy(LLVMDialect *dialect) {
+  // Lock access to the dialect as this may modify the LLVM context.
+  return getLocked(dialect, [=] {
+    return llvm::StructType::create(dialect->getLLVMContext());
+  });
+}
+
 LLVMType LLVMType::getStructTy(LLVMDialect *dialect,
                                ArrayRef<LLVMType> elements, bool isPacked) {
   SmallVector<llvm::Type *, 8> llvmElements;

@@ -362,6 +362,42 @@ endif()
 set(CLANG_VERSION "${CLANG_VERSION_MAJOR}.${CLANG_VERSION_MINOR}.${CLANG_VERSION_PATCHLEVEL}")
 message(STATUS "Clang version: ${CLANG_VERSION}")
 
+set(MLIR_SOURCE_DIR ${PROJECT_SOURCE_DIR}/../mlir)
+set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir/include ) # --src-root
+set(MLIR_INCLUDE_DIR ${LLVM_MAIN_SRC_DIR}/../mlir/include ) # --includedir
+set(MLIR_TABLEGEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/tools/mlir/include)
+set(MLIR_TABLEGEN_EXE $<TARGET_FILE:mlir-tblgen>)
+include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
+include_directories(SYSTEM ${MLIR_TABLEGEN_OUTPUT_DIR})
+
+function(mlir_tablegen ofn)
+  tablegen(MLIR ${ARGV} "-Iinclude/" "-I${MLIR_SOURCE_DIR}/include" "-I${PROJECT_SOURCE_DIR}/include")
+  set(TABLEGEN_OUTPUT ${TABLEGEN_OUTPUT} ${CMAKE_CURRENT_BINARY_DIR}/${ofn}
+      PARENT_SCOPE)
+endfunction()
+
+#TODO: This is to handle the current static registration, but should be
+# factored out a bit.
+function(whole_archive_link target)
+  if("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
+    set(link_flags "-L${LLVM_BUILD_DIR}/lib ")
+    FOREACH(LIB ${ARGN})
+      string(CONCAT link_flags ${link_flags} "-Wl,-force_load ${CMAKE_BINARY_DIR}/lib/lib${LIB}.a ")
+    ENDFOREACH(LIB)
+  elseif(MSVC)
+    FOREACH(LIB ${ARGN})
+      string(CONCAT link_flags ${link_flags} "/WHOLEARCHIVE:${LIB} ")
+    ENDFOREACH(LIB)
+  else()
+    set(link_flags "-L${LLVM_BINARY_DIR}/lib -Wl,--whole-archive,")
+    FOREACH(LIB ${ARGN})
+      string(CONCAT link_flags ${link_flags} "-l${LIB},")
+    ENDFOREACH(LIB)
+    string(CONCAT link_flags ${link_flags} "--no-whole-archive")
+  endif()
+  set_target_properties(${target} PROPERTIES LINK_FLAGS ${link_flags})
+endfunction(whole_archive_link)
+
 # Configure the Version.inc file.
 configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/include/clang/Basic/Version.inc.in
@@ -459,10 +495,10 @@ endif()
 add_definitions( -D_GNU_SOURCE )
 
 option(CLANG_BUILD_TOOLS
-  "Build the Clang tools. If OFF, just generate build targets." ON)
+  "Build the Clang tools. If OFF, just generate build targets." OFF)
 
-option(CLANG_ENABLE_ARCMT "Build ARCMT." ON)
-option(CLANG_ENABLE_STATIC_ANALYZER "Build static analyzer." ON)
+option(CLANG_ENABLE_ARCMT "Build ARCMT." OFF)
+option(CLANG_ENABLE_STATIC_ANALYZER "Build static analyzer." OFF)
 
 option(CLANG_ENABLE_PROTO_FUZZER "Build Clang protobuf fuzzer." OFF)
 
