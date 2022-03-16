@@ -10,10 +10,10 @@
 
 #include "llvm/Analysis/RegionPrinter.h"
 #include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/Analysis/DOTGraphTraitsPass.h"
 #include "llvm/Analysis/DominanceFrontier.h"
 #include "llvm/Analysis/LoopInfo.h"
-#include "llvm/ADT/SetVector.h"
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/RegionInfo.h"
 #include "llvm/Analysis/RegionIterator.h"
@@ -193,15 +193,11 @@ struct RegionViewer2 : public FunctionPass {
     initializeRegionViewer2Pass(*PassRegistry::getPassRegistry());
   }
 
-
-
   bool runOnFunction(Function &F) override {
     DominatorTree *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
     DominanceFrontier *DF =
         &getAnalysis<DominanceFrontierWrapperPass>().getDominanceFrontier();
     LoopInfo *LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
-
-
 
     PostDominatorTree SyntaxPDT;
     SyntaxPDT.recalculate(F);
@@ -241,10 +237,8 @@ struct RegionViewer2 : public FunctionPass {
     };
     llvm::stable_sort(PDTRoots, CostSorter);
 
-
     SmallVector<PostDominatorTree::UpdateType> Updates;
 
- 
     for (BasicBlock *Root : drop_begin(PDTRoots, 1)) {
       auto PDTNode = SyntaxPDT.getNode(Root);
 
@@ -252,14 +246,13 @@ struct RegionViewer2 : public FunctionPass {
       while (DTNode) {
         auto CandidBB = DTNode->getBlock();
         if (!SyntaxPDT.dominates(PDTNode, SyntaxPDT.getNode(CandidBB))) {
-           Updates.emplace_back(cfg::UpdateKind::Insert, Root, CandidBB);
+          Updates.emplace_back(cfg::UpdateKind::Insert, Root, CandidBB);
           break;
         }
 
         DTNode = DTNode->getIDom();
       }
     }
-
 
     SmallVector<std::pair<BasicBlock *, BasicBlock *>> ConsideredBreak;
 
@@ -269,7 +262,7 @@ struct RegionViewer2 : public FunctionPass {
       for (Loop *L : depth_first_ext(TLL, Visited)) {
         SmallVector<BasicBlock *> ExitBBs;
         L->getUniqueExitBlocks(ExitBBs);
-    
+
         for (BasicBlock *Exit : ExitBBs) {
           SetVector<BasicBlock *> ExitingBBs;
           for (auto *Exiting : predecessors(Exit)) {
@@ -282,8 +275,7 @@ struct RegionViewer2 : public FunctionPass {
           llvm::stable_sort(ExitingBBVec, CostSorter);
           std::reverse(ExitingBBVec.begin(), ExitingBBVec.end());
 
-          // Only consider a BB executed unconditionally as main break
-          auto Header = L->getHeader();
+          // Only consider a BB executed unconditionally as main break.
           auto Latch = L->getLoopLatch();
           if (!Latch)
             continue;
@@ -299,35 +291,25 @@ struct RegionViewer2 : public FunctionPass {
           if (!MainBreak)
             continue;
 
-
-
           for (BasicBlock *Exiting : reverse(ExitingBBVec)) {
             if (Exiting == MainBreak)
               continue;
 
-            auto &UpdateRemove =
-                Updates.emplace_back(cfg::UpdateKind::Delete, Exiting, Exit);
+            Updates.emplace_back(cfg::UpdateKind::Delete, Exiting, Exit);
             ConsideredBreak.emplace_back(Exiting, Exit);
-
           }
         }
       }
     }
 
-
     // Can only apply once, a second call would assume that `Updates` has
     // already been applied to the CFG.
     SyntaxPDT.applyUpdates({}, Updates);
 
-
-
- 
     RegionInfo RI;
     RI.releaseMemory();
     RI.recalculate(F, DT, &SyntaxPDT, DF, ConsideredBreak);
 
-
-   
     GraphT Graph = &RI;
     std::string GraphName = DOTGraphTraits<GraphT>::getGraphName(Graph);
     std::string Title = GraphName + " for '" + F.getName().str() + "' function";
