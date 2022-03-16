@@ -63,7 +63,7 @@ template <typename NodePtr>
 void LegalizeUpdates(ArrayRef<Update<NodePtr>> AllUpdates,
                      SmallVectorImpl<Update<NodePtr>> &Result,
                      bool InverseGraph, bool ReverseResultOrder = false) {
-  // Count the total number of insertions of each edge.
+  // Count the total number of inserions of each edge.
   // Each insertion adds 1 and deletion subtracts 1. The end number should be
   // one of {-1 (deletion), 0 (NOP), +1 (insertion)}. Otherwise, the sequence
   // of updates contains multiple updates of the same kind and we assert for

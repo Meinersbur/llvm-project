@@ -32,11 +32,8 @@ template <
     typename AnalysisGraphTraitsT = DefaultAnalysisGraphTraits<AnalysisT, GraphT> >
 class DOTGraphTraitsViewer : public FunctionPass {
 public:
-  DOTGraphTraitsViewer(StringRef GraphName, char &ID
-                       //, bool Syntactical =false
-                       )
-      : FunctionPass(ID), Name(GraphName) //, Syntactical(Syntactical)
-  {}
+  DOTGraphTraitsViewer(StringRef GraphName, char &ID)
+      : FunctionPass(ID), Name(GraphName) {}
 
   /// Return true if this function should be processed.
   ///
@@ -70,7 +67,6 @@ public:
 
 private:
   std::string Name;
-  // bool Syntactical;
 };
 
 template <

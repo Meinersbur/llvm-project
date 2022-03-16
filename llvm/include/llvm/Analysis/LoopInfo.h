@@ -1223,7 +1223,6 @@ public:
 /// flag allows the checks to be enabled selectively without re-compilation.
 extern bool VerifyLoopInfo;
 
-#if 1
 // Allow clients to walk the list of nested loops...
 template <> struct GraphTraits<const Loop *> {
   typedef const Loop *NodeRef;
@@ -1242,7 +1241,6 @@ template <> struct GraphTraits<Loop *> {
   static ChildIteratorType child_begin(NodeRef N) { return N->begin(); }
   static ChildIteratorType child_end(NodeRef N) { return N->end(); }
 };
-#endif
 
 /// Analysis pass that exposes the \c LoopInfo for a function.
 class LoopAnalysis : public AnalysisInfoMixin<LoopAnalysis> {

@@ -716,7 +716,7 @@ class RegionInfoBase {
 
   virtual ~RegionInfoBase();
 
-  bool Syntactical = false; // a
+  bool Syntactical = false;
 
   DomTreeT *DT;
   PostDomTreeT *PDT;

@@ -527,7 +527,6 @@ struct SemiNCAInfo {
         // root from the set of roots, as it is reverse-reachable from the other
         // one.
         if (llvm::is_contained(Roots, N)) {
-          //  llvm_unreachable("X ");
           LLVM_DEBUG(dbgs() << "\tForward DFS walk found another root "
                             << BlockNamePrinter(N) << "\n\tRemoving root "
                             << BlockNamePrinter(Root) << "\n");
@@ -546,7 +545,7 @@ struct SemiNCAInfo {
   template <typename DescendCondition>
   void doFullDFSWalk(const DomTreeT &DT, DescendCondition DC) {
     if (!IsPostDom) {
-      assert(DT.Roots.size() == 1 && "Dominators should have a single root");
+      assert(DT.Roots.size() == 1 && "Dominators should have a singe root");
       runDFS(DT.Roots[0], 0, DC, 0);
       return;
     }
@@ -556,10 +555,7 @@ struct SemiNCAInfo {
     for (const NodePtr Root : DT.Roots) Num = runDFS(Root, Num, DC, 0);
   }
 
-  static void CalculateFromScratch(
-      DomTreeT &DT, BatchUpdatePtr BUI, bool Syntactical = false
-      // , llvm::function_ref<void(SemiNCAInfo&, RootsT &)> Postprocess = {}
-  ) {
+  static void CalculateFromScratch(DomTreeT &DT, BatchUpdatePtr BUI) {
     auto *Parent = DT.Parent;
     DT.reset();
     DT.Parent = Parent;
@@ -588,22 +584,6 @@ struct SemiNCAInfo {
     }
 
     if (DT.Roots.empty()) return;
-
-    // if (Postprocess)
-    //    Postprocess(SNCA, DT.Roots);
-
-    if (IsPostDom && Syntactical) {
-      // Try to avoid roots
-      auto OldRoots = DT.Roots;
-
-      for (unsigned i = 0; i < DT.Roots.size(); ++i) {
-        NodePtr Root = DT.Roots[i];
-#if 0
-           TreeNodePtr N =SNCA. getNodeForBlock(Root,DT);
-           assert ( N->getIDom() == nullptr);
-#endif
-      }
-    }
 
     // Add a node for the root. If the tree is a PostDominatorTree it will be
     // the virtual exit (denoted by (BasicBlock *) nullptr) which postdominates
@@ -709,8 +689,6 @@ struct SemiNCAInfo {
 
     LLVM_DEBUG(dbgs() << "\t\tAfter the insertion, " << BlockNamePrinter(To)
                       << " is no longer a root\n\t\tRebuilding the tree!!!\n");
-
-    // The insert
 
     CalculateFromScratch(DT, BUI);
     return true;
@@ -1179,7 +1157,6 @@ struct SemiNCAInfo {
     // Take the fast path for a single update and avoid running the batch update
     // machinery.
     if (NumUpdates == 1) {
-
       if (!PostViewCFG) {
         UpdateT Update = PreViewCFG.popUpdateForIncrementalUpdates();
         if (Update.getKind() == UpdateKind::Insert)
@@ -1228,7 +1205,6 @@ struct SemiNCAInfo {
   static void ApplyNextUpdate(DomTreeT &DT, BatchUpdateInfo &BUI) {
     // Popping the next update, will move the PreViewCFG to the next snapshot.
     UpdateT CurrentUpdate = BUI.PreViewCFG.popUpdateForIncrementalUpdates();
-
 #if 0
     // FIXME: The LLVM_DEBUG macro only plays well with a modular
     // build of LLVM when the header is marked as textual, but doing
@@ -1589,7 +1565,7 @@ struct SemiNCAInfo {
 
 template <class DomTreeT>
 void Calculate(DomTreeT &DT) {
-  SemiNCAInfo<DomTreeT>::CalculateFromScratch(DT, nullptr, DT.Syntactical);
+  SemiNCAInfo<DomTreeT>::CalculateFromScratch(DT, nullptr);
 }
 
 template <typename DomTreeT>
