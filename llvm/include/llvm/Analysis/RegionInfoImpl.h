@@ -594,7 +594,6 @@ bool RegionInfoBase<Tr>::isRegion(BlockT *entry, BlockT *exit) const {
   DST *exitSuccs = &DF->find(exit)->second;
 
   // Do not allow edges leaving the region (except for chosen breaks).
-#if 1
   DenseSet<BlockT *> Visited;
   SmallVector<BlockT *> Worklist;
   Worklist.push_back(entry);
@@ -618,44 +617,6 @@ bool RegionInfoBase<Tr>::isRegion(BlockT *entry, BlockT *exit) const {
       Worklist.push_back(Succ);
     }
   }
-
-#else
-  if (!Syntactical) {
-    /*
-    Required for tests:
-    LLVM :: Analysis/RegionInfo/block_sort.ll
-    LLVM :: Analysis/RegionInfo/cond_loop.ll
-    LLVM :: Analysis/RegionInfo/exit_in_condition.ll
-    LLVM :: Analysis/RegionInfo/infinite_loop_4.ll
-    LLVM :: Analysis/RegionInfo/infinite_loop_5_c.ll
-    LLVM :: Analysis/RegionInfo/loop_with_condition.ll
-    LLVM :: Analysis/RegionInfo/loops_1.ll
-    LLVM :: Analysis/RegionInfo/loops_2.ll
-    LLVM :: Analysis/RegionInfo/mix_1.ll
-    LLVM :: Analysis/RegionInfo/nested_loops.ll
-    LLVM :: Analysis/RegionInfo/next.ll
-    LLVM :: Analysis/RegionInfo/outgoing_edge.ll
-    LLVM :: Analysis/RegionInfo/outgoing_edge_1.ll
-    LLVM :: Analysis/RegionInfo/paper.ll
-    LLVM :: Analysis/RegionInfo/two_loops_same_header.ll
-    LLVM :: Transforms/PGOProfile/chr.ll
-    LLVM :: Transforms/StructurizeCFG/bug36015.ll
-    LLVM :: Transforms/StructurizeCFG/nested-loop-order.ll
-    LLVM :: Transforms/StructurizeCFG/workarounds/needs-unified-loop-exits.ll
-    */
-    for (BlockT *Succ : *entrySuccs) {
-      if (Succ == exit || Succ == entry)
-        continue;
-      auto ItSucc = exitSuccs->find(Succ);
-      if (ItSucc == exitSuccs->end())
-        return false;
-      // if (AllowBreaks.count({ entry, Succ }))
-      //     continue;
-      if (!isCommonDomFrontier(Succ, entry, exit))
-        return false;
-    }
-  }
-#endif
 
   // Do not allow edges pointing into the region.
   for (BlockT *Succ : *exitSuccs) {
@@ -688,14 +649,12 @@ void RegionInfoBase<Tr>::insertShortCut(BlockT *entry, BlockT *exit,
 template <class Tr>
 typename Tr::DomTreeNodeT *
 RegionInfoBase<Tr>::getNextPostDom(DomTreeNodeT *N, BBtoBBMap *ShortCut) const {
-  // if (!Syntactical) {
   typename BBtoBBMap::iterator e = ShortCut->find(N->getBlock());
 
-  if (e != ShortCut->end())
-    return PDT->getNode(e->second)->getIDom();
-  //   }
+  if (e == ShortCut->end())
+    return N->getIDom();
 
-  return N->getIDom();
+  return PDT->getNode(e->second)->getIDom();
 }
 
 template <class Tr>

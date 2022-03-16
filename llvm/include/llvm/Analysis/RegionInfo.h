@@ -693,18 +693,14 @@ class RegionInfoBase {
 
   RegionInfoBase();
 
-  RegionInfoBase(bool Syntactical) : Syntactical(Syntactical) {}
-
   RegionInfoBase(RegionInfoBase &&Arg)
-      : Syntactical(Arg.Syntactical), DT(std::move(Arg.DT)),
-        PDT(std::move(Arg.PDT)), DF(std::move(Arg.DF)),
-        TopLevelRegion(std::move(Arg.TopLevelRegion)),
-        BBtoRegion(std::move(Arg.BBtoRegion)) {
+    : DT(std::move(Arg.DT)), PDT(std::move(Arg.PDT)), DF(std::move(Arg.DF)),
+      TopLevelRegion(std::move(Arg.TopLevelRegion)),
+      BBtoRegion(std::move(Arg.BBtoRegion)) {
     Arg.wipe();
   }
 
   RegionInfoBase &operator=(RegionInfoBase &&RHS) {
-    Syntactical = RHS.Syntactical;
     DT = std::move(RHS.DT);
     PDT = std::move(RHS.PDT);
     DF = std::move(RHS.DF);
@@ -715,8 +711,6 @@ class RegionInfoBase {
   }
 
   virtual ~RegionInfoBase();
-
-  bool Syntactical = false;
 
   DomTreeT *DT;
   PostDomTreeT *PDT;
@@ -911,7 +905,6 @@ public:
   using Base = RegionInfoBase<RegionTraits<Function>>;
 
   explicit RegionInfo();
-  explicit RegionInfo(bool Syntactical) : Base(Syntactical) {}
 
   RegionInfo(RegionInfo &&Arg) : Base(std::move(static_cast<Base &>(Arg))) {
     updateRegionTree(*this, TopLevelRegion);
@@ -919,7 +912,6 @@ public:
 
   RegionInfo &operator=(RegionInfo &&RHS) {
     Base::operator=(std::move(static_cast<Base &>(RHS)));
-    // this->Syntactical = RHS.Syntactical;
     updateRegionTree(*this, TopLevelRegion);
     return *this;
   }
