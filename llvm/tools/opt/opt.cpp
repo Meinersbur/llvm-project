@@ -501,7 +501,8 @@ static bool shouldPinPassToLegacyPM(StringRef Pass) {
       "polyhedral-info",      "print-polyhedral-info",
       "replace-with-veclib",  "jmc-instrument",
       "dot-regions",          "dot-regions-only",
-      "view-regions",     "view-regions2",      "view-regions-only"};
+      "view-regions",         "view-regions2",
+      "view-regions-only"};
   for (const auto &P : PassNamePrefix)
     if (Pass.startswith(P))
       return true;

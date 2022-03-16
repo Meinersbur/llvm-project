@@ -33,9 +33,9 @@ template <
 class DOTGraphTraitsViewer : public FunctionPass {
 public:
   DOTGraphTraitsViewer(StringRef GraphName, char &ID
-      //, bool Syntactical =false
-  )
-      : FunctionPass(ID), Name(GraphName)//, Syntactical(Syntactical) 
+                       //, bool Syntactical =false
+                       )
+      : FunctionPass(ID), Name(GraphName) //, Syntactical(Syntactical)
   {}
 
   /// Return true if this function should be processed.
@@ -70,7 +70,7 @@ public:
 
 private:
   std::string Name;
- // bool Syntactical;
+  // bool Syntactical;
 };
 
 template <

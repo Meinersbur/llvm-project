@@ -167,10 +167,12 @@ TEST(Local, ReplaceDbgDeclare) {
 }
 
 /// Build the dominator tree for the function and run the Test.
-static void runWithDomTree(
-    Module &M, StringRef FuncName,
-    function_ref<void(Function &F, DominatorTree *DT)> Test) { 
-  auto *F = M.getFunction(FuncName);   if (false) F->viewCFG();
+static void
+runWithDomTree(Module &M, StringRef FuncName,
+               function_ref<void(Function &F, DominatorTree *DT)> Test) {
+  auto *F = M.getFunction(FuncName);
+  if (false)
+    F->viewCFG();
   ASSERT_NE(F, nullptr) << "Could not find " << FuncName;
   // Compute the dominator tree for the function.
   DominatorTree DT(*F);

@@ -260,20 +260,18 @@ protected:
   friend struct DomTreeBuilder::SemiNCAInfo<DominatorTreeBase>;
 
 public:
-   bool Syntactical = false;
+  bool Syntactical = false;
 
- public:
+public:
   DominatorTreeBase() = default;
 
-  explicit DominatorTreeBase(bool Syntactical) : Syntactical(Syntactical) { };
+  explicit DominatorTreeBase(bool Syntactical) : Syntactical(Syntactical){};
 
   DominatorTreeBase(DominatorTreeBase &&Arg)
-      : Roots(std::move(Arg.Roots)),
-        DomTreeNodes(std::move(Arg.DomTreeNodes)),
-        RootNode(Arg.RootNode),
-        Parent(Arg.Parent),
-        DFSInfoValid(Arg.DFSInfoValid),
-        SlowQueries(Arg.SlowQueries),  Syntactical(Arg.Syntactical) {
+      : Roots(std::move(Arg.Roots)), DomTreeNodes(std::move(Arg.DomTreeNodes)),
+        RootNode(Arg.RootNode), Parent(Arg.Parent),
+        DFSInfoValid(Arg.DFSInfoValid), SlowQueries(Arg.SlowQueries),
+        Syntactical(Arg.Syntactical) {
     Arg.wipe();
   }
 

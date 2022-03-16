@@ -573,84 +573,88 @@ bool RegionInfoBase<Tr>::isCommonDomFrontier(BlockT *BB, BlockT *entry,
 }
 
 template <class Tr>
-bool RegionInfoBase<Tr>::isRegion(BlockT* entry, BlockT* exit) const {
-    assert(entry && exit && "entry and exit must not be null!");
+bool RegionInfoBase<Tr>::isRegion(BlockT *entry, BlockT *exit) const {
+  assert(entry && exit && "entry and exit must not be null!");
 
-    using DST = typename DomFrontierT::DomSetType;
+  using DST = typename DomFrontierT::DomSetType;
 
-    DST* entrySuccs = &DF->find(entry)->second;
+  DST *entrySuccs = &DF->find(entry)->second;
 
-    // Exit is the header of a loop that contains the entry. In this case,
-    // the dominance frontier must only contain the exit.
-    if (!DT->dominates(entry, exit)) {
-        for (BlockT* successor : *entrySuccs) {
-            if (successor != exit && successor != entry)
-                return false;
-        }
-
-        return true;
+  // Exit is the header of a loop that contains the entry. In this case,
+  // the dominance frontier must only contain the exit.
+  if (!DT->dominates(entry, exit)) {
+    for (BlockT *successor : *entrySuccs) {
+      if (successor != exit && successor != entry)
+        return false;
     }
 
-    DST* exitSuccs = &DF->find(exit)->second;
+    return true;
+  }
 
+  DST *exitSuccs = &DF->find(exit)->second;
 
-        // Do not allow edges leaving the region (except for chosen breaks).
+  // Do not allow edges leaving the region (except for chosen breaks).
 #if 1
-    DenseSet<BlockT*> Visited;
-    SmallVector<BlockT*> Worklist;
-    Worklist.push_back(entry);
+  DenseSet<BlockT *> Visited;
+  SmallVector<BlockT *> Worklist;
+  Worklist.push_back(entry);
 
-    while (!Worklist.empty()) {
-        BlockT* BB = Worklist.pop_back_val();
-        if (!Visited.insert(BB).second) continue;
-         
-        for (auto Succ :  llvm::children< BlockT* >(BB)) {
-            if (Succ == exit) continue;
-            if (AllowBreaks.count({BB,Succ})) continue;
+  while (!Worklist.empty()) {
+    BlockT *BB = Worklist.pop_back_val();
+    if (!Visited.insert(BB).second)
+      continue;
 
-            if (!DT->dominates(entry, Succ)) return false;
-            if (!PDT->dominates(exit, Succ)) return false;
+    for (auto Succ : llvm::children<BlockT *>(BB)) {
+      if (Succ == exit)
+        continue;
+      if (AllowBreaks.count({BB, Succ}))
+        continue;
 
-            Worklist.push_back(Succ);
-        }
+      if (!DT->dominates(entry, Succ))
+        return false;
+      if (!PDT->dominates(exit, Succ))
+        return false;
+
+      Worklist.push_back(Succ);
     }
+  }
 
 #else
-        if (!Syntactical){
-            /*
-            Required for tests:
-            LLVM :: Analysis/RegionInfo/block_sort.ll
-            LLVM :: Analysis/RegionInfo/cond_loop.ll
-            LLVM :: Analysis/RegionInfo/exit_in_condition.ll
-            LLVM :: Analysis/RegionInfo/infinite_loop_4.ll
-            LLVM :: Analysis/RegionInfo/infinite_loop_5_c.ll
-            LLVM :: Analysis/RegionInfo/loop_with_condition.ll
-            LLVM :: Analysis/RegionInfo/loops_1.ll
-            LLVM :: Analysis/RegionInfo/loops_2.ll
-            LLVM :: Analysis/RegionInfo/mix_1.ll
-            LLVM :: Analysis/RegionInfo/nested_loops.ll
-            LLVM :: Analysis/RegionInfo/next.ll
-            LLVM :: Analysis/RegionInfo/outgoing_edge.ll
-            LLVM :: Analysis/RegionInfo/outgoing_edge_1.ll
-            LLVM :: Analysis/RegionInfo/paper.ll
-            LLVM :: Analysis/RegionInfo/two_loops_same_header.ll
-            LLVM :: Transforms/PGOProfile/chr.ll
-            LLVM :: Transforms/StructurizeCFG/bug36015.ll
-            LLVM :: Transforms/StructurizeCFG/nested-loop-order.ll
-            LLVM :: Transforms/StructurizeCFG/workarounds/needs-unified-loop-exits.ll
-            */
-        for (BlockT* Succ : *entrySuccs) {
-            if (Succ == exit || Succ == entry)
-                continue;
-            auto ItSucc = exitSuccs->find(Succ);
-            if (ItSucc == exitSuccs->end())
-                return false;
-            //if (AllowBreaks.count({ entry, Succ })) 
-           //     continue;
-            if (!isCommonDomFrontier(Succ, entry, exit))
-                return false;
-        }
-}
+  if (!Syntactical) {
+    /*
+    Required for tests:
+    LLVM :: Analysis/RegionInfo/block_sort.ll
+    LLVM :: Analysis/RegionInfo/cond_loop.ll
+    LLVM :: Analysis/RegionInfo/exit_in_condition.ll
+    LLVM :: Analysis/RegionInfo/infinite_loop_4.ll
+    LLVM :: Analysis/RegionInfo/infinite_loop_5_c.ll
+    LLVM :: Analysis/RegionInfo/loop_with_condition.ll
+    LLVM :: Analysis/RegionInfo/loops_1.ll
+    LLVM :: Analysis/RegionInfo/loops_2.ll
+    LLVM :: Analysis/RegionInfo/mix_1.ll
+    LLVM :: Analysis/RegionInfo/nested_loops.ll
+    LLVM :: Analysis/RegionInfo/next.ll
+    LLVM :: Analysis/RegionInfo/outgoing_edge.ll
+    LLVM :: Analysis/RegionInfo/outgoing_edge_1.ll
+    LLVM :: Analysis/RegionInfo/paper.ll
+    LLVM :: Analysis/RegionInfo/two_loops_same_header.ll
+    LLVM :: Transforms/PGOProfile/chr.ll
+    LLVM :: Transforms/StructurizeCFG/bug36015.ll
+    LLVM :: Transforms/StructurizeCFG/nested-loop-order.ll
+    LLVM :: Transforms/StructurizeCFG/workarounds/needs-unified-loop-exits.ll
+    */
+    for (BlockT *Succ : *entrySuccs) {
+      if (Succ == exit || Succ == entry)
+        continue;
+      auto ItSucc = exitSuccs->find(Succ);
+      if (ItSucc == exitSuccs->end())
+        return false;
+      // if (AllowBreaks.count({ entry, Succ }))
+      //     continue;
+      if (!isCommonDomFrontier(Succ, entry, exit))
+        return false;
+    }
+  }
 #endif
 
   // Do not allow edges pointing into the region.
@@ -684,25 +688,26 @@ void RegionInfoBase<Tr>::insertShortCut(BlockT *entry, BlockT *exit,
 template <class Tr>
 typename Tr::DomTreeNodeT *
 RegionInfoBase<Tr>::getNextPostDom(DomTreeNodeT *N, BBtoBBMap *ShortCut) const {
-   // if (!Syntactical) {
-        typename BBtoBBMap::iterator e = ShortCut->find(N->getBlock());
+  // if (!Syntactical) {
+  typename BBtoBBMap::iterator e = ShortCut->find(N->getBlock());
 
-        if (e != ShortCut->end())
-            return PDT->getNode(e->second)->getIDom();
- //   }
+  if (e != ShortCut->end())
+    return PDT->getNode(e->second)->getIDom();
+  //   }
 
-    return N->getIDom();
+  return N->getIDom();
 }
 
 template <class Tr>
 bool RegionInfoBase<Tr>::isTrivialRegion(BlockT *entry, BlockT *exit) const {
   assert(entry && exit && "entry and exit must not be null!");
 
-  unsigned num_successors = BlockTraits::child_end(entry) - BlockTraits::child_begin(entry);
+  unsigned num_successors =
+      BlockTraits::child_end(entry) - BlockTraits::child_begin(entry);
 
   if (num_successors == 0) {
     // Fake virtual exit?
-      return true;
+    return true;
   }
 
   if (num_successors == 1 && exit == *(BlockTraits::child_begin(entry)))
@@ -972,7 +977,7 @@ void RegionInfoBase<Tr>::calculate(FuncT &F) {
   // starting with BB is stored. These regions can be threated as single BBS.
   // This improves performance on linear CFGs.
   BBtoBBMap ShortCut;
-  
+
   scanForRegions(F, &ShortCut);
   BlockT *BB = GraphTraits<FuncPtrT>::getEntryNode(&F);
   buildRegionsTree(DT->getNode(BB), TopLevelRegion);

@@ -27,13 +27,13 @@ class raw_ostream;
 /// compute the post-dominator tree.
 class PostDominatorTree : public PostDomTreeBase<BasicBlock> {
 private:
-   // bool Syntactical = false;
+  // bool Syntactical = false;
 
 public:
   using Base = PostDomTreeBase<BasicBlock>;
 
   PostDominatorTree() = default;
-  PostDominatorTree(bool Syntactical) : Base(Syntactical) {};
+  PostDominatorTree(bool Syntactical) : Base(Syntactical){};
 
   explicit PostDominatorTree(Function &F) { recalculate(F); }
   /// Handle invalidation explicitly.
