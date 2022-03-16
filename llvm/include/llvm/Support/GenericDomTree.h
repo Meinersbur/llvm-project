@@ -259,8 +259,13 @@ protected:
 
   friend struct DomTreeBuilder::SemiNCAInfo<DominatorTreeBase>;
 
+public:
+   bool Syntactical = false;
+
  public:
   DominatorTreeBase() = default;
+
+  explicit DominatorTreeBase(bool Syntactical) : Syntactical(Syntactical) { };
 
   DominatorTreeBase(DominatorTreeBase &&Arg)
       : Roots(std::move(Arg.Roots)),
@@ -268,7 +273,7 @@ protected:
         RootNode(Arg.RootNode),
         Parent(Arg.Parent),
         DFSInfoValid(Arg.DFSInfoValid),
-        SlowQueries(Arg.SlowQueries) {
+        SlowQueries(Arg.SlowQueries),  Syntactical(Arg.Syntactical) {
     Arg.wipe();
   }
 
@@ -279,6 +284,7 @@ protected:
     Parent = RHS.Parent;
     DFSInfoValid = RHS.DFSInfoValid;
     SlowQueries = RHS.SlowQueries;
+    Syntactical = RHS.Syntactical;
     RHS.wipe();
     return *this;
   }
@@ -725,6 +731,10 @@ protected:
     }
     O << "\n";
   }
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  LLVM_DUMP_METHOD void dump() const { print(dbgs()); }
+#endif
 
 public:
   /// updateDFSNumbers - Assign In and Out numbers to the nodes while walking

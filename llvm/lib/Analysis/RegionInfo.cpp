@@ -93,12 +93,14 @@ void RegionInfo::updateStatistics(Region *R) {
     ++numSimpleRegions;
 }
 
-void RegionInfo::recalculate(Function &F, DominatorTree *DT_,
-                             PostDominatorTree *PDT_, DominanceFrontier *DF_) {
+void RegionInfo::recalculate(Function &F, DominatorTree *DT_, PostDominatorTree *PDT_, DominanceFrontier *DF_,  ArrayRef<std::pair<BasicBlock*,BasicBlock*>> Breaks) {
   DT = DT_;
   PDT = PDT_;
   DF = DF_;
-
+  AllowBreaks.clear();
+  for (auto B : Breaks)
+      AllowBreaks.insert(B);
+  
   TopLevelRegion = new Region(&F.getEntryBlock(), nullptr,
                               this, DT, nullptr);
   updateStatistics(TopLevelRegion);

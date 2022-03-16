@@ -74,6 +74,7 @@ void llvm::initializeAnalysis(PassRegistry &Registry) {
   initializePostDominatorTreeWrapperPassPass(Registry);
   initializeRegionInfoPassPass(Registry);
   initializeRegionViewerPass(Registry);
+  initializeRegionViewer2Pass(Registry);
   initializeRegionPrinterPass(Registry);
   initializeRegionOnlyViewerPass(Registry);
   initializeRegionOnlyPrinterPass(Registry);

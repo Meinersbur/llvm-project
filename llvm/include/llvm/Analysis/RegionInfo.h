@@ -693,14 +693,18 @@ class RegionInfoBase {
 
   RegionInfoBase();
 
+  RegionInfoBase(bool Syntactical) :Syntactical(Syntactical)  {}
+
   RegionInfoBase(RegionInfoBase &&Arg)
-    : DT(std::move(Arg.DT)), PDT(std::move(Arg.PDT)), DF(std::move(Arg.DF)),
+    : Syntactical(Arg.Syntactical),      
+      DT(std::move(Arg.DT)), PDT(std::move(Arg.PDT)), DF(std::move(Arg.DF)),
       TopLevelRegion(std::move(Arg.TopLevelRegion)),
       BBtoRegion(std::move(Arg.BBtoRegion)) {
     Arg.wipe();
   }
 
   RegionInfoBase &operator=(RegionInfoBase &&RHS) {
+      Syntactical = RHS.Syntactical;
     DT = std::move(RHS.DT);
     PDT = std::move(RHS.PDT);
     DF = std::move(RHS.DF);
@@ -712,6 +716,8 @@ class RegionInfoBase {
 
   virtual ~RegionInfoBase();
 
+  bool Syntactical = false; // a
+
   DomTreeT *DT;
   PostDomTreeT *PDT;
   DomFrontierT *DF;
@@ -721,6 +727,8 @@ class RegionInfoBase {
 
   /// Map every BB to the smallest region, that contains BB.
   BBtoRegionMap BBtoRegion;
+
+  DenseSet<std::pair<BlockT*,BlockT*>> AllowBreaks;
 
 protected:
   /// Update refences to a RegionInfoT held by the RegionT managed here
@@ -747,6 +755,7 @@ private:
     DF = nullptr;
     TopLevelRegion = nullptr;
     BBtoRegion.clear();
+    AllowBreaks.clear();
   }
 
   // Check whether the entries of BBtoRegion for the BBs of region
@@ -902,6 +911,8 @@ public:
   using Base = RegionInfoBase<RegionTraits<Function>>;
 
   explicit RegionInfo();
+  explicit RegionInfo(bool Syntactical) : Base(Syntactical) {}
+
 
   RegionInfo(RegionInfo &&Arg) : Base(std::move(static_cast<Base &>(Arg))) {
     updateRegionTree(*this, TopLevelRegion);
@@ -909,6 +920,7 @@ public:
 
   RegionInfo &operator=(RegionInfo &&RHS) {
     Base::operator=(std::move(static_cast<Base &>(RHS)));
+   // this->Syntactical = RHS.Syntactical;
     updateRegionTree(*this, TopLevelRegion);
     return *this;
   }
@@ -916,14 +928,12 @@ public:
   ~RegionInfo() override;
 
   /// Handle invalidation explicitly.
-  bool invalidate(Function &F, const PreservedAnalyses &PA,
-                  FunctionAnalysisManager::Invalidator &);
+  bool invalidate(Function &F, const PreservedAnalyses &PA,  FunctionAnalysisManager::Invalidator &);
 
   // updateStatistics - Update statistic about created regions.
   void updateStatistics(Region *R) final;
 
-  void recalculate(Function &F, DominatorTree *DT, PostDominatorTree *PDT,
-                   DominanceFrontier *DF);
+  void recalculate(Function& F, DominatorTree* DT, PostDominatorTree* PDT, DominanceFrontier* DF, ArrayRef<std::pair<BasicBlock*, BasicBlock*>> Breaks = {});
 
 #ifndef NDEBUG
   /// Opens a viewer to show the GraphViz visualization of the regions.
@@ -937,6 +947,8 @@ public:
   /// Useful during debugging as an alternative to dump().
   void viewOnly();
 #endif
+
+
 };
 
 class RegionInfoPass : public FunctionPass {
