@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -disable-legacy-loop-transformations -ast-print %s | FileCheck --check-prefix=PRINT --match-full-lines %s
-// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -disable-legacy-loop-transformations -emit-llvm -disable-llvm-passes -o - %s | FileCheck --check-prefix=IR --match-full-lines %s
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -disable-legacy-loop-transformations -emit-llvm -disable-llvm-passes -o - %s | FileCheck --check-prefix=IR %s
 // RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -disable-legacy-loop-transformations -emit-llvm -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -mllvm -debug-only=polly-ast -o /dev/null %s 2>&1 > /dev/null | FileCheck --check-prefix=AST %s
 // RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -disable-legacy-loop-transformations -emit-llvm -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -o - %s | FileCheck --check-prefix=TRANS %s
 // RUN: %clang -DMAIN -std=c99 -disable-legacy-loop-transformations -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable %s -o %t_pragma_pack%exeext
@@ -34,7 +34,7 @@ int main() {
 // PRINT-NEXT: }
 
 
-// IR-LABEL: define dso_local void @pragma_unrolling(double* noalias align 8 dereferenceable(64) %C, double* noalias align 8 dereferenceable(64) %A) #0 {
+// IR-LABEL: void @pragma_unrolling(
 // IR:         br label %for.cond, !llvm.loop !2
 //
 // IR: !2 = distinct !{!2, !3, !4, !5}

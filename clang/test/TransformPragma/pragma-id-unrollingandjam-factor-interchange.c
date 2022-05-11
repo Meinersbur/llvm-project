@@ -1,7 +1,7 @@
-// RUN: %clang_cc1                       -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -ast-print %s | FileCheck %s --match-full-lines --check-prefix=PRINT
-// RUN: %clang_cc1                       -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -disable-llvm-passes -o - %s | FileCheck %s --check-prefix=IR
-// RUN: %clang_cc1                       -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -mllvm -debug-only=polly-ast -o /dev/null %s 2>&1 > /dev/null | FileCheck %s --check-prefix=AST
-// RUN: %clang_cc1 -flegacy-pass-manager -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -o - %s | FileCheck %s --check-prefix=TRANS
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -ast-print %s | FileCheck %s --match-full-lines --check-prefix=PRINT
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -disable-llvm-passes -o - %s | FileCheck %s --check-prefix=IR
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -mllvm -debug-only=polly-ast -o /dev/null %s 2>&1 > /dev/null | FileCheck %s --check-prefix=AST
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -o - %s | FileCheck %s --check-prefix=TRANS
 // RUN: %clang                           -DMAIN                                   -std=c99            -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable %s -o %t_pragma_pack%exeext
 // RUN: %t_pragma_pack%exeext | FileCheck --check-prefix=RESULT %s
 
@@ -43,7 +43,7 @@ int main() {
 // PRINT-NEXT:  }
 
 
-// IR-LABEL: @pragma_unrollingandjam_factor_interchange(
+// IR-LABEL: void @pragma_unrollingandjam_factor_interchange(
 // IR:         br label %for.cond1, !llvm.loop !2
 // IR:         br label %for.cond, !llvm.loop !8
 //
@@ -77,12 +77,17 @@ int main() {
 // AST:   }
 
 
-// TRANS: polly.loop_header32:
-// TRANS:   %polly.indvar35 = phi i64 [ 0, %polly.loop_header ], [ %polly.indvar_next36, %polly.loop_header32 ]
-// TRANS:   store double %p_add7, double* %scevgep40, align 8, !alias.scope !5, !noalias !2
-// TRANS:   %3 = or i64 %polly.indvar35, 1
-// TRANS:   store double %p_add748, double* %scevgep50, align 8, !alias.scope !5, !noalias !2
-// TRANS:   %polly.indvar_next36 = add nuw nsw i64 %polly.indvar35, 2
+// TRANS-LABEL: void @pragma_unrollingandjam_factor_interchange(
+// TRANS:       polly.loop_exit26:
+// TRANS:       polly.stmt.for.body433:
+// TRANS:         %polly.indvar27 = phi i64 [ 0, %polly.loop_preheader25 ], [ %polly.indvar_next28, %polly.stmt.for.body433 ]
+// TRANS:         store double %p_add7, ptr %uglygep32, align 8, !alias.scope !5, !noalias !2
+// TRANS:         %3 = or i64 %polly.indvar27, 1
+// TRANS:         store double %p_add740, ptr %uglygep42, align 8, !alias.scope !5, !noalias !2
+// TRANS:         %polly.indvar_next28 = add nuw nsw i64 %polly.indvar27, 2
+// TRANS:       polly.loop_preheader25:
+// TRANS:         %polly.indvar = phi i64 [ 0, %polly.loop_preheader ], [ %polly.indvar_next, %polly.loop_exit26 ]
+// TRANS:       }
 
 
 // RESULT: (44)

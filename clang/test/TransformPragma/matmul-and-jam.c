@@ -1,7 +1,7 @@
-// RUN: %clang_cc1                        -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -fno-unroll-loops -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -ast-print %s | FileCheck  %s --match-full-lines --check-prefix=PRINT 
-// RUN: %clang_cc1                        -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -fno-unroll-loops -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -emit-llvm -o -         %s -disable-llvm-passes | FileCheck %s --check-prefix=IR
-// RUN: %clang_cc1                        -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -fno-unroll-loops -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -emit-llvm -o /dev/null %s -mllvm -debug-only=polly-ast 2>&1 > /dev/null | FileCheck %s --check-prefix=AST
-// RUN: %clang_cc1  -flegacy-pass-manager -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -fno-unroll-loops -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -emit-llvm -o -         %s | FileCheck %s --check-prefix=TRANS
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -fno-unroll-loops -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -ast-print %s | FileCheck  %s --match-full-lines --check-prefix=PRINT
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -fno-unroll-loops -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -emit-llvm -o -         %s -disable-llvm-passes | FileCheck %s --check-prefix=IR
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -fno-unroll-loops -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -emit-llvm -o /dev/null %s -mllvm -debug-only=polly-ast 2>&1 > /dev/null | FileCheck %s --check-prefix=AST
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -fno-unroll-loops -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -emit-llvm -o -         %s | FileCheck %s --check-prefix=TRANS
 // RUN: %clang                            -DMAIN                                   -std=c99 -fno-unroll-loops -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -ffast-math -march=native -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable %s -o %t_pragma_pack%exeext
 // RUN: %t_pragma_pack%exeext | FileCheck --check-prefix=RESULT %s
 
@@ -61,7 +61,7 @@ int main() {
 // PRINT-NEXT: }
 
 
-// IR-LABEL: define dso_local void @matmul(i32 %M, i32 %N, i32 %K, double* noalias nonnull align 8 %C, double* noalias nonnull align 8 %A, double* noalias nonnull align 8 %B) #0 {
+// IR-LABEL: void @matmul(
 // IR-DAG:   !"llvm.loop.tile.enable"
 // IR-DAG:   !"llvm.loop.interchange.enable"
 // IR-DAG:   !"llvm.data.pack.enable"
@@ -164,48 +164,51 @@ int main() {
 // AST: 	{  /* original code */ }
 
 
-// TRANS: %malloccall{{[0-9]*}} = tail call dereferenceable_or_null(131072) i8* @malloc(i64 131072)
-// TRANS: %malloccall{{[0-9]*}} = tail call dereferenceable_or_null(4194304) i8* @malloc(i64 4194304)
-// TRANS: tail call void @free(i8* %malloccall{{[0-9]*}})
-// TRANS: tail call void @free(i8* %malloccall{{[0-9]*}})
+// TRANS-LABEL: @matmul(
+// TRANS: %malloccall{{[0-9]*}} = tail call dereferenceable_or_null(131072) ptr @malloc(i64 131072)
+// TRANS: %malloccall{{[0-9]*}} = tail call dereferenceable_or_null(4194304) ptr @malloc(i64 4194304)
+// TRANS: tail call void @free(ptr %malloccall{{[0-9]*}})
+// TRANS: tail call void @free(ptr %malloccall{{[0-9]*}})
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: store double
+// TRANS: }
+
 // TRANS-DAG: Packed_MemRef_A
 // TRANS-DAG: Packed_MemRef_B
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
-// TRANS: store double %p_add
 
 
 // RESULT: (31)

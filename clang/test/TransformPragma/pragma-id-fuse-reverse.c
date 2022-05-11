@@ -1,7 +1,7 @@
-// RUN: %clang_cc1                       -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -ast-print %s | FileCheck --match-full-lines %s --check-prefix=PRINT
-// RUN: %clang_cc1                       -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -disable-llvm-passes -o - %s | FileCheck %s --check-prefix=IR
-// RUN: %clang_cc1                       -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -mllvm -debug-only=polly-ast -o /dev/null %s 2>&1 > /dev/null | FileCheck %s --check-prefix=AST
-// RUN: %clang_cc1 -flegacy-pass-manager -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -o - %s | FileCheck %s --check-prefix=TRANS
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -ast-print %s | FileCheck --match-full-lines %s --check-prefix=PRINT
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -disable-llvm-passes -o - %s | FileCheck %s --check-prefix=IR
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -mllvm -debug-only=polly-ast -o /dev/null %s 2>&1 > /dev/null | FileCheck %s --check-prefix=AST
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -o - %s | FileCheck %s --check-prefix=TRANS
 // RUN: %clang                           -DMAIN                                   -std=c99            -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable %s -o %t_pragma_pack%exeext
 // RUN: %t_pragma_pack%exeext | FileCheck --check-prefix=RESULT %s
 
@@ -10,10 +10,10 @@ void pragma_id_fuse_reverse(int n, double A[n], double B[n]) {
   #pragma clang loop(i, j) fuse fused_id(k)
 
   #pragma clang loop id(i)
-  for (int i = 0; i < n; i += 1) 
+  for (int i = 0; i < n; i += 1)
     A[i] = 3 * i;
   #pragma clang loop id(j)
-  for (int j = 0; j < n; j += 1) 
+  for (int j = 0; j < n; j += 1)
     B[j] = 2 * j;
 }
 
@@ -43,7 +43,7 @@ int main() {
 // PRINT-NEXT: }
 
 
-// IR-LABEL: @pragma_id_fuse_reverse(
+// IR-LABEL: void @pragma_id_fuse_reverse(
 // IR:         br label %for.cond, !llvm.loop !2
 // IR:         br label %for.cond1, !llvm.loop !12
 //
@@ -70,11 +70,12 @@ int main() {
 // AST:     {  /* original code */ }
 
 
-// TRANS: polly.start:
-// TRANS: polly.loop_header:
-// TRANS:   store double %p_conv, double* %scevgep, align 8, !alias.scope !18, !noalias !21
-// TRANS:   store double %p_conv7, double* %scevgep35, align 8, !alias.scope !21, !noalias !18
-// TRANS:   br i1 %exitcond.not38, label %for.cond.cleanup4, label %polly.loop_header
+// TRANS-LABEL: void @pragma_id_fuse_reverse(
+// TRANS:       polly.stmt.for.body5:
+// TRANS:         store double %p_conv, ptr %uglygep, align 8, !alias.scope !18, !noalias !21
+// TRANS:         store double %p_conv7, ptr %uglygep26, align 8, !alias.scope !21, !noalias !18
+// TRANS:         br i1 %exitcond.not29, label %for.end12, label %polly.stmt.for.body5
+// TRANS:       }
 
 
 // RESULT: (3 2)

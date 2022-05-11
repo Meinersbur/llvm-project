@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -ast-print %s | FileCheck --check-prefix=PRINT --match-full-lines %s
-// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -debug-info-kind=limited -gno-column-info -disable-llvm-passes -o - %s | FileCheck --check-prefix=IR --match-full-lines %s
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -debug-info-kind=limited -gno-column-info -disable-llvm-passes -o - %s | FileCheck --check-prefix=IR %s
 // RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -fno-unroll-loops -O3 -emit-llvm -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-allow-nonaffine -mllvm -polly-use-llvm-names -debug-info-kind=limited -o /dev/null %s 2>&1 > /dev/null | FileCheck %s --check-prefix=WARN
 // RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -fno-unroll-loops -O3 -emit-llvm -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-allow-nonaffine -mllvm -polly-use-llvm-names -o /dev/null -mllvm -debug-only=polly-ast %s 2>&1 > /dev/null | FileCheck %s --check-prefix=AST
 
@@ -21,9 +21,9 @@ void pragma_pack(double C[restrict 16][32], double A[restrict 16*32][16]) {
 // PRINT-NEXT: }
 
 
-// IR-LABEL: define dso_local void @pragma_pack([32 x double]* noalias %C, [16 x double]* noalias %A) #0 !dbg !5 {
-// IR:         %A.addr = alloca [16 x double]*, align 8
-// IR:         %6 = load double, double* %arrayidx5, align 8, !dbg !35, !llvm.access !36
+// IR-LABEL: void @pragma_pack(
+// IR:         %A.addr = alloca ptr, align 8
+// IR:         %6 = load double, ptr %arrayidx5, align 8, !dbg !35, !llvm.access !36
 // IR:         br label %for.cond1, !dbg !33, !llvm.loop !37
 // IR:         br label %for.cond, !dbg !28, !llvm.loop !45
 //

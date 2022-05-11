@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -ast-print %s | FileCheck --match-full-lines %s --check-prefix=PRINT
-// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -disable-llvm-passes -o - %s | FileCheck --match-full-lines %s --check-prefix=IR
+// RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -disable-llvm-passes -o - %s | FileCheck %s --check-prefix=IR
 // RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -mllvm -polly-use-llvm-names -mllvm -debug-only=polly-ast -o /dev/null %s 2>&1 > /dev/null | FileCheck %s --check-prefix=AST
 // RUN: %clang_cc1 -triple x86_64-pc-windows-msvc19.0.24215 -std=c99 -emit-llvm -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable -o - %s | FileCheck %s --check-prefix=TRANS
 // RUN: %clang -DMAIN -std=c99 -O3 -mllvm -polly -mllvm -polly-position=early -mllvm -polly-process-unprofitable %s -o %t_pragma_pack%exeext
@@ -35,7 +35,7 @@ int main() {
 // PRINT-NEXT:  }
 
 
-// IR-LABEL: define dso_local void @pragma_reverse_tile(i32 %n, double* %A) #0 {
+// IR-LABEL: void @pragma_reverse_tile(
 // IR:         br label %for.cond, !llvm.loop !2
 //
 // IR: !2 = distinct !{!2, !3, !4, !5}
@@ -56,8 +56,10 @@ int main() {
 // AST:     {  /* original code */ }
 
 
-// TRANS: polly.loop_if6:
-// TRANS:   %.neg = mul i64 %polly.indvar, -128
+// TRANS-LABEL: void @pragma_reverse_tile(
+// TRANS:       polly.loop_if7:
+// TRANS:         %.neg = mul i64 %polly.indvar, -128
+// TRANS:       }
 
 
 // RESULT: (43)
