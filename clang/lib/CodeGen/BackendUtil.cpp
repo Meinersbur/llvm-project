@@ -326,6 +326,7 @@ static bool actionRequiresCodeGen(BackendAction Action) {
          Action != Backend_EmitLL;
 }
 
+#if 0
 struct NoLegacyLoopTransformsPassGate : public llvm::OptPassGate {
   AnalysisID UnrollPassID;
 
@@ -350,6 +351,7 @@ struct NoLegacyLoopTransformsPassGate : public llvm::OptPassGate {
 
 static ManagedStatic<NoLegacyLoopTransformsPassGate>
     DisableLegacyLoopTransformsPassGate;
+#endif
 
 static bool initTargetOptions(DiagnosticsEngine &Diags,
                               llvm::TargetOptions &Options,
@@ -537,11 +539,14 @@ getInstrProfOptions(const CodeGenOptions &CodeGenOpts,
   return Options;
 }
 
-
+// TODO: Disable automatic loop transformation in NPM if this option is given.
+#if 0
   if (CodeGenOpts.DisableLegacyLoopTransformation) {
     TheModule->getContext().setOptPassGate(
         *DisableLegacyLoopTransformsPassGate);
   }
+#endif
+
 static void setCommandLineOpts(const CodeGenOptions &CodeGenOpts) {
   SmallVector<const char *, 16> BackendArgs;
   BackendArgs.push_back("clang"); // Fake program name.
