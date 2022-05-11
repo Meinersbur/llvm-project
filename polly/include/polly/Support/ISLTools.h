@@ -14,8 +14,8 @@
 #ifndef POLLY_ISLTOOLS_H
 #define POLLY_ISLTOOLS_H
 
-#include "llvm/ADT/Sequence.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/Sequence.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/iterator.h"
 #include "isl/isl-noexceptions.h"
