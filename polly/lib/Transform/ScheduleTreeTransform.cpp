@@ -1400,7 +1400,7 @@ isl::schedule polly::applyFission(MDNode *LoopMD,
   llvm::sort(Sorted);
 
   SmallVector<isl::schedule_node> FissionableStmts;
-  collectFussionableStmts(BandBody, FissionableStmts);
+  collectFissionableStmts(BandBody, FissionableStmts);
   auto N = FissionableStmts.size();
 
   int i = 0;
