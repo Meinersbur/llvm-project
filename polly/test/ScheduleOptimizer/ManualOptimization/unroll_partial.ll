@@ -41,3 +41,8 @@ return:
 ; CHECK-NEXT:      - filter: "[n] -> { Stmt_body[i0] : (-1 + i0) mod 4 = 0 }"
 ; CHECK-NEXT:      - filter: "[n] -> { Stmt_body[i0] : (2 + i0) mod 4 = 0 }"
 ; CHECK-NEXT:      - filter: "[n] -> { Stmt_body[i0] : (1 + i0) mod 4 = 0 }"
+
+
+; OFF-LABEL: Printing analysis 'Polly - Optimize schedule of SCoP' for region: 'for => return' in function 'func':
+; OFF-NEXT:  Calculated schedule:
+; OFF-NEXT:    n/a
