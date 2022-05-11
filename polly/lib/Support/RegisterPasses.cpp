@@ -38,6 +38,7 @@
 #include "polly/ScopInfo.h"
 #include "polly/Simplify.h"
 #include "polly/Support/DumpFunctionPass.h"
+#include "polly/Support/DumpLoopNestPass.h"
 #include "polly/Support/DumpModulePass.h"
 #include "llvm/Analysis/CFGPrinter.h"
 #include "llvm/IR/LegacyPassManager.h"
@@ -201,6 +202,11 @@ static cl::list<std::string> DumpBeforeFile(
     cl::desc("Dump module before Polly transformations to the given file"),
     cl::cat(PollyCategory));
 
+static cl::opt<bool> DumpLoopnest("polly-dump-loopnest",
+                                  cl::cat(PollyCategory));
+static cl::list<std::string> DumpLoopnestFile("polly-dump-loopnest-file",
+                                              cl::cat(PollyCategory));
+
 static cl::opt<bool>
     DumpAfter("polly-dump-after",
               cl::desc("Dump module after Polly transformations into a file "
@@ -289,6 +295,7 @@ void initializePollyPasses(llvm::PassRegistry &Registry) {
   initializeSimplifyWrapperPassPass(Registry);
   initializeSimplifyPrinterLegacyPassPass(Registry);
   initializeDumpModuleWrapperPassPass(Registry);
+  initializeDumpLoopnestWrapperPassPass(Registry);
   initializePruneUnprofitableWrapperPassPass(Registry);
 }
 
@@ -360,6 +367,11 @@ static void registerPollyPasses(llvm::legacy::PassManagerBase &PM,
 
   if (FullyIndexedStaticExpansion)
     PM.add(polly::createMaximalStaticExpansionPass());
+
+  if (DumpLoopnest)
+    PM.add(polly::createDumpLoopnestWrapperPass("-loopnest", true));
+  for (auto &Filename : DumpLoopnestFile)
+    PM.add(polly::createDumpLoopnestWrapperPass(Filename, false));
 
   if (EnablePruneUnprofitable)
     PM.add(polly::createPruneUnprofitableWrapperPass());
@@ -538,6 +550,11 @@ static void buildCommonPollyPipeline(FunctionPassManager &PM,
   if (FullyIndexedStaticExpansion)
     llvm::report_fatal_error("Option -polly-enable-mse not supported with NPM",
                              false);
+
+  if (DumpLoopnest)
+    SPM.addPass(DumpLoopnestPass("-loopnest", true));
+  for (auto &Filename : DumpLoopnestFile)
+    SPM.addPass(DumpLoopnestPass(Filename, false));
 
   if (EnablePruneUnprofitable)
     SPM.addPass(PruneUnprofitablePass());

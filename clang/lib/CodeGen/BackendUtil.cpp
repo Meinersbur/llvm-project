@@ -33,6 +33,7 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/ModuleSummaryIndex.h"
+#include "llvm/IR/OptBisect.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/LTO/LTOBackend.h"
@@ -325,6 +326,31 @@ static bool actionRequiresCodeGen(BackendAction Action) {
          Action != Backend_EmitLL;
 }
 
+struct NoLegacyLoopTransformsPassGate : public llvm::OptPassGate {
+  AnalysisID UnrollPassID;
+
+  NoLegacyLoopTransformsPassGate() {
+    auto UnrollPass = std::unique_ptr<Pass>(createLoopUnrollPass());
+    UnrollPassID = UnrollPass->getPassID();
+  }
+
+  bool isLegacyLoopPass(const Pass *P) const {
+    auto ID = P->getPassID();
+    auto Result = ID == UnrollPassID;
+    return Result;
+  }
+
+  bool shouldRunPass(const Pass *P, StringRef IRDescription) override {
+    return !isLegacyLoopPass(P);
+  }
+
+  /// isEnabled should return true before calling shouldRunPass
+  bool isEnabled() const override { return true; }
+};
+
+static ManagedStatic<NoLegacyLoopTransformsPassGate>
+    DisableLegacyLoopTransformsPassGate;
+
 static bool initTargetOptions(DiagnosticsEngine &Diags,
                               llvm::TargetOptions &Options,
                               const CodeGenOptions &CodeGenOpts,
@@ -511,6 +537,11 @@ getInstrProfOptions(const CodeGenOptions &CodeGenOpts,
   return Options;
 }
 
+
+  if (CodeGenOpts.DisableLegacyLoopTransformation) {
+    TheModule->getContext().setOptPassGate(
+        *DisableLegacyLoopTransformsPassGate);
+  }
 static void setCommandLineOpts(const CodeGenOptions &CodeGenOpts) {
   SmallVector<const char *, 16> BackendArgs;
   BackendArgs.push_back("clang"); // Fake program name.

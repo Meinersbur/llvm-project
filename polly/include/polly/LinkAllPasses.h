@@ -17,6 +17,7 @@
 #include "polly/CodeGen/PPCGCodeGeneration.h"
 #include "polly/Config/config.h"
 #include "polly/Support/DumpFunctionPass.h"
+#include "polly/Support/DumpLoopNestPass.h"
 #include "polly/Support/DumpModulePass.h"
 #include "llvm/ADT/StringRef.h"
 #include <cstdlib>
@@ -128,6 +129,7 @@ struct PollyForcePassLinking {
     polly::createDeLICMPrinterLegacyPass(llvm::outs());
     polly::createDumpModuleWrapperPass("", true);
     polly::createDumpFunctionWrapperPass("");
+    polly::createDumpLoopnestWrapperPass("", true);
     polly::createSimplifyWrapperPass(0);
     polly::createSimplifyPrinterLegacyPass(llvm::outs());
     polly::createPruneUnprofitableWrapperPass();
