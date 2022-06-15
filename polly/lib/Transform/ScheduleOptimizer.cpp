@@ -54,12 +54,15 @@
 #include "polly/ScheduleTreeTransform.h"
 #include "polly/Support/ISLOStream.h"
 #include "polly/Support/ISLTools.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Sequence.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Transforms/Utils/LoopUtils.h"
 #include "isl/options.h"
+#include <tuple>
 
 using namespace llvm;
 using namespace polly;
@@ -693,12 +696,13 @@ static bool runIslScheduleOptimizer(
     return false;
   }
 
-  ScopsProcessed++;
-
   // Schedule without optimizations.
   isl::schedule Schedule = S.getScheduleTree();
   walkScheduleTreeForStatistics(S.getScheduleTree(), 0);
   LLVM_DEBUG(printSchedule(dbgs(), Schedule, "Original schedule tree"));
+
+  isl_ctx *Ctx = S.getIslCtx().get();
+  isl_options_set_tile_scale_tile_loops(Ctx, 0);
 
   bool HasUserTransformation = false;
   if (PragmaBasedOpts) {
@@ -771,6 +775,8 @@ static bool runIslScheduleOptimizer(
     if (Domain.is_null())
       return false;
 
+    ScopsProcessed++;
+
     isl::union_map Validity = D.getDependences(ValidityKinds);
     isl::union_map Proximity = D.getDependences(ProximityKinds);
 
@@ -826,12 +832,12 @@ static bool runIslScheduleOptimizer(
     isl_options_set_schedule_maximize_band_depth(Ctx, IslMaximizeBands);
     isl_options_set_schedule_max_constant_term(Ctx, MaxConstantTerm);
     isl_options_set_schedule_max_coefficient(Ctx, MaxCoefficient);
-    isl_options_set_tile_scale_tile_loops(Ctx, 0);
+    // isl_options_set_tile_scale_tile_loops(Ctx, 0);
 
     auto OnErrorStatus = isl_options_get_on_error(Ctx);
     isl_options_set_on_error(Ctx, ISL_ON_ERROR_CONTINUE);
 
-    auto SC = isl::schedule_constraints::on_domain(Domain);
+    isl::schedule_constraints SC = isl::schedule_constraints::on_domain(Domain);
     SC = SC.set_proximity(Proximity);
     SC = SC.set_validity(Validity);
     SC = SC.set_coincidence(Validity);
