@@ -259,15 +259,18 @@ static Attr *handlePack(Sema &S, Stmt *St, const ParsedAttr &A, SourceRange) {
 
 static Attr *handleLoopUnrolling(Sema &S, Stmt *St, const ParsedAttr &A,
                                  SourceRange) {
-  assert(A.getNumArgs() == 3);
+  assert(A.getNumArgs() == 4);
 
   auto ApplyOnLoc = A.getArgAsIdent(0);
   auto FactorLoc = A.getArgAsExpr(1);
   auto FullLoc = A.getArgAsIdent(2);
+  IdentifierLoc *UnrolledIdLoc = A.getArgAsIdent(3);
 
   auto ApplyOn = ApplyOnLoc ? ApplyOnLoc->Ident->getName() : StringRef();
+  auto UnrolledId =
+      UnrolledIdLoc ? UnrolledIdLoc->Ident->getName() : StringRef();
   return LoopUnrollingAttr::CreateImplicit(S.Context, ApplyOn, FactorLoc,
-                                           FullLoc != nullptr, A.getRange());
+                                           FullLoc != nullptr, UnrolledId, A.getRange()            );
 }
 
 static Attr *handleLoopUnrollingAndJam(Sema &S, Stmt *St, const ParsedAttr &A,

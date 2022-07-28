@@ -806,8 +806,7 @@ LoopInfoStack::applyUnrolling(const LoopTransformation &Transform,
     Result->addAttribute(X);
 
   Orig->addTransformMD(
-      MDNode::get(Ctx, {MDString::get(Ctx, "llvm.loop.unroll.enable"),
-                        createBoolMetadataConstant(Ctx, true)}));
+      MDNode::get(Ctx, {MDString::get(Ctx, "llvm.loop.unroll.enable"),createBoolMetadataConstant(Ctx, true)}));
   Orig->markDisableHeuristic();
   Orig->markNondefault();
 
@@ -827,7 +826,17 @@ LoopInfoStack::applyUnrolling(const LoopTransformation &Transform,
   }
   addDebugLoc(Ctx, "llvm.loop.unroll.loc", Transform, On[0]);
 
+
   Orig->addFollowup("llvm.loop.unroll.followup_unrolled", Result);
+  if (!Transform.UnrolledId.empty()) {
+      assert(!NamedLoopMap.count(Transform.UnrolledId));
+      NamedLoopMap[Transform.UnrolledId] = Result;
+      Result->addTransformMD(
+          MDNode::get(Ctx, {MDString::get(Ctx, "llvm.loop.id"),
+              MDString::get(Ctx, Transform.UnrolledId)}));
+      Result->markNondefault();
+  }
+
   Orig->markNondefault();
   Orig->markDisableHeuristic();
   invalidateVirtualLoop(Orig);
@@ -1547,7 +1556,7 @@ void LoopInfoStack::push(BasicBlock *Header, Function *F,
       }
       addTransformation(LoopTransformation::createUnrolling(
           LocBegin, LocEnd, Unrolling->getApplyOn(), FactorInt,
-          Unrolling->getFull()));
+          Unrolling->getFull(), Unrolling->getUnrolledId()));
       continue;
     }
 

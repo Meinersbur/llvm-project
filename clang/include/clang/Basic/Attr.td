@@ -3947,14 +3947,14 @@ def Pack : Attr {
 
 def LoopUnrolling : Attr {
   // FIXME: Replace by #pragma clang loop unroll, which current emits different metadata
-  // #pragma clang loop unrolling [factor(n)] [full]
-  // #pragma clang loop(loopname) unrolling [factor(n)] [full]
+  // #pragma clang loop unrolling           [factor(n)] [full] [unrolled_id("UnrolledId")]
+  // #pragma clang loop(loopname) unrolling [factor(n)] [full] [unrolled_id("UnrolledId")]
 
   // This exists only to make ClangAttrEmitter emit a printPretty(OS, Policy) function which prints "#pragma" and then calls printPrettyPragma(OS, Policy)
   let Spellings = [Pragma<"", "unrolling">];
   let PrettyPrintSpelling = 0;
 
-  let Args = [StringArgument<"ApplyOn">, ExprArgument<"Factor">, BoolArgument<"Full">];
+  let Args = [StringArgument<"ApplyOn">, ExprArgument<"Factor">, BoolArgument<"Full">, StringArgument<"UnrolledId">];
 
   let AdditionalMembers = [{
     void printPrettyPragma(raw_ostream &OS, const PrintingPolicy &Policy) const {
@@ -3971,9 +3971,11 @@ def LoopUnrolling : Attr {
         OS << ")";
       }
 
-      if (getFull()) {
+      if (getFull()) 
         OS << " full";
-      }
+
+      if (!getUnrolledId().empty())
+        OS << " unrolled_id(" << getUnrolledId() << ")";
     }
   }];
 

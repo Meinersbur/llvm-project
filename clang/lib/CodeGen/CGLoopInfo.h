@@ -90,6 +90,9 @@ struct LoopTransformation {
   int64_t Factor = -1;
   bool Full = false;
 
+  // Unroll 
+  StringRef UnrolledId;
+
   // UnrollAndJam
   llvm::SmallVector<llvm::StringRef, 4> UnrolledIds;
 
@@ -208,7 +211,7 @@ struct LoopTransformation {
   static LoopTransformation createUnrolling(llvm::DebugLoc BeginLoc,
                                             llvm::DebugLoc EndLoc,
                                             llvm::StringRef ApplyOn,
-                                            int64_t Factor, bool Full) {
+                                            int64_t Factor, bool Full,       llvm::StringRef UnrolledId ) {
     LoopTransformation Result;
     Result.BeginLoc = BeginLoc;
     Result.EndLoc = EndLoc;
@@ -218,6 +221,7 @@ struct LoopTransformation {
       Result.ApplyOns.push_back(ApplyOn);
     Result.Factor = Factor;
     Result.Full = Full;
+    Result.UnrolledId = UnrolledId;
     return Result;
   }
 

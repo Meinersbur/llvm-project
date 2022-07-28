@@ -1547,6 +1547,7 @@ enum class TransformClauseKind {
   IslRedirect,   // pack
   Factor,        // unrolling, unrollingandjam
   Full,          // unrolling, unrollingandjam
+  UnrolledId,    // unrolling
   UnrolledIds,   // unrollingandjam
   Autofission,   // fission
   SplitAt,       // fission
@@ -1580,6 +1581,7 @@ static TransformClauseKind parseNextClause(Preprocessor &PP, Parser &Parse,
                   .Case("isl_redirect", TransformClauseKind::IslRedirect)
                   .Case("factor", TransformClauseKind::Factor)
                   .Case("full", TransformClauseKind::Full)
+      .Case("unrolled_id", TransformClauseKind::UnrolledId)
                   .Case("unrolled_ids", TransformClauseKind::UnrolledIds)
                   .Case("autofission", TransformClauseKind::Autofission)
                   .Case("split_at", TransformClauseKind::SplitAt)
@@ -1589,7 +1591,9 @@ static TransformClauseKind parseNextClause(Preprocessor &PP, Parser &Parse,
 
   switch (Kind) {
   case TransformClauseKind::ReversedId:
-  case TransformClauseKind::FusedId: {
+  case TransformClauseKind::FusedId:
+  case TransformClauseKind::UnrolledId:
+  {
     i += 1;
 
     assert(Toks[i].is(tok::l_paren));
@@ -2118,6 +2122,7 @@ bool Parser::HandlePragmaLoopTransform(IdentifierLoc *&PragmaNameLoc,
 
     ArgsUnion Factor{(Expr *)nullptr};
     ArgsUnion Full{(IdentifierLoc *)nullptr}; // Only presence matters
+    ArgsUnion UnrolledId=  (IdentifierLoc *)nullptr;
     while (true) {
       SmallVector<ArgsUnion, 4> ClauseArgs;
       auto Kind = parseNextClause(PP, *this, Tok, Toks, i, ClauseArgs);
@@ -2134,12 +2139,18 @@ bool Parser::HandlePragmaLoopTransform(IdentifierLoc *&PragmaNameLoc,
         assert(ClauseArgs.size() == 1);
         Full = ClauseArgs[0];
         break;
+      case TransformClauseKind::UnrolledId:
+          assert(!UnrolledId);
+          assert(ClauseArgs.size() == 1);
+          UnrolledId = ClauseArgs[0];
+          break;
       }
     }
 
     assert((!Factor || !Full) && "factor(n) and full contradicting");
     ArgHints.push_back(Factor);
     ArgHints.push_back(Full);
+    ArgHints.push_back(UnrolledId);
 
     auto &EofTok = Toks[i];
     assert(EofTok.is(tok::eof));

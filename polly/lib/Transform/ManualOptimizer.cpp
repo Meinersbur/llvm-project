@@ -2585,7 +2585,7 @@ applyParallelizeThread(MDNode *LoopMD, isl::schedule_node BandToParallelize) {
 }
 
 /// Apply full or partial unrolling.
-static isl::schedule applyLoopUnroll(MDNode *LoopMD,
+static isl::schedule applyLoopUnroll(LLVMContext &LLVMCtx, MDNode *LoopMD,
                                      isl::schedule_node BandToUnroll) {
   TransformationMode UnrollMode = ::hasUnrollTransformation(LoopMD);
   if (UnrollMode & TM_Disable)
@@ -2608,10 +2608,10 @@ static isl::schedule applyLoopUnroll(MDNode *LoopMD,
     return applyFullUnroll(BandToUnroll);
 
   if (Factor > 0)
-    return applyPartialUnroll(BandToUnroll, Factor);
+    return applyPartialUnroll(LLVMCtx, BandToUnroll, Factor);
 
-  // For heuristic unrolling, fall back to LLVM's LoopUnroll pass.
-  return {};
+
+  return applyHeuristicUnroll(LLVMCtx, BandToUnroll);
 }
 
 static isl::schedule applyLoopFission(MDNode *LoopMD,
@@ -2812,6 +2812,8 @@ public:
   }
 
   void visitBand(isl::schedule_node_band Band) {
+      LLVMContext &LLVMCtx = F->getContext();
+
     // Transform inner loops first (depth-first search).
     getBase().visitBand(Band);
     if (!Result.is_null())
@@ -2842,6 +2844,10 @@ public:
     if (!LoopMD)
       return;
     auto &Ctx = LoopMD->getContext();
+
+    // Exlicitly skip
+  if (  findOptionMDForLoopID(LoopMD, "llvm.loop.polly.done"))
+     return ;
 
     // Iterate over loop properties to find the first transformation.
     // FIXME: If there are more than one transformation in the LoopMD (making
@@ -2883,7 +2889,7 @@ public:
       } else if (AttrName == "llvm.loop.unroll.enable" ||
                  AttrName == "llvm.loop.unroll.count" ||
                  AttrName == "llvm.loop.unroll.full") {
-        Result = applyLoopUnroll(LoopMD, Band);
+        Result = applyLoopUnroll(LLVMCtx, LoopMD, Band);
         if (!Result.is_null())
           return;
       } else if (AttrName == "llvm.loop.unroll_and_jam.enable") {
