@@ -1183,105 +1183,108 @@ isl::schedule polly::applyFullUnroll(isl::schedule_node BandToUnroll) {
   return Body.get_schedule();
 }
 
-static
-isl::schedule applyPartialUnrollCommon(LLVMContext &LLVMCtx , isl::schedule_node BandToUnroll,    int Factor, bool EnableHeuristic) {
-    assert(Factor >= 1);
-    isl::ctx Ctx = BandToUnroll.ctx();
+static isl::schedule applyPartialUnrollCommon(LLVMContext &LLVMCtx,
+                                              isl::schedule_node BandToUnroll,
+                                              int Factor,
+                                              bool EnableHeuristic) {
+  assert(Factor >= 1);
+  isl::ctx Ctx = BandToUnroll.ctx();
 
- 
-    // Remove the mark, save the attribute for later use.
-    BandAttr *Attr;
-    BandToUnroll = removeMark(BandToUnroll, Attr);
-    assert(isBandWithSingleLoop(BandToUnroll));
+  // Remove the mark, save the attribute for later use.
+  BandAttr *Attr;
+  BandToUnroll = removeMark(BandToUnroll, Attr);
+  assert(isBandWithSingleLoop(BandToUnroll));
 
-    MDNode *FollowupMD = nullptr;
-    if (Attr && Attr->Metadata)
-        FollowupMD = findOptionalNodeOperand(Attr->Metadata, LLVMLoopUnrollFollowupUnrolled);
+  MDNode *FollowupMD = nullptr;
+  if (Attr && Attr->Metadata)
+    FollowupMD =
+        findOptionalNodeOperand(Attr->Metadata, LLVMLoopUnrollFollowupUnrolled);
 
+  if (EnableHeuristic) {
+    SmallVector<Metadata *> NewLoopProperties;
+    NewLoopProperties.push_back(nullptr);
 
-   
-    if (EnableHeuristic) {
-        SmallVector<Metadata *> NewLoopProperties;
-        NewLoopProperties.push_back(nullptr);
+    // Avoid this function is called again
+    NewLoopProperties.push_back(
+        MDNode::get(LLVMCtx, MDString::get(LLVMCtx, "llvm.loop.polly.done")));
 
-        // Avoid this function is called again
-        NewLoopProperties.push_back(MDNode::get(LLVMCtx,  MDString::get(LLVMCtx, "llvm.loop.polly.done" )  ));
-        
-        // Instruct the LLVM loop unroller to unroll this.
-        NewLoopProperties.push_back(MDNode::get(LLVMCtx,  MDString::get(LLVMCtx, "llvm.loop.unroll.enable" )  ));
+    // Instruct the LLVM loop unroller to unroll this.
+    NewLoopProperties.push_back(MDNode::get(
+        LLVMCtx, MDString::get(LLVMCtx, "llvm.loop.unroll.enable")));
 
-        if (FollowupMD) 
-            append_range(NewLoopProperties,  drop_begin( FollowupMD->operands() ));
-       
-        MDNode *LoopID = MDNode::getDistinct(LLVMCtx, NewLoopProperties);
-        LoopID->replaceOperandWith(0, LoopID);
+    if (FollowupMD)
+      append_range(NewLoopProperties, drop_begin(FollowupMD->operands()));
 
-        FollowupMD = LoopID;
+    MDNode *LoopID = MDNode::getDistinct(LLVMCtx, NewLoopProperties);
+    LoopID->replaceOperandWith(0, LoopID);
+
+    FollowupMD = LoopID;
+  }
+
+  isl::schedule_node NewLoop;
+  if (Factor == 1) {
+    // nothing to dp
+    NewLoop = BandToUnroll;
+  } else {
+    isl::multi_union_pw_aff PartialSched = isl::manage(
+        isl_schedule_node_band_get_partial_schedule(BandToUnroll.get()));
+
+    // { Stmt[] -> [x] }
+    isl::union_pw_aff PartialSchedUAff = PartialSched.at(0);
+
+    // Here we assume the schedule stride is one and starts with 0, which is not
+    // necessarily the case.
+    // FIXME: A lot of unnecessary work if factor  is 1
+    isl::union_pw_aff StridedPartialSchedUAff =
+        isl::union_pw_aff::empty(PartialSchedUAff.get_space());
+    isl::val ValFactor{Ctx, Factor};
+    PartialSchedUAff.foreach_pw_aff([&StridedPartialSchedUAff, &ValFactor](
+                                        isl::pw_aff PwAff) -> isl::stat {
+      isl::space Space = PwAff.get_space();
+      isl::set Universe = isl::set::universe(Space.domain());
+      isl::pw_aff AffFactor{Universe, ValFactor};
+      isl::pw_aff DivSchedAff = PwAff.div(AffFactor).floor().mul(AffFactor);
+      StridedPartialSchedUAff = StridedPartialSchedUAff.union_add(DivSchedAff);
+      return isl::stat::ok();
+    });
+
+    isl::union_set_list List = isl::union_set_list(Ctx, Factor);
+    for (auto i : seq<int>(0, Factor)) {
+      // { Stmt[] -> [x] }
+      isl::union_map UMap =
+          isl::union_map::from(isl::union_pw_multi_aff(PartialSchedUAff));
+
+      // { [x] }
+      isl::basic_set Divisible = isDivisibleBySet(Ctx, Factor, i);
+
+      // { Stmt[] }
+      isl::union_set UnrolledDomain = UMap.intersect_range(Divisible).domain();
+
+      List = List.add(UnrolledDomain);
     }
 
-    isl::schedule_node NewLoop ;
-    if (Factor == 1) {
-        // nothing to dp
-        NewLoop = BandToUnroll;
-    } else {
-        isl::multi_union_pw_aff PartialSched = isl::manage(isl_schedule_node_band_get_partial_schedule(BandToUnroll.get()));
+    isl::schedule_node Body =
+        isl::manage(isl_schedule_node_delete(BandToUnroll.copy()));
+    Body = Body.insert_sequence(List);
+    NewLoop = Body.insert_partial_schedule(StridedPartialSchedUAff);
+  }
 
-        // { Stmt[] -> [x] }
-        isl::union_pw_aff PartialSchedUAff = PartialSched.at(0);
+  isl::id NewBandId = createGeneratedLoopAttr(Ctx, FollowupMD);
+  if (!NewBandId.is_null())
+    NewLoop = insertMark(NewLoop, NewBandId);
 
-        // Here we assume the schedule stride is one and starts with 0, which is not
-        // necessarily the case.
-        // FIXME: A lot of unnecessary work if factor  is 1
-        isl::union_pw_aff StridedPartialSchedUAff =
-            isl::union_pw_aff::empty(PartialSchedUAff.get_space());
-        isl::val ValFactor{ Ctx, Factor };
-        PartialSchedUAff.foreach_pw_aff([&StridedPartialSchedUAff,
-            &ValFactor](isl::pw_aff PwAff) -> isl::stat {
-                isl::space Space = PwAff.get_space();
-                isl::set Universe = isl::set::universe(Space.domain());
-                isl::pw_aff AffFactor{ Universe, ValFactor };
-                isl::pw_aff DivSchedAff = PwAff.div(AffFactor).floor().mul(AffFactor);
-                StridedPartialSchedUAff = StridedPartialSchedUAff.union_add(DivSchedAff);
-                return isl::stat::ok();
-            });
-
-        isl::union_set_list List = isl::union_set_list(Ctx, Factor);
-        for (auto i : seq<int>(0, Factor)) {
-            // { Stmt[] -> [x] }
-            isl::union_map UMap =
-                isl::union_map::from(isl::union_pw_multi_aff(PartialSchedUAff));
-
-            // { [x] }
-            isl::basic_set Divisible = isDivisibleBySet(Ctx, Factor, i);
-
-            // { Stmt[] }
-            isl::union_set UnrolledDomain = UMap.intersect_range(Divisible).domain();
-
-            List = List.add(UnrolledDomain);
-        }
-
-        isl::schedule_node Body =
-            isl::manage(isl_schedule_node_delete(BandToUnroll.copy()));
-        Body = Body.insert_sequence(List);
-         NewLoop =
-            Body.insert_partial_schedule(StridedPartialSchedUAff);
-    }
- 
-
-    isl::id NewBandId = createGeneratedLoopAttr(Ctx, FollowupMD);
-    if (!NewBandId.is_null())
-        NewLoop = insertMark(NewLoop, NewBandId);
-
-    return NewLoop.get_schedule();
+  return NewLoop.get_schedule();
 }
 
-isl::schedule polly::applyPartialUnroll(LLVMContext &LLVMCtx ,isl::schedule_node BandToUnroll,
+isl::schedule polly::applyPartialUnroll(LLVMContext &LLVMCtx,
+                                        isl::schedule_node BandToUnroll,
                                         int Factor) {
-    return  applyPartialUnrollCommon(LLVMCtx, BandToUnroll,Factor, false);
+  return applyPartialUnrollCommon(LLVMCtx, BandToUnroll, Factor, false);
 }
 
-isl::schedule polly::applyHeuristicUnroll(LLVMContext &LLVMCtx ,isl::schedule_node BandToUnroll) {
-    return  applyPartialUnrollCommon( LLVMCtx,BandToUnroll,1, true);
+isl::schedule polly::applyHeuristicUnroll(LLVMContext &LLVMCtx,
+                                          isl::schedule_node BandToUnroll) {
+  return applyPartialUnrollCommon(LLVMCtx, BandToUnroll, 1, true);
 }
 
 isl::set polly::getPartialTilePrefixes(isl::set ScheduleRange,

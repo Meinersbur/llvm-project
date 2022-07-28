@@ -2610,7 +2610,6 @@ static isl::schedule applyLoopUnroll(LLVMContext &LLVMCtx, MDNode *LoopMD,
   if (Factor > 0)
     return applyPartialUnroll(LLVMCtx, BandToUnroll, Factor);
 
-
   return applyHeuristicUnroll(LLVMCtx, BandToUnroll);
 }
 
@@ -2812,7 +2811,7 @@ public:
   }
 
   void visitBand(isl::schedule_node_band Band) {
-      LLVMContext &LLVMCtx = F->getContext();
+    LLVMContext &LLVMCtx = F->getContext();
 
     // Transform inner loops first (depth-first search).
     getBase().visitBand(Band);
@@ -2846,8 +2845,8 @@ public:
     auto &Ctx = LoopMD->getContext();
 
     // Exlicitly skip
-  if (  findOptionMDForLoopID(LoopMD, "llvm.loop.polly.done"))
-     return ;
+    if (findOptionMDForLoopID(LoopMD, "llvm.loop.polly.done"))
+      return;
 
     // Iterate over loop properties to find the first transformation.
     // FIXME: If there are more than one transformation in the LoopMD (making

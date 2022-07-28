@@ -22,7 +22,7 @@
 namespace llvm {
 class MDNode;
 class LLVMContext;
-}
+} // namespace llvm
 
 namespace polly {
 struct BandAttr;
@@ -220,10 +220,11 @@ isl::schedule applyLoopUnroll(isl::schedule_node BandToUnroll, int Factor,
 isl::schedule applyFullUnroll(isl::schedule_node BandToUnroll);
 
 /// Replace the AST band @p BandToUnroll by a partially unrolled equivalent.
-isl::schedule applyPartialUnroll(llvm::LLVMContext &LLVMCtx ,isl::schedule_node BandToUnroll, int Factor);
+isl::schedule applyPartialUnroll(llvm::LLVMContext &LLVMCtx,
+                                 isl::schedule_node BandToUnroll, int Factor);
 
-isl::schedule applyHeuristicUnroll(llvm::LLVMContext &LLVMCtx ,isl::schedule_node BandToUnroll);
-
+isl::schedule applyHeuristicUnroll(llvm::LLVMContext &LLVMCtx,
+                                   isl::schedule_node BandToUnroll);
 
 isl::schedule applyAutofission(isl::schedule_node BandToFission,
                                const Dependences *D);
