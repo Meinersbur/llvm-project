@@ -19,7 +19,34 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Metadata.h"
 using namespace clang::CodeGen;
-using namespace llvm;
+using llvm::AllocaInst;
+using llvm::APInt;
+using llvm::BasicBlock;
+using llvm::CallBase;
+using llvm::cast;
+using llvm::ConstantAsMetadata;
+using llvm::ConstantInt;
+using llvm::DenseSet;
+using llvm::dyn_cast;
+using llvm::Function;
+using llvm::Instruction;
+using llvm::isa;
+using llvm::LLVMContext;
+using llvm::LoadInst;
+using llvm::MDNode;
+using llvm::MDString;
+using llvm::Metadata;
+using llvm::Operator;
+using llvm::PHINode;
+using llvm::PointerType;
+using llvm::reverse;
+using llvm::SetVector;
+using llvm::SmallSet;
+using llvm::SmallVector;
+using llvm::StoreInst;
+using llvm::StringMap;
+using llvm::StringRef;
+using llvm::Value;
 
 MDNode *
 LoopInfo::createLoopPropertiesMetadata(ArrayRef<Metadata *> LoopProperties) {
@@ -2055,7 +2082,7 @@ void LoopInfoStack::finish() {
         if (auto CB = dyn_cast<CallBase>(Op)) {
           switch (CB->getIntrinsicID()) {
             // TODO: more whitelisted functions.
-          case Intrinsic::expect:
+          case llvm::Intrinsic::expect:
             break;
           default:
             continue;
