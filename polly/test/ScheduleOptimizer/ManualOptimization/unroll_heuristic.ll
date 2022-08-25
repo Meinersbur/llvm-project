@@ -1,5 +1,5 @@
-; RUN: opt %loadPolly -polly-pragma-based-opts=1 -polly-print-opt-isl -disable-output < %s | FileCheck %s --match-full-lines
-; RUN: opt %loadPolly -polly-pragma-based-opts=0 -polly-print-opt-isl -disable-output < %s | FileCheck %s --match-full-lines
+; RUN: opt %loadPolly -polly-pragma-based-opts=1 -polly-print-opt-isl -disable-output < %s | FileCheck %s --match-full-lines --check-prefixes=CHECK,PRAGMA
+; RUN: opt %loadPolly -polly-pragma-based-opts=0 -polly-print-opt-isl -disable-output < %s | FileCheck %s --match-full-lines --check-prefixes=CHECK,HEURISTIC
 ;
 ; Unrolling with heuristic factor.
 ; Currently not supported and expected to be handled by LLVM's unroll pass.
@@ -35,4 +35,7 @@ return:
 
 ; CHECK-LABEL: Printing analysis 'Polly - Optimize schedule of SCoP' for region: 'for => return' in function 'func':
 ; CHECK-NEXT:  Calculated schedule:
-; CHECK-NEXT:    n/a
+; HEURISTIC-NEXT:    n/a
+
+; PRAGMA:  mark: "Loop with Metadata"
+; PRAGMA:    schedule: "[n] -> [{ Stmt_body[i0] -> [(i0)] }]"

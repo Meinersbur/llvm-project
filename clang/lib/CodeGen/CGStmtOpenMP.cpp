@@ -2093,11 +2093,11 @@ void CodeGenFunction::EmitOMPInnerLoop(
   const AttributedStmt *AS = dyn_cast_or_null<AttributedStmt>(SS);
   OMPLoopNestStack.clear();
   if (AS)
-    LoopStack.push(CondBlock, CGM.getContext(), CGM.getCodeGenOpts(),
+    LoopStack.push(CondBlock, CurFn, CGM.getContext(), CGM.getCodeGenOpts(),
                    AS->getAttrs(), SourceLocToDebugLoc(R.getBegin()),
                    SourceLocToDebugLoc(R.getEnd()));
   else
-    LoopStack.push(CondBlock, SourceLocToDebugLoc(R.getBegin()),
+    LoopStack.push(CondBlock, CurFn, SourceLocToDebugLoc(R.getBegin()),
                    SourceLocToDebugLoc(R.getEnd()));
 
   // If there are any cleanups between here and the loop-exit scope,
@@ -2778,7 +2778,8 @@ void CodeGenFunction::EmitOMPOuterLoop(
   EmitBlock(CondBlock);
   const SourceRange R = S.getSourceRange();
   OMPLoopNestStack.clear();
-  LoopStack.push(CondBlock, SourceLocToDebugLoc(R.getBegin()),
+  LoopStack.push(CondBlock, CurFn, SourceLocToDebugLoc(R.getBegin()),
+
                  SourceLocToDebugLoc(R.getEnd()));
 
   llvm::Value *BoolCondVal = nullptr;

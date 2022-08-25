@@ -28,7 +28,8 @@ return:
 }
 
 
-!2 = distinct !{!2, !5}
+!2 = distinct !{!2, !4, !5}
+!4 = !{!"llvm.loop.unroll.enable", i1 true}
 !5 = !{!"llvm.loop.unroll.count", i4 4}
 
 
