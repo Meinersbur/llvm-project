@@ -37,6 +37,9 @@ class VarDecl;
 
 namespace CodeGen {
 
+ bool  HasStrictReturn(const CodeGenModule &Module, QualType RetTy,
+                            const Decl *TargetDecl);
+
 /// Abstract information about a function or function prototype.
 class CGCalleeInfo {
   /// The function prototype of the callee.

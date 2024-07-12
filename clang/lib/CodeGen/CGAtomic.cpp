@@ -195,6 +195,7 @@ public:
              llvm::Align AtomicAlign, llvm::Align ValueAlign, bool UseLibcall)
       : llvm::AtomicInfo<CGBuilderBaseTy>(&CGF.Builder, 
         CGF.IntTy, CGF.SizeTy,  CGF.getContext().getCharWidth(), CGF.getRuntimeCC(), CGF.CGM.getCodeGenOpts().EnableNoundefAttrs , 
+        HasStrictReturn(CGF.CGM,  CGF.getContext().BoolTy , nullptr ),
         Ty, AtomicSizeInBits,
                                           ValueSizeInBits, AtomicAlign,
                                           ValueAlign, UseLibcall),

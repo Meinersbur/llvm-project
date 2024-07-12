@@ -51,10 +51,11 @@ template <typename IRBuilderTy> struct AtomicInfo {
   // TODO: Handle by BuildLibCalls.h
   Type *IntTy;  // LLVM representation of `int`
   Type *SizeTy; // LLVM representation of `size_t`
-  uint64_t BitsPerByte; // Clang does not hardcode this everwhere
-  CallingConv::ID cc;
+  uint64_t BitsPerByte; // Clang does not always hardcode this
+  CallingConv::ID cc; 
   bool EnableNoundefAttrs;
-
+  bool BoolHasStrictReturn; 
+  bool IntIsPromotable;
 
   Type *Ty;
   uint64_t AtomicSizeInBits;
@@ -67,14 +68,14 @@ template <typename IRBuilderTy> struct AtomicInfo {
 
 public:
   AtomicInfo(IRBuilderTy *Builder, 
-      Type *IntTy, Type *SizeTy, uint64_t BitsPerByte, CallingConv::ID cc, bool EnableNoundefAttrs,
+      Type *IntTy, Type *SizeTy, uint64_t BitsPerByte, CallingConv::ID cc, bool EnableNoundefAttrs, bool BoolHasStrictReturn,
     Type *Ty, uint64_t AtomicSizeInBits,
              uint64_t ValueSizeInBits, llvm::Align AtomicAlign,
              llvm::Align ValueAlign,
              // bool ISVolatile, bool IsWeak,
              bool UseLibcall)
       : Builder(Builder),
-    IntTy(IntTy), SizeTy(SizeTy), BitsPerByte(BitsPerByte), cc(cc), EnableNoundefAttrs(EnableNoundefAttrs),
+    IntTy(IntTy), SizeTy(SizeTy), BitsPerByte(BitsPerByte), cc(cc), EnableNoundefAttrs(EnableNoundefAttrs), BoolHasStrictReturn(BoolHasStrictReturn), IntIsPromotable(IntIsPromotable),
     Ty(Ty), AtomicSizeInBits(AtomicSizeInBits),
         ValueSizeInBits(ValueSizeInBits), AtomicAlign(AtomicAlign),
         ValueAlign(ValueAlign), UseLibcall(UseLibcall) {}
@@ -132,6 +133,10 @@ public:
   }
 
 
+
+
+
+
   // TODO: Replace with emitLibCall and its helpers from from BuildLibCalls.h
    CallInst *emitLibCall(IRBuilderTy *Builder, StringRef fnName,
                                        Type *ResultType,
@@ -179,7 +184,11 @@ public:
   
       AttrBuilder AttrB(C);
       if (EnableNoundefAttrs) 
-        AttrB.addAttribute( llvm::Attribute::NoUndef);
+        AttrB.addAttribute( Attribute::NoUndef);
+      if ((ParamTys.back() == IntTy && IntIsPromotable) ||
+          (ParamTys.back()->isIntegerTy() && ParamTys.back()->getIntegerBitWidth() <IntTy->getIntegerBitWidth() )) {
+            AttrB.addAttribute( llvm::Attribute::SExt);
+      }
       ArgAttrs.push_back(AttributeSet::get(C, AttrB));
     }
     FunctionType *FnType = FunctionType::get(ResultType, ParamTys, false);
@@ -199,9 +208,13 @@ public:
 
         llvm::AttrBuilder RetAttrB(C);
     if (F->getReturnType() ->isIntegerTy(1)) {
-      // Clang switches on type-coersion to int for things that can be passed in a register. 
-      // But then it decides to use `i1` for the coerced type of `i1`. It still adds the zeroextend attribute even though it is useless.
+      // Clang switches on type-coersion to int for things that can be passed in a register, and adds zeroextend.
       RetAttrB.addAttribute(Attribute::ZExt );
+
+      // It also sets noundef for the return value under certain conditions
+      if (EnableNoundefAttrs && BoolHasStrictReturn) {
+               RetAttrB.addAttribute( llvm::Attribute::NoUndef);
+      }
     }
 
     CallInst *CI = Builder->CreateCall(LibcallFn, Args);
@@ -216,13 +229,10 @@ public:
 
 
   llvm::Value *getAtomicSizeValue() const {
-    auto &C = getLLVMContext();
-
-    // TODO: Get from llvm::TargetMachine / clang::TargetInfo
-    //uint16_t SizeTBits = 64;
-    //uint16_t BitsPerByte = 8;
     return llvm::ConstantInt::get(SizeTy,   AtomicSizeInBits / BitsPerByte);
   }
+
+
 
  llvm::Value *
     EmitAtomicCompareExchangeLibcall(
@@ -230,18 +240,9 @@ public:
       llvm::AtomicOrdering Success, llvm::AtomicOrdering Failure) {
     auto &C = getLLVMContext();
 
-    // __atomic_compare_exchange's expected and desired are passed by pointers
-    // FIXME: types
-  //  auto *ExpectedPtr = CreateAlloca(ExpectedVal->getType(), "atomic.expected");
-  //  auto *DesiredPtr = CreateAlloca(DesiredVal->getType(), "atomic.desired");
-  //  Builder->CreateStore(ExpectedPtr, ExpectedVal);
-  //  Builder->CreateStore(DesiredPtr, DesiredVal);
 
-    // TODO: Get from llvm::TargetMachine / clang::TargetInfo
-   // uint64_t IntBits = 32;
 
-    // bool __atomic_compare_exchange(size_t size, void *obj, void *expected,
-    // void *desired, int success, int failure);
+    // In Clang, the type of the builtin is derived from the concrete arguments. It shouldn't.
     Value *Args[6] = {
         getAtomicSizeValue(),
         getAtomicPointer(),
@@ -325,6 +326,7 @@ AtomicResult
     // AggValueSlot::ignored(), SourceLocation(), /*AsValue=*/false,
     // /*CmpXchg=*/true), Res.second);
   }
+
 };
 } // end namespace llvm
 
