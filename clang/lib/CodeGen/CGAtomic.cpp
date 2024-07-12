@@ -1663,13 +1663,13 @@ std::pair<RValue, llvm::Value *> AtomicInfo::EmitAtomicCompareExchange(
     RValue Expected, RValue Desired, llvm::AtomicOrdering Success,
     llvm::AtomicOrdering Failure, bool IsWeak) {
 
-  Address ExpectedAddr = materializeRValue(Expected);
-  llvm::Value *ExpectedPtr = ExpectedAddr.emitRawPointer(CGF);
-  auto *DesiredVal = convertRValueToInt(Desired, /*CmpXchg=*/true);
+ 
+  //llvm::Value *ExpectedPtr = ExpectedAddr.emitRawPointer(CGF);
+  //auto *DesiredVal = convertRValueToInt(Desired, /*CmpXchg=*/true);
 
 
-  auto MaterializeExpectedVal = [&]() -> llvm::Value * { return convertRValueToInt(Expected, /*CmpXchg=*/true);  };
-      auto MaterializeExpectedPtr = [&]() -> llvm::Value * { return  ExpectedAddr.emitRawPointer(CGF);  };
+  auto MaterializeExpectedVal = [&]() -> llvm::Value * {   return convertRValueToInt(Expected, /*CmpXchg=*/true);  };
+      auto MaterializeExpectedPtr = [&]() -> llvm::Value * {  return  materializeRValue(Expected).emitRawPointer(CGF);  };
 
   auto MaterializeDesiredVal = [&]() -> llvm::Value * { return  convertRValueToInt(Desired, /*CmpXchg=*/true); };
       auto MaterializeDesiredPtr = [&]() -> llvm::Value * { return  materializeRValue(Desired).emitRawPointer(CGF); };
