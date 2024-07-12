@@ -1680,6 +1680,19 @@ Value *llvm::emitVSPrintf(Value *Dest, Value *Fmt, Value *VAList,
                      {Dest, Fmt, VAList}, B, TLI);
 }
 
+
+Value *llvm::emitAtomicCompareExchange(Value *Ptr, Value *Expected, Value *Desired, Value *Weak, Value *SuccessMemorder, Value *FailureMemorder,  
+       IRBuilderBase &B, const DataLayout &DL, const TargetLibraryInfo *TLI) {
+  Type *BoolTy = B.getInt1Ty();
+  Type *PtrTy = B.getPtrTy();
+  Type *IntTy = getIntTy(B, TLI);
+  return emitLibCall(LibFunc_atomic_compare_exchange, BoolTy,
+                    {PtrTy , PtrTy,PtrTy, BoolTy, IntTy, IntTy  }, 
+    {Ptr, Expected, Desired, Weak, SuccessMemorder, FailureMemorder},
+                   B, TLI);
+}
+
+
 /// Append a suffix to the function name according to the type of 'Op'.
 static void appendTypeSuffix(Value *Op, StringRef &Name,
                              SmallString<20> &NameBuffer) {

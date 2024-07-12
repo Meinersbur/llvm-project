@@ -192,6 +192,10 @@ namespace llvm {
   Value *emitVSPrintf(Value *Dest, Value *Fmt, Value *VAList, IRBuilderBase &B,
                       const TargetLibraryInfo *TLI);
 
+    /// Emit a call to the __atomic_compare_exchange function.
+  Value *emitAtomicCompareExchange(Value *Ptr, Value *Expected, Value *Desired, Value *Weak, Value *SuccessMemorder, Value *FailureMemorder,  
+       IRBuilderBase &B, const DataLayout &DL, const TargetLibraryInfo *TLI) ;
+
   /// Emit a call to the unary function named 'Name' (e.g.  'floor'). This
   /// function is known to take a single of type matching 'Op' and returns one
   /// value with the same type. If 'Op' is a long double, 'l' is added as the
