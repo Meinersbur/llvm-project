@@ -30,11 +30,10 @@ using namespace CodeGen;
 namespace {
 
     static bool isPromotableArgType(CodeGenFunction &CGF, CanQualType Ty) {
-      auto &Context =  CGF.getContext();
+      ASTContext  &Context =  CGF.getContext();
 
       //  Context.getCanonicalParamType(Ty)
-      auto &FI =   CGF.getTypes(). arrangeLLVMFunctionInfo( Context.VoidTy , FnInfoOpts::None, {Ty },
-          FunctionType::ExtInfo(),   /*paramInfos=*/{}, RequiredArgs::All);
+      const CGFunctionInfo &FI =   CGF.getTypes(). arrangeLLVMFunctionInfo( Context.VoidTy , FnInfoOpts::None, {Ty },   FunctionType::ExtInfo(),   /*paramInfos=*/{}, RequiredArgs::All);
       return  FI.arguments()[0].info.getKind() == ABIArgInfo::Extend; 
   }
 
@@ -76,27 +75,27 @@ public:
     TypeEvaluationKind EvaluationKind = CGF.getEvaluationKind(ValueTy);
 
     TypeInfo ValueTI = C.getTypeInfo(ValueTy);
-    auto ValueSizeInBits = ValueTI.Width;
-    auto ValueAlignInBits = ValueTI.Align;
+    uint64_t ValueSizeInBits = ValueTI.Width;
+    unsigned  ValueAlignInBits = ValueTI.Align;
 
     TypeInfo AtomicTI = C.getTypeInfo(AtomicTy);
-    auto AtomicSizeInBits = AtomicTI.Width;
-    auto AtomicAlignInBits = AtomicTI.Align;
+    uint64_t AtomicSizeInBits = AtomicTI.Width;
+    unsigned AtomicAlignInBits = AtomicTI.Align;
 
     assert(ValueSizeInBits <= AtomicSizeInBits);
     assert(ValueAlignInBits <= AtomicAlignInBits);
 
-    auto AtomicAlign = C.toCharUnitsFromBits(AtomicAlignInBits).getAsAlign();
-    auto ValueAlign = C.toCharUnitsFromBits(ValueAlignInBits).getAsAlign();
+    llvm::Align AtomicAlign = C.toCharUnitsFromBits(AtomicAlignInBits).getAsAlign();
+    llvm::Align  ValueAlign = C.toCharUnitsFromBits(ValueAlignInBits).getAsAlign();
+
+    // MK: Why is CGAtomic doing this? lvalue should not be modified here.
     if (lvalue.getAlignment().isZero())
-      lvalue.setAlignment(CharUnits::fromQuantity(
-          AtomicAlign)); // MK: Why is CGAtomic doing this? Should be Sema.
+      lvalue.setAlignment(CharUnits::fromQuantity(  AtomicAlign)); 
 
-    auto LVal = lvalue;
-    auto ElTy = LVal.getAddress().getElementType();
+    LValue  LVal = lvalue;
+    llvm::Type * ElTy = LVal.getAddress().getElementType();
 
-    bool UseLibcall = !C.getTargetInfo().hasBuiltinAtomic(
-        AtomicSizeInBits, C.toBits(lvalue.getAlignment()));
+    bool UseLibcall = !C.getTargetInfo().hasBuiltinAtomic( AtomicSizeInBits, C.toBits(lvalue.getAlignment()));
     return AtomicInfo(CGF, ElTy, LVal, AtomicTy, ValueTy, EvaluationKind, {},
                       AtomicSizeInBits, ValueSizeInBits, AtomicAlign,
                       ValueAlign, UseLibcall);
@@ -106,15 +105,15 @@ public:
     assert(lvalue.isBitField());
     ASTContext &C = CGF.getContext();
 
-    auto ValueTy = lvalue.getType();
-    auto ValueSizeInBits = C.getTypeSize(ValueTy);
+    QualType  ValueTy = lvalue.getType();
+    uint64_t  ValueSizeInBits = C.getTypeSize(ValueTy);
   const   CGBitFieldInfo &OrigBFI = lvalue.getBitFieldInfo();
-    auto Offset = OrigBFI.Offset % C.toBits(lvalue.getAlignment());
-    auto AtomicSizeInBits = C.toBits(
+    unsigned  Offset = OrigBFI.Offset % C.toBits(lvalue.getAlignment());
+    int64_t AtomicSizeInBits = C.toBits(
         C.toCharUnitsFromBits(Offset + OrigBFI.Size + C.getCharWidth() - 1)
             .alignTo(lvalue.getAlignment()));
     llvm::Value *BitFieldPtr = lvalue.getRawBitFieldPointer(CGF);
-    auto OffsetInChars =
+    CharUnits OffsetInChars =
         (C.toCharUnitsFromBits(OrigBFI.Offset) / lvalue.getAlignment()) *
         lvalue.getAlignment();
     llvm::Value *StoragePtr = CGF.Builder.CreateConstGEP1_64(
@@ -126,10 +125,10 @@ public:
     BFI->StorageSize = AtomicSizeInBits;
     BFI->StorageOffset += OffsetInChars;
     llvm::Type *StorageTy = CGF.Builder.getIntNTy(AtomicSizeInBits);
-    auto LVal = LValue::MakeBitfield(
+    LValue  LVal = LValue::MakeBitfield(
         Address(StoragePtr, StorageTy, lvalue.getAlignment()), *BFI,
         lvalue.getType(), lvalue.getBaseInfo(), lvalue.getTBAAInfo());
-    auto AtomicTy = C.getIntTypeForBitwidth(AtomicSizeInBits, OrigBFI.IsSigned);
+    QualType  AtomicTy = C.getIntTypeForBitwidth(AtomicSizeInBits, OrigBFI.IsSigned);
     if (AtomicTy.isNull()) {
       llvm::APInt Size(
           /*numBits=*/32,
@@ -138,10 +137,10 @@ public:
                                         ArraySizeModifier::Normal,
                                         /*IndexTypeQuals=*/0);
     }
-    auto ValueAlign = lvalue.getAlignment().getAsAlign();
-    auto AtomicAlign = ValueAlign;
+    llvm::Align  ValueAlign = lvalue.getAlignment().getAsAlign();
+     llvm::Align  AtomicAlign = ValueAlign;
 
-    auto ElTy = LVal.getBitFieldAddress().getElementType();
+    llvm::Type * ElTy = LVal.getBitFieldAddress().getElementType();
 
     TypeEvaluationKind EvaluationKind = TEK_Scalar;
     bool UseLibcall = !C.getTargetInfo().hasBuiltinAtomic(
@@ -155,15 +154,15 @@ public:
     assert(lvalue.isVectorElt());
     ASTContext &C = CGF.getContext();
 
-    auto ValueTy = lvalue.getType()->castAs<VectorType>()->getElementType();
-    auto ValueSizeInBits = C.getTypeSize(ValueTy);
-    auto AtomicTy = lvalue.getType();
-    auto AtomicSizeInBits = C.getTypeSize(AtomicTy);
-    auto ValueAlign = lvalue.getAlignment().getAsAlign();
-    auto AtomicAlign = ValueAlign;
-    auto LVal = lvalue;
+    QualType  ValueTy = lvalue.getType()->castAs<VectorType>()->getElementType();
+    uint64_t  ValueSizeInBits = C.getTypeSize(ValueTy);
+    QualType  AtomicTy = lvalue.getType();
+    uint64_t  AtomicSizeInBits = C.getTypeSize(AtomicTy);
+   llvm:: Align  ValueAlign = lvalue.getAlignment().getAsAlign();
+     llvm:: Align AtomicAlign = ValueAlign;
+    LValue  LVal = lvalue;
 
-    auto ElTy = LVal.getVectorAddress().getElementType();
+    llvm::Type * ElTy = LVal.getVectorAddress().getElementType();
 
     TypeEvaluationKind EvaluationKind = TEK_Scalar;
     bool UseLibcall = !C.getTargetInfo().hasBuiltinAtomic(
@@ -178,18 +177,18 @@ public:
     assert(lvalue.isExtVectorElt());
     ASTContext &C = CGF.getContext();
 
-    auto ValueTy = lvalue.getType();
-    auto ValueSizeInBits = C.getTypeSize(ValueTy);
-    auto AtomicTy = ValueTy = CGF.getContext().getExtVectorType(
+    QualType  ValueTy = lvalue.getType();
+    uint64_t ValueSizeInBits = C.getTypeSize(ValueTy);
+    QualType  AtomicTy = ValueTy = CGF.getContext().getExtVectorType(
         lvalue.getType(), cast<llvm::FixedVectorType>(
                               lvalue.getExtVectorAddress().getElementType())
                               ->getNumElements());
-    auto AtomicSizeInBits = C.getTypeSize(AtomicTy);
-    auto ValueAlign = lvalue.getAlignment().getAsAlign();
-    auto AtomicAlign = ValueAlign;
-    auto LVal = lvalue;
+    uint64_t AtomicSizeInBits = C.getTypeSize(AtomicTy);
+    llvm::Align  ValueAlign = lvalue.getAlignment().getAsAlign();
+    llvm::Align  AtomicAlign = ValueAlign;
+    LValue  LVal = lvalue;
 
-    auto ElTy = LVal.getExtVectorAddress().getElementType();
+    llvm::Type * ElTy = LVal.getExtVectorAddress().getElementType();
 
     TypeEvaluationKind EvaluationKind = TEK_Scalar;
     bool UseLibcall = !C.getTargetInfo().hasBuiltinAtomic(

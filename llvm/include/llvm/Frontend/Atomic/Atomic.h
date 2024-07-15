@@ -101,7 +101,7 @@ public:
   virtual void decorateFnDeclAttributes(AttrBuilder &FnAttr, StringRef Name) {}
   virtual void decorateCallAttributes(AttrBuilder &CallAttr, StringRef Name) {}
   virtual AllocaInst *CreateAlloca(Type *Ty,  const Twine &Name) { 
-    auto Alloca = Builder->CreateAlloca(Ty); 
+    AllocaInst * Alloca = Builder->CreateAlloca(Ty); 
   Alloca->setName(Name);
   return Alloca;
   } 
@@ -150,7 +150,7 @@ public:
    CallInst *emitLibCall(IRBuilderTy *Builder, StringRef fnName,
                                        Type *ResultType,
                                        ArrayRef<Value *> Args) {
-      auto &C = Builder->getContext();
+      LLVMContext &C = Builder->getContext();
 
 
 
@@ -163,9 +163,7 @@ public:
       AttrBuilder AttrB(C);
       if (EnableNoundefAttrs) 
         AttrB.addAttribute( Attribute::NoUndef);
-      if ((ParamTys.back() == IntTy && IntIsPromotable)
-        //|| (ParamTys.back()->isIntegerTy() && ParamTys.back()->getIntegerBitWidth() <IntTy->getIntegerBitWidth() )
-         ) {
+      if ((ParamTys.back() == IntTy && IntIsPromotable)         ) {
             AttrB.addAttribute( Attribute::SExt);
       }
       ArgAttrs.push_back(AttributeSet::get(C, AttrB));
@@ -220,7 +218,7 @@ public:
     EmitAtomicCompareExchangeLibcall(
       Value *ExpectedPtr, Value *DesiredPtr,
       AtomicOrdering Success, AtomicOrdering Failure) {
-    auto &C = getLLVMContext();
+    LLVMContext &C = getLLVMContext();
 
 
 
@@ -237,15 +235,14 @@ public:
            IntTy,
             APInt(IntTy->getScalarSizeInBits(),  (int)toCABI(Failure), /*signed=*/true)),
     };
-    auto Res = emitLibCall(Builder, "__atomic_compare_exchange", IntegerType::getInt1Ty(C), Args);
-   // auto PreviousVal = Builder->CreateLoad(ExpectedVal->getType(), ExpectedPtr, "atomic.previous");
-   // return std::make_pair(Res, Res);
-    return Res;
+    return  emitLibCall(Builder, "__atomic_compare_exchange", IntegerType::getInt1Ty(C), Args);
   }
+
 
   Value *castToAtomicIntPointer(Value *addr) const {
     return addr; // opaque pointer
   }
+
 
   Value *getAtomicAddressAsAtomicIntPointer() const {
     return castToAtomicIntPointer(getAtomicPointer());
@@ -260,7 +257,7 @@ public:
                               bool IsVolatile = false, bool IsWeak = false) {
     // Do the atomic store.
     Value *Addr = getAtomicAddressAsAtomicIntPointer();
-    auto *Inst = Builder->CreateAtomicCmpXchg(Addr, ExpectedVal, DesiredVal,
+    AtomicCmpXchgInst *Inst = Builder->CreateAtomicCmpXchg(Addr, ExpectedVal, DesiredVal,
                                               getAtomicAlignment(), Success,
                                               Failure, SyncScope::System);
     // Other decoration.
@@ -268,8 +265,8 @@ public:
     Inst->setWeak(IsWeak);
 
     // Okay, turn that back into the original value type.
-    auto *PreviousVal = Builder->CreateExtractValue(Inst, /*Idxs=*/0);
-    auto *SuccessFailureVal = Builder->CreateExtractValue(Inst, /*Idxs=*/1);
+    Value *PreviousVal = Builder->CreateExtractValue(Inst, /*Idxs=*/0);
+    Value *SuccessFailureVal = Builder->CreateExtractValue(Inst, /*Idxs=*/1);
     return std::make_pair(PreviousVal, SuccessFailureVal);
   }
 
@@ -287,19 +284,19 @@ AtomicResult
 
     // Check whether we should use a library call.
     if (shouldUseLibcall() || ForceLibcall) {
-              auto   ExpectedPtr = MaterializeExpectedPtr();
-        auto   DesiredPtr = MaterializeDesiredPtr();
-      auto Res = EmitAtomicCompareExchangeLibcall(ExpectedPtr, DesiredPtr, Success, Failure);
+              Value *   ExpectedPtr = MaterializeExpectedPtr();
+         Value *   DesiredPtr = MaterializeDesiredPtr();
+       Value * Res = EmitAtomicCompareExchangeLibcall(ExpectedPtr, DesiredPtr, Success, Failure);
 
           return AtomicResult::fromPtr(ExpectedPtr,Res );
     }
 
 
 
-            auto   ExpectedVal = MaterializeExpectedVal();
-        auto   DesiredVal = MaterializeDesiredVal();
-    auto Res = EmitAtomicCompareExchangeOp(ExpectedVal, DesiredVal, Success,      Failure, IsVolatile, IsWeak);
-      return AtomicResult::fromVal(Res.first,Res.second );
+             Value *   ExpectedVal = MaterializeExpectedVal();
+         Value *   DesiredVal = MaterializeDesiredVal();
+     auto [ PreviousVal, SuccessFailureVal] = EmitAtomicCompareExchangeOp(ExpectedVal, DesiredVal, Success,      Failure, IsVolatile, IsWeak);
+      return AtomicResult::fromVal(PreviousVal,SuccessFailureVal );
   }
 
 };
