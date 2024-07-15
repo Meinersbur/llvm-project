@@ -56,26 +56,28 @@ template <typename IRBuilderTy> struct AtomicInfo {
   bool EnableNoundefAttrs;
   bool BoolHasStrictReturn; 
   bool IntIsPromotable;
+//  bool AssumeConvergent;
 
   Type *Ty;
   uint64_t AtomicSizeInBits;
   uint64_t ValueSizeInBits;
-  llvm::Align AtomicAlign;
-  llvm::Align ValueAlign;
+  Align AtomicAlign;
+  Align ValueAlign;
   // bool IsVolatile;
   // bool IsWeak;
   bool UseLibcall;
 
 public:
   AtomicInfo(IRBuilderTy *Builder, 
-      Type *IntTy, Type *SizeTy, uint64_t BitsPerByte, CallingConv::ID cc, bool EnableNoundefAttrs, bool BoolHasStrictReturn, bool IntIsPromotable,
+      Type *IntTy, Type *SizeTy, uint64_t BitsPerByte, CallingConv::ID cc, bool EnableNoundefAttrs, bool BoolHasStrictReturn, bool IntIsPromotable, bool AssumeConvergent,
     Type *Ty, uint64_t AtomicSizeInBits,
-             uint64_t ValueSizeInBits, llvm::Align AtomicAlign,
-             llvm::Align ValueAlign,
+             uint64_t ValueSizeInBits, Align AtomicAlign,
+             Align ValueAlign, 
              // bool ISVolatile, bool IsWeak,
              bool UseLibcall)
       : Builder(Builder),
     IntTy(IntTy), SizeTy(SizeTy), BitsPerByte(BitsPerByte), cc(cc), EnableNoundefAttrs(EnableNoundefAttrs), BoolHasStrictReturn(BoolHasStrictReturn), IntIsPromotable(IntIsPromotable),
+    //AssumeConvergent(AssumeConvergent),
     Ty(Ty), AtomicSizeInBits(AtomicSizeInBits),
         ValueSizeInBits(ValueSizeInBits), AtomicAlign(AtomicAlign),
         ValueAlign(ValueAlign), UseLibcall(UseLibcall) {}
@@ -88,16 +90,23 @@ public:
 
 
 
-  llvm::Align getAtomicAlignment() const { return AtomicAlign; }
+  Align getAtomicAlignment() const { return AtomicAlign; }
   uint64_t getAtomicSizeInBits() const { return AtomicSizeInBits; }
   uint64_t getValueSizeInBits() const { return ValueSizeInBits; }
   bool shouldUseLibcall() const { return UseLibcall; }
-  llvm::Type *getAtomicTy() const { return Ty; }
+  Type *getAtomicTy() const { return Ty; }
 
-  virtual llvm::Value *getAtomicPointer() const = 0;
+  virtual Value *getAtomicPointer() const = 0;
   virtual void decorateWithTBAA(Instruction *I) {}
-  virtual llvm::AllocaInst *CreateAlloca(llvm::Type *Ty,
-                                         const llvm::Twine &Name) = 0;
+  virtual void decorateFnDeclAttributes(AttrBuilder &FnAttr, StringRef Name) {}
+  virtual void decorateCallAttributes(AttrBuilder &CallAttr, StringRef Name) {}
+  virtual AllocaInst *CreateAlloca(Type *Ty,  const Twine &Name) { 
+    auto Alloca = Builder->CreateAlloca(Ty); 
+  Alloca->setName(Name);
+  return Alloca;
+  } 
+
+
 
   /// Is the atomic size larger than the underlying value type?
   ///
@@ -109,18 +118,18 @@ public:
 
   LLVMContext &getLLVMContext() const { return Builder->getContext(); }
 
-  static bool shouldCastToInt(llvm::Type *ValTy, bool CmpXchg) {
+  static bool shouldCastToInt(Type *ValTy, bool CmpXchg) {
     if (ValTy->isFloatingPointTy())
       return ValTy->isX86_FP80Ty() || CmpXchg;
     return !ValTy->isIntegerTy() && !ValTy->isPointerTy();
   }
 
-  llvm::Value *EmitAtomicLoadOp(llvm::AtomicOrdering AO, bool IsVolatile,
+  Value *EmitAtomicLoadOp(AtomicOrdering AO, bool IsVolatile,
                                 bool CmpXchg = false) {
     Value *Ptr = getAtomicPointer();
     Type *AtomicTy = Ty;
     if (shouldCastToInt(Ty, CmpXchg))
-      AtomicTy = llvm::IntegerType::get(getLLVMContext(), AtomicSizeInBits);
+      AtomicTy = IntegerType::get(getLLVMContext(), AtomicSizeInBits);
     LoadInst *Load =
         Builder->CreateAlignedLoad(AtomicTy, Ptr, AtomicAlign, "atomic-load");
     Load->setAtomic(AO);
@@ -141,37 +150,6 @@ public:
    CallInst *emitLibCall(IRBuilderTy *Builder, StringRef fnName,
                                        Type *ResultType,
                                        ArrayRef<Value *> Args) {
-#if 0
-
-  llvm::Constant *C =
-      GetOrCreateLLVMFunction(Name, FTy, GlobalDecl(), /*ForVTable=*/false,
-                              /*DontDefer=*/false, /*IsThunk=*/false,
-                              ExtraAttrs);
-
-  if (auto *F = dyn_cast<llvm::Function>(C)) {
-    if (F->empty()) {
-      // In Windows Itanium environments, try to mark runtime functions
-      // dllimport. For Mingw and MSVC, don't. We don't really know if the user
-      // will link their standard library statically or dynamically. Marking
-      // functions imported when they are not imported can cause linker errors
-      // and warnings.
-      if (!Local && getTriple().isWindowsItaniumEnvironment() &&
-          !getCodeGenOpts().LTOVisibilityPublicStd) {
-        const FunctionDecl *FD = GetRuntimeFunctionDecl(Context, Name);
-        if (!FD || FD->hasAttr<DLLImportAttr>()) {
-          F->setDLLStorageClass(llvm::GlobalValue::DLLImportStorageClass);
-          F->setLinkage(llvm::GlobalValue::ExternalLinkage);
-        }
-      }
-      setDSOLocal(F);
-      // FIXME: We should use CodeGenModule::SetLLVMFunctionAttributes() instead
-      // of trying to approximate the attributes using the LLVM function
-      // signature. This requires revising the API of CreateRuntimeFunction().
-      markRegisterParameterAttributes(F);
-    }
-  }
-    #endif 
-
       auto &C = Builder->getContext();
 
 
@@ -188,7 +166,7 @@ public:
       if ((ParamTys.back() == IntTy && IntIsPromotable)
         //|| (ParamTys.back()->isIntegerTy() && ParamTys.back()->getIntegerBitWidth() <IntTy->getIntegerBitWidth() )
          ) {
-            AttrB.addAttribute( llvm::Attribute::SExt);
+            AttrB.addAttribute( Attribute::SExt);
       }
       ArgAttrs.push_back(AttributeSet::get(C, AttrB));
     }
@@ -197,30 +175,33 @@ public:
 
 
 
-    llvm::AttrBuilder fnAttrB(C);
-    fnAttrB.addAttribute(llvm::Attribute::NoUnwind);
-    fnAttrB.addAttribute(llvm::Attribute::WillReturn);
-    llvm::AttributeList fnAttrs = AttributeList::get(C, llvm::AttributeList::FunctionIndex, fnAttrB);
+    AttrBuilder fnAttrB(C);
+     decorateFnDeclAttributes( fnAttrB, fnName  );
+    fnAttrB.addAttribute(Attribute::NoUnwind);
+    fnAttrB.addAttribute(Attribute::WillReturn);
+    AttributeList fnAttrs = AttributeList::get(C, AttributeList::FunctionIndex, fnAttrB);
     FunctionCallee LibcallFn = M->getOrInsertFunction(fnName, FnType, fnAttrs);
     Function *F = cast<Function>(LibcallFn.getCallee());
     F->setCallingConv(cc);
     markRegisterParameterAttributes(F);
     
 
-        llvm::AttrBuilder RetAttrB(C);
+     AttrBuilder CallAttrB(C);
+   decorateCallAttributes( CallAttrB, fnName  );
+
+        AttrBuilder RetAttrB(C);
     if (F->getReturnType() ->isIntegerTy(1)) {
       // Clang switches on type-coersion to int for things that can be passed in a register, and adds zeroextend.
-      RetAttrB.addAttribute(Attribute::ZExt );
+      RetAttrB.addAttribute(Attribute::ZExt);
 
       // It also sets noundef for the return value under certain conditions
-      if (EnableNoundefAttrs && BoolHasStrictReturn) {
-               RetAttrB.addAttribute( llvm::Attribute::NoUndef);
-      }
+      if (EnableNoundefAttrs && BoolHasStrictReturn) 
+               RetAttrB.addAttribute( Attribute::NoUndef);
     }
 
     CallInst *CI = Builder->CreateCall(LibcallFn, Args);
     CI->setCallingConv(cc);
-    CI->setAttributes(AttributeList::get(C, {}, AttributeSet::get(C, RetAttrB) , ArgAttrs));
+    CI->setAttributes(AttributeList::get(C, AttributeSet::get(C, CallAttrB), AttributeSet::get(C, RetAttrB) , ArgAttrs));
 
 
 
@@ -229,16 +210,16 @@ public:
 
 
 
-  llvm::Value *getAtomicSizeValue() const {
-    return llvm::ConstantInt::get(SizeTy,   AtomicSizeInBits / BitsPerByte);
+  Value *getAtomicSizeValue() const {
+    return ConstantInt::get(SizeTy,   AtomicSizeInBits / BitsPerByte);
   }
 
 
 
- llvm::Value *
+ Value *
     EmitAtomicCompareExchangeLibcall(
-      llvm::Value *ExpectedPtr, llvm::Value *DesiredPtr,
-      llvm::AtomicOrdering Success, llvm::AtomicOrdering Failure) {
+      Value *ExpectedPtr, Value *DesiredPtr,
+      AtomicOrdering Success, AtomicOrdering Failure) {
     auto &C = getLLVMContext();
 
 
@@ -251,12 +232,12 @@ public:
         DesiredPtr,
         Constant::getIntegerValue(
            IntTy,
-            llvm::APInt(IntTy->getScalarSizeInBits(),  (int)llvm::toCABI(Success), /*signed=*/true)),
+            APInt(IntTy->getScalarSizeInBits(),  (int)toCABI(Success), /*signed=*/true)),
        Constant::getIntegerValue(
            IntTy,
-            llvm::APInt(IntTy->getScalarSizeInBits(),  (int)llvm::toCABI(Failure), /*signed=*/true)),
+            APInt(IntTy->getScalarSizeInBits(),  (int)toCABI(Failure), /*signed=*/true)),
     };
-    auto Res = emitLibCall(Builder, "__atomic_compare_exchange", llvm::IntegerType::getInt1Ty(C), Args);
+    auto Res = emitLibCall(Builder, "__atomic_compare_exchange", IntegerType::getInt1Ty(C), Args);
    // auto PreviousVal = Builder->CreateLoad(ExpectedVal->getType(), ExpectedPtr, "atomic.previous");
    // return std::make_pair(Res, Res);
     return Res;
@@ -272,16 +253,16 @@ public:
 
 
 
-  std::pair<llvm::Value *, llvm::Value *>
-  EmitAtomicCompareExchangeOp(llvm::Value *ExpectedVal, llvm::Value *DesiredVal,
-                              llvm::AtomicOrdering Success,
-                              llvm::AtomicOrdering Failure,
+  std::pair<Value *, Value *>
+  EmitAtomicCompareExchangeOp(Value *ExpectedVal, Value *DesiredVal,
+                              AtomicOrdering Success,
+                              AtomicOrdering Failure,
                               bool IsVolatile = false, bool IsWeak = false) {
     // Do the atomic store.
     Value *Addr = getAtomicAddressAsAtomicIntPointer();
     auto *Inst = Builder->CreateAtomicCmpXchg(Addr, ExpectedVal, DesiredVal,
                                               getAtomicAlignment(), Success,
-                                              Failure, llvm::SyncScope::System);
+                                              Failure, SyncScope::System);
     // Other decoration.
     Inst->setVolatile(IsVolatile);
     Inst->setWeak(IsWeak);
@@ -300,9 +281,8 @@ AtomicResult
       function_ref< Value *()> MaterializeExpectedPtr,
         function_ref< Value *()> MaterializeDesiredVal,
       function_ref< Value *()> MaterializeDesiredPtr,
-    //llvm::Value *ExpectedVal, llvm::Value *DesiredVal,
-                            llvm::AtomicOrdering Success,
-                            llvm::AtomicOrdering Failure, bool IsVolatile,
+                            AtomicOrdering Success,
+                            AtomicOrdering Failure, bool IsVolatile,
                             bool IsWeak, bool ForceLibcall=false) {
 
     // Check whether we should use a library call.
@@ -314,18 +294,12 @@ AtomicResult
           return AtomicResult::fromPtr(ExpectedPtr,Res );
     }
 
-    // If we've got a scalar value of the right size, try to avoid going
-    // through memory.
-    // auto *ExpectedVal = convertRValueToInt(ExpectedPtr, /*CmpXchg=*/true);
-    // auto *DesiredVal = convertRValueToInt(DesiredPtr, /*CmpXchg=*/true);
+
 
             auto   ExpectedVal = MaterializeExpectedVal();
         auto   DesiredVal = MaterializeDesiredVal();
     auto Res = EmitAtomicCompareExchangeOp(ExpectedVal, DesiredVal, Success,      Failure, IsVolatile, IsWeak);
       return AtomicResult::fromVal(Res.first,Res.second );
-    // return std::make_pair(ConvertToValueOrAtomic(Res.first,
-    // AggValueSlot::ignored(), SourceLocation(), /*AsValue=*/false,
-    // /*CmpXchg=*/true), Res.second);
   }
 
 };

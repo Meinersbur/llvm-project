@@ -209,10 +209,8 @@ public:
              llvm::Align AtomicAlign, llvm::Align ValueAlign, bool UseLibcall)
       : llvm::AtomicInfo<CGBuilderBaseTy>(&CGF.Builder, 
         CGF.IntTy, CGF.SizeTy,  CGF.getContext().getCharWidth(), CGF.getRuntimeCC(), CGF.CGM.getCodeGenOpts().EnableNoundefAttrs ,  
-        HasStrictReturn(CGF.CGM,  CGF.getContext().BoolTy , nullptr ), isPromotableArgType(CGF,  CGF.getContext().IntTy  ),
-        Ty, AtomicSizeInBits,
-                                          ValueSizeInBits, AtomicAlign,
-                                          ValueAlign, UseLibcall),
+        HasStrictReturn(CGF.CGM,  CGF.getContext().BoolTy , nullptr ), isPromotableArgType(CGF,  CGF.getContext().IntTy  ), CGF.getLangOpts().assumeFunctionsAreConvergent() ,
+        Ty, AtomicSizeInBits,  ValueSizeInBits, AtomicAlign,   ValueAlign, UseLibcall),
         CGF(CGF), AtomicTy(AtomicTy), ValueTy(ValueTy),
         EvaluationKind(EvaluationKind), LVal(lvalue), BFI(std::move(BFI)) {}
 
@@ -221,6 +219,7 @@ public:
   CharUnits getAtomicAlignment() const {
     return CharUnits::fromQuantity(AtomicAlign);
   }
+
   TypeEvaluationKind getEvaluationKind() const { return EvaluationKind; }
   const LValue &getAtomicLValue() const { return LVal; }
   llvm::Value *getAtomicPointer() const override {
@@ -233,6 +232,7 @@ public:
     assert(LVal.isExtVectorElt());
     return LVal.getRawExtVectorPointer(CGF);
   }
+
   Address getAtomicAddress() const {
     llvm::Type *ElTy;
     if (LVal.isSimple())
@@ -249,6 +249,13 @@ public:
   void decorateWithTBAA(llvm::Instruction *I) override {
     CGF.CGM.DecorateInstructionWithTBAA(I, LVal.getTBAAInfo());
   }
+
+     void decorateFnDeclAttributes(llvm::AttrBuilder &FnAttr, StringRef Name)override {
+   CGF.CGM.getDefaultFunctionAttributes(Name, false,false, FnAttr);     
+     }
+   void decorateCallAttributes(llvm::AttrBuilder &CallAttr, StringRef Name)override {
+      CGF.CGM.getDefaultFunctionAttributes(Name, false,true , CallAttr);  
+   }
 
   llvm::AllocaInst *CreateAlloca(llvm::Type *Ty,
                                  const llvm::Twine &Name) override {
@@ -341,6 +348,8 @@ public:
 
   /// Creates temp alloca for intermediate operations on atomic value.
   Address CreateTempAlloca() const;
+
+
 
 private:
   bool requiresMemSetZero(llvm::Type *type) const;
