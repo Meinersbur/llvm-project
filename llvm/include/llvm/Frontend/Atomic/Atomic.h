@@ -68,7 +68,7 @@ template <typename IRBuilderTy> struct AtomicInfo {
 
 public:
   AtomicInfo(IRBuilderTy *Builder, 
-      Type *IntTy, Type *SizeTy, uint64_t BitsPerByte, CallingConv::ID cc, bool EnableNoundefAttrs, bool BoolHasStrictReturn,
+      Type *IntTy, Type *SizeTy, uint64_t BitsPerByte, CallingConv::ID cc, bool EnableNoundefAttrs, bool BoolHasStrictReturn, bool IntIsPromotable,
     Type *Ty, uint64_t AtomicSizeInBits,
              uint64_t ValueSizeInBits, llvm::Align AtomicAlign,
              llvm::Align ValueAlign,
@@ -185,8 +185,9 @@ public:
       AttrBuilder AttrB(C);
       if (EnableNoundefAttrs) 
         AttrB.addAttribute( Attribute::NoUndef);
-      if ((ParamTys.back() == IntTy && IntIsPromotable) ||
-          (ParamTys.back()->isIntegerTy() && ParamTys.back()->getIntegerBitWidth() <IntTy->getIntegerBitWidth() )) {
+      if ((ParamTys.back() == IntTy && IntIsPromotable)
+        //|| (ParamTys.back()->isIntegerTy() && ParamTys.back()->getIntegerBitWidth() <IntTy->getIntegerBitWidth() )
+         ) {
             AttrB.addAttribute( llvm::Attribute::SExt);
       }
       ArgAttrs.push_back(AttributeSet::get(C, AttrB));

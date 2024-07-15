@@ -28,6 +28,18 @@ using namespace clang;
 using namespace CodeGen;
 
 namespace {
+
+    static bool isPromotableArgType(CodeGenFunction &CGF, CanQualType Ty) {
+      auto &Context =  CGF.getContext();
+
+      //  Context.getCanonicalParamType(Ty)
+      auto &FI =   CGF.getTypes(). arrangeLLVMFunctionInfo( Context.VoidTy , FnInfoOpts::None, {Ty },
+          FunctionType::ExtInfo(),   /*paramInfos=*/{}, RequiredArgs::All);
+      return  FI.arguments()[0].info.getKind() == ABIArgInfo::Extend; 
+  }
+
+
+
 class AtomicInfo : public llvm::AtomicInfo<CGBuilderBaseTy> {
   CodeGenFunction &CGF;
   QualType AtomicTy;
@@ -188,14 +200,16 @@ public:
                       ValueAlign, UseLibcall);
   }
 
+
+ 
   AtomicInfo(CodeGenFunction &CGF, llvm::Type *Ty, LValue &lvalue,
              QualType AtomicTy, QualType ValueTy,
              TypeEvaluationKind EvaluationKind, std::unique_ptr< CGBitFieldInfo> BFI,
              uint64_t AtomicSizeInBits, uint64_t ValueSizeInBits,
              llvm::Align AtomicAlign, llvm::Align ValueAlign, bool UseLibcall)
       : llvm::AtomicInfo<CGBuilderBaseTy>(&CGF.Builder, 
-        CGF.IntTy, CGF.SizeTy,  CGF.getContext().getCharWidth(), CGF.getRuntimeCC(), CGF.CGM.getCodeGenOpts().EnableNoundefAttrs , 
-        HasStrictReturn(CGF.CGM,  CGF.getContext().BoolTy , nullptr ),
+        CGF.IntTy, CGF.SizeTy,  CGF.getContext().getCharWidth(), CGF.getRuntimeCC(), CGF.CGM.getCodeGenOpts().EnableNoundefAttrs ,  
+        HasStrictReturn(CGF.CGM,  CGF.getContext().BoolTy , nullptr ), isPromotableArgType(CGF,  CGF.getContext().IntTy  ),
         Ty, AtomicSizeInBits,
                                           ValueSizeInBits, AtomicAlign,
                                           ValueAlign, UseLibcall),
