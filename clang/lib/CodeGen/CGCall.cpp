@@ -1830,8 +1830,8 @@ bool CodeGenModule::MayDropFunctionReturn(const ASTContext &Context,
   return ReturnType.isTriviallyCopyableType(Context);
 }
 
-static bool HasStrictReturn(const CodeGenModule &Module, QualType RetTy,
-                            const Decl *TargetDecl) {
+bool clang::CodeGen::HasStrictReturn(const CodeGenModule &Module,
+                                     QualType RetTy, const Decl *TargetDecl) {
   // As-is msan can not tolerate noundef mismatch between caller and
   // implementation. Mismatch is possible for e.g. indirect calls from C-caller
   // into C++. Such mismatches lead to confusing false reports. To avoid
@@ -2030,6 +2030,9 @@ static void getTrivialDefaultFunctionAttributes(
     std::tie(Var, Value) = Attr.split('=');
     FuncAttrs.addAttribute(Var, Value);
   }
+
+  TargetInfo::BranchProtectionInfo BPI(LangOpts);
+  TargetCodeGenInfo::setBranchProtectionFnAttributes(BPI, FuncAttrs);
 }
 
 /// Merges `target-features` from \TargetOpts and \F, and sets the result in
@@ -3860,7 +3863,8 @@ void CodeGenFunction::EmitFunctionEpilog(const CGFunctionInfo &FI,
       LValue ArgVal =
           LValue::MakeAddr(ArgAddr, RetTy, getContext(), BaseInfo, TBAAInfo);
       EmitStoreOfScalar(
-          Builder.CreateLoad(ReturnValue), ArgVal, /*isInit*/ true);
+          EmitLoadOfScalar(MakeAddrLValue(ReturnValue, RetTy), EndLoc), ArgVal,
+          /*isInit*/ true);
       break;
     }
     }

@@ -1010,7 +1010,7 @@ public:
   bool shouldEmitRTTI(bool ForEH = false) {
     return (ForEH || getLangOpts().RTTI) && !getLangOpts().CUDAIsDevice &&
            !(getLangOpts().OpenMP && getLangOpts().OpenMPIsTargetDevice &&
-             getTriple().isNVPTX());
+             (getTriple().isNVPTX() || getTriple().isAMDGPU()));
   }
 
   /// Get the address of the RTTI descriptor for the given type.
@@ -1849,6 +1849,7 @@ private:
                                            bool AttrOnCallSite,
                                            llvm::AttrBuilder &FuncAttrs);
 
+public:
   /// Helper function for ConstructAttributeList and
   /// addDefaultFunctionDefinitionAttributes.  Builds a set of function
   /// attributes to add to a function with the given properties.
@@ -1856,6 +1857,7 @@ private:
                                     bool AttrOnCallSite,
                                     llvm::AttrBuilder &FuncAttrs);
 
+private:
   llvm::Metadata *CreateMetadataIdentifierImpl(QualType T, MetadataTypeMap &Map,
                                                StringRef Suffix);
 };

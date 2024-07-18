@@ -441,6 +441,11 @@ TLI_DEFINE_ENUM_INTERNAL(atomic_store)
 TLI_DEFINE_STRING_INTERNAL("__atomic_store")
 TLI_DEFINE_SIG_INTERNAL(Void, SizeT, Ptr, Ptr, Int)
 
+/// bool __atomic_compare_exchange(void *ptr, void *expected, void *desired, bool weak, int success_memorder, int failure_memorder)
+TLI_DEFINE_ENUM_INTERNAL(atomic_compare_exchange)
+TLI_DEFINE_STRING_INTERNAL("__atomic_compare_exchange")
+TLI_DEFINE_SIG_INTERNAL(Ptr, Ptr, Ptr, Bool, Int, Int)
+
 /// double __cosh_finite(double x);
 TLI_DEFINE_ENUM_INTERNAL(cosh_finite)
 TLI_DEFINE_STRING_INTERNAL("__cosh_finite")
