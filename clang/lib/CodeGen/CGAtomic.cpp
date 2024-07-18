@@ -271,6 +271,8 @@ public:
     return CGF.CreateTempAlloca(Ty, Name);
   }
 
+
+
   Address getAtomicAddressAsAtomicIntPointer() const {
     return castToAtomicIntPointer(getAtomicAddress());
   }

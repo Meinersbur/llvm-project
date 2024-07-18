@@ -13,6 +13,14 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Operator.h"
+#include "llvm/Transforms/Utils/BuildLibCalls.h"
+
 
 using namespace llvm;
 
@@ -21,8 +29,6 @@ namespace {
 } 
 
 namespace llvm {
-
-
   AtomicInfo::  AtomicInfo(IRBuilderBase &Builder, 
     Type *IntTy, Type *SizeTy,
              uint64_t BitsPerByte, CallingConv::ID cc, bool EnableNoundefAttrs,
@@ -126,6 +132,10 @@ namespace llvm {
                                          ArgAttrs));
 
     return CI;
+  }
+
+    Value * AtomicInfo:: getAtomicSizeValue() const {
+    return ConstantInt::get(SizeTy, AtomicSizeInBits / BitsPerByte);
   }
 
 

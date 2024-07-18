@@ -9,15 +9,25 @@
 #ifndef LLVM_FRONTEND_ATOMIC_ATOMIC_H
 #define LLVM_FRONTEND_ATOMIC_ATOMIC_H
 
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/IR/DataLayout.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/Operator.h"
-#include "llvm/Transforms/Utils/BuildLibCalls.h"
+
+#include <cstdint>
+#include "llvm/IR/CallingConv.h"
+#include "llvm/Support/Alignment.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/AtomicOrdering.h"
+#include "llvm/ADT/ArrayRef.h"
+
 
 namespace llvm {
+  class IRBuilderBase;
+  class AttrBuilder;
+  class AllocaInst;
+  class Value;
+  class Type ;
+    class Instruction ;
+    class Twine;
+    class LLVMContext;
+    class CallInst;
 
 struct AtomicResult {
   Value *V;
@@ -87,6 +97,7 @@ public:
   virtual void decorateFnDeclAttributes(AttrBuilder &FnAttr, StringRef Name) {}
   virtual void decorateCallAttributes(AttrBuilder &CallAttr, StringRef Name) {}
   virtual AllocaInst *CreateAlloca(Type *Ty, const Twine &Name) ;
+  
 
   /// Is the atomic size larger than the underlying value type?
   ///
@@ -105,9 +116,7 @@ public:
 
   CallInst *emitLibCall(StringRef fnName,     Type *ResultType, ArrayRef<Value *> Args);
 
-  Value *getAtomicSizeValue() const {
-    return ConstantInt::get(SizeTy, AtomicSizeInBits / BitsPerByte);
-  }
+  Value *getAtomicSizeValue() const ;
 
   Value *EmitAtomicCompareExchangeLibcall(Value *ExpectedPtr, Value *DesiredPtr,
                                           AtomicOrdering Success,
