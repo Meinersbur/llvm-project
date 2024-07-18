@@ -9,25 +9,23 @@
 #ifndef LLVM_FRONTEND_ATOMIC_ATOMIC_H
 #define LLVM_FRONTEND_ATOMIC_ATOMIC_H
 
-
-#include <cstdint>
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/Support/Alignment.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/AtomicOrdering.h"
-#include "llvm/ADT/ArrayRef.h"
-
+#include <cstdint>
 
 namespace llvm {
-  class IRBuilderBase;
-  class AttrBuilder;
-  class AllocaInst;
-  class Value;
-  class Type ;
-    class Instruction ;
-    class Twine;
-    class LLVMContext;
-    class CallInst;
+class IRBuilderBase;
+class AttrBuilder;
+class AllocaInst;
+class Value;
+class Type;
+class Instruction;
+class Twine;
+class LLVMContext;
+class CallInst;
 
 struct AtomicResult {
   Value *V;
@@ -51,7 +49,7 @@ struct AtomicResult {
   }
 };
 
-//template <typename IRBuilderTy> 
+// template <typename IRBuilderTy>
 struct AtomicInfo {
   IRBuilderBase &Builder;
 
@@ -73,8 +71,7 @@ struct AtomicInfo {
   bool UseLibcall;
 
 public:
-  AtomicInfo(IRBuilderBase &Builder, 
-    Type *IntTy, Type *SizeTy,
+  AtomicInfo(IRBuilderBase &Builder, Type *IntTy, Type *SizeTy,
              uint64_t BitsPerByte, CallingConv::ID cc, bool EnableNoundefAttrs,
              bool BoolHasStrictReturn, bool IntIsPromotable,
              bool AssumeConvergent, Type *Ty, uint64_t AtomicSizeInBits,
@@ -83,8 +80,7 @@ public:
 
   virtual ~AtomicInfo() = default;
 
-
-      static bool shouldCastToInt(Type *ValTy, bool CmpXchg) ;
+  static bool shouldCastToInt(Type *ValTy, bool CmpXchg);
 
   Align getAtomicAlignment() const { return AtomicAlign; }
   uint64_t getAtomicSizeInBits() const { return AtomicSizeInBits; }
@@ -96,8 +92,7 @@ public:
   virtual void decorateWithTBAA(Instruction *I) {}
   virtual void decorateFnDeclAttributes(AttrBuilder &FnAttr, StringRef Name) {}
   virtual void decorateCallAttributes(AttrBuilder &CallAttr, StringRef Name) {}
-  virtual AllocaInst *CreateAlloca(Type *Ty, const Twine &Name) ;
-  
+  virtual AllocaInst *CreateAlloca(Type *Ty, const Twine &Name);
 
   /// Is the atomic size larger than the underlying value type?
   ///
@@ -109,18 +104,17 @@ public:
 
   LLVMContext &getLLVMContext() const;
 
-
   Value *EmitAtomicLoadOp(AtomicOrdering AO, bool IsVolatile,
-                          bool CmpXchg = false) ;
+                          bool CmpXchg = false);
 
+  CallInst *emitLibCall(StringRef fnName, Type *ResultType,
+                        ArrayRef<Value *> Args);
 
-  CallInst *emitLibCall(StringRef fnName,     Type *ResultType, ArrayRef<Value *> Args);
-
-  Value *getAtomicSizeValue() const ;
+  Value *getAtomicSizeValue() const;
 
   Value *EmitAtomicCompareExchangeLibcall(Value *ExpectedPtr, Value *DesiredPtr,
                                           AtomicOrdering Success,
-                                          AtomicOrdering Failure) ;
+                                          AtomicOrdering Failure);
 
   Value *castToAtomicIntPointer(Value *addr) const {
     return addr; // opaque pointer
@@ -133,7 +127,7 @@ public:
   std::pair<Value *, Value *>
   EmitAtomicCompareExchangeOp(Value *ExpectedVal, Value *DesiredVal,
                               AtomicOrdering Success, AtomicOrdering Failure,
-                              bool IsVolatile = false, bool IsWeak = false) ;
+                              bool IsVolatile = false, bool IsWeak = false);
 
   // The callbacks are done to make this an NFC change; It should be sufficient
   // to pass the pointer variant, and leave it to mem2reg to optimize them away.

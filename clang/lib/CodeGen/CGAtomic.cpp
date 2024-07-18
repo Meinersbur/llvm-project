@@ -210,9 +210,8 @@ public:
              uint64_t ValueSizeInBits, llvm::Align AtomicAlign,
              llvm::Align ValueAlign, bool UseLibcall)
       : llvm::AtomicInfo(
-            CGF.Builder, CGF.IntTy, CGF.SizeTy,
-            CGF.getContext().getCharWidth(), CGF.getRuntimeCC(),
-            CGF.CGM.getCodeGenOpts().EnableNoundefAttrs,
+            CGF.Builder, CGF.IntTy, CGF.SizeTy, CGF.getContext().getCharWidth(),
+            CGF.getRuntimeCC(), CGF.CGM.getCodeGenOpts().EnableNoundefAttrs,
             HasStrictReturn(CGF.CGM, CGF.getContext().BoolTy, nullptr),
             isPromotableArgType(CGF, CGF.getContext().IntTy),
             CGF.getLangOpts().assumeFunctionsAreConvergent(), Ty,
@@ -270,8 +269,6 @@ public:
                                  const llvm::Twine &Name) override {
     return CGF.CreateTempAlloca(Ty, Name);
   }
-
-
 
   Address getAtomicAddressAsAtomicIntPointer() const {
     return castToAtomicIntPointer(getAtomicAddress());
@@ -2017,7 +2014,7 @@ void CodeGenFunction::EmitAtomicStore(RValue rvalue, LValue dest,
     Address Addr = atomics.getAtomicAddress();
     if (llvm::Value *Value = atomics.getScalarRValValueOrNull(rvalue))
       if (llvm::AtomicInfo::shouldCastToInt(Value->getType(),
-                                                         /*CmpXchg=*/false)) {
+                                            /*CmpXchg=*/false)) {
         Addr = atomics.castToAtomicIntPointer(Addr);
         ValToStore = Builder.CreateIntCast(ValToStore, Addr.getElementType(),
                                            /*isSigned=*/false);
