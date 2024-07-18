@@ -41,8 +41,9 @@ struct AtomicResult {
   }
 };
 
-template <typename IRBuilderTy> struct AtomicInfo {
-  IRBuilderTy *Builder;
+//template <typename IRBuilderTy> 
+struct AtomicInfo {
+  IRBuilderBase &Builder;
 
   // For libcall ABI; try to be as close to what Clang would emit as possible.
   // TODO: Handle by BuildLibCalls.h
@@ -53,36 +54,27 @@ template <typename IRBuilderTy> struct AtomicInfo {
   bool EnableNoundefAttrs;
   bool BoolHasStrictReturn;
   bool IntIsPromotable;
-  //  bool AssumeConvergent;
 
   Type *Ty;
   uint64_t AtomicSizeInBits;
   uint64_t ValueSizeInBits;
   Align AtomicAlign;
   Align ValueAlign;
-  // bool IsVolatile;
-  // bool IsWeak;
   bool UseLibcall;
 
 public:
-  AtomicInfo(IRBuilderTy *Builder, Type *IntTy, Type *SizeTy,
+  AtomicInfo(IRBuilderBase &Builder, 
+    Type *IntTy, Type *SizeTy,
              uint64_t BitsPerByte, CallingConv::ID cc, bool EnableNoundefAttrs,
              bool BoolHasStrictReturn, bool IntIsPromotable,
              bool AssumeConvergent, Type *Ty, uint64_t AtomicSizeInBits,
              uint64_t ValueSizeInBits, Align AtomicAlign, Align ValueAlign,
-             // bool ISVolatile, bool IsWeak,
-             bool UseLibcall)
-      : Builder(Builder), IntTy(IntTy), SizeTy(SizeTy),
-        BitsPerByte(BitsPerByte), cc(cc),
-        EnableNoundefAttrs(EnableNoundefAttrs),
-        BoolHasStrictReturn(BoolHasStrictReturn),
-        IntIsPromotable(IntIsPromotable),
-        // AssumeConvergent(AssumeConvergent),
-        Ty(Ty), AtomicSizeInBits(AtomicSizeInBits),
-        ValueSizeInBits(ValueSizeInBits), AtomicAlign(AtomicAlign),
-        ValueAlign(ValueAlign), UseLibcall(UseLibcall) {}
+             bool UseLibcall);
 
   virtual ~AtomicInfo() = default;
+
+
+      static bool shouldCastToInt(Type *ValTy, bool CmpXchg) ;
 
   Align getAtomicAlignment() const { return AtomicAlign; }
   uint64_t getAtomicSizeInBits() const { return AtomicSizeInBits; }
@@ -94,11 +86,7 @@ public:
   virtual void decorateWithTBAA(Instruction *I) {}
   virtual void decorateFnDeclAttributes(AttrBuilder &FnAttr, StringRef Name) {}
   virtual void decorateCallAttributes(AttrBuilder &CallAttr, StringRef Name) {}
-  virtual AllocaInst *CreateAlloca(Type *Ty, const Twine &Name) {
-    AllocaInst *Alloca = Builder->CreateAlloca(Ty);
-    Alloca->setName(Name);
-    return Alloca;
-  }
+  virtual AllocaInst *CreateAlloca(Type *Ty, const Twine &Name) ;
 
   /// Is the atomic size larger than the underlying value type?
   ///
@@ -108,85 +96,14 @@ public:
   /// without making it bigger.
   bool hasPadding() const { return (ValueSizeInBits != AtomicSizeInBits); }
 
-  LLVMContext &getLLVMContext() const { return Builder->getContext(); }
+  LLVMContext &getLLVMContext() const;
 
-  static bool shouldCastToInt(Type *ValTy, bool CmpXchg) {
-    if (ValTy->isFloatingPointTy())
-      return ValTy->isX86_FP80Ty() || CmpXchg;
-    return !ValTy->isIntegerTy() && !ValTy->isPointerTy();
-  }
 
   Value *EmitAtomicLoadOp(AtomicOrdering AO, bool IsVolatile,
-                          bool CmpXchg = false) {
-    Value *Ptr = getAtomicPointer();
-    Type *AtomicTy = Ty;
-    if (shouldCastToInt(Ty, CmpXchg))
-      AtomicTy = IntegerType::get(getLLVMContext(), AtomicSizeInBits);
-    LoadInst *Load =
-        Builder->CreateAlignedLoad(AtomicTy, Ptr, AtomicAlign, "atomic-load");
-    Load->setAtomic(AO);
+                          bool CmpXchg = false) ;
 
-    // Other decoration.
-    if (IsVolatile)
-      Load->setVolatile(true);
-    decorateWithTBAA(Load);
-    return Load;
-  }
 
-  // TODO: Replace with emitLibCall and its helpers from from BuildLibCalls.h
-  CallInst *emitLibCall(IRBuilderTy *Builder, StringRef fnName,
-                        Type *ResultType, ArrayRef<Value *> Args) {
-    LLVMContext &C = Builder->getContext();
-
-    SmallVector<Type *, 6> ParamTys;
-    SmallVector<AttributeSet, 6> ArgAttrs;
-    for (Value *Arg : Args) {
-      ParamTys.push_back(Arg->getType());
-
-      AttrBuilder AttrB(C);
-      if (EnableNoundefAttrs)
-        AttrB.addAttribute(Attribute::NoUndef);
-      if ((ParamTys.back() == IntTy && IntIsPromotable)) {
-        AttrB.addAttribute(Attribute::SExt);
-      }
-      ArgAttrs.push_back(AttributeSet::get(C, AttrB));
-    }
-    FunctionType *FnType = FunctionType::get(ResultType, ParamTys, false);
-    Module *M = Builder->GetInsertBlock()->getModule();
-
-    AttrBuilder fnAttrB(C);
-    decorateFnDeclAttributes(fnAttrB, fnName);
-    fnAttrB.addAttribute(Attribute::NoUnwind);
-    fnAttrB.addAttribute(Attribute::WillReturn);
-    AttributeList fnAttrs =
-        AttributeList::get(C, AttributeList::FunctionIndex, fnAttrB);
-    FunctionCallee LibcallFn = M->getOrInsertFunction(fnName, FnType, fnAttrs);
-    Function *F = cast<Function>(LibcallFn.getCallee());
-    F->setCallingConv(cc);
-    markRegisterParameterAttributes(F);
-
-    AttrBuilder CallAttrB(C);
-    decorateCallAttributes(CallAttrB, fnName);
-
-    AttrBuilder RetAttrB(C);
-    if (F->getReturnType()->isIntegerTy(1)) {
-      // Clang switches on type-coersion to int for things that can be passed in
-      // a register, and adds zeroextend.
-      RetAttrB.addAttribute(Attribute::ZExt);
-
-      // It also sets noundef for the return value under certain conditions
-      if (EnableNoundefAttrs && BoolHasStrictReturn)
-        RetAttrB.addAttribute(Attribute::NoUndef);
-    }
-
-    CallInst *CI = Builder->CreateCall(LibcallFn, Args);
-    CI->setCallingConv(cc);
-    CI->setAttributes(AttributeList::get(C, AttributeSet::get(C, CallAttrB),
-                                         AttributeSet::get(C, RetAttrB),
-                                         ArgAttrs));
-
-    return CI;
-  }
+  CallInst *emitLibCall(StringRef fnName,     Type *ResultType, ArrayRef<Value *> Args);
 
   Value *getAtomicSizeValue() const {
     return ConstantInt::get(SizeTy, AtomicSizeInBits / BitsPerByte);
@@ -194,26 +111,7 @@ public:
 
   Value *EmitAtomicCompareExchangeLibcall(Value *ExpectedPtr, Value *DesiredPtr,
                                           AtomicOrdering Success,
-                                          AtomicOrdering Failure) {
-    LLVMContext &C = getLLVMContext();
-
-    // In Clang, the type of the builtin is derived from the concrete arguments.
-    // It shouldn't.
-    Value *Args[6] = {
-        getAtomicSizeValue(),
-        getAtomicPointer(),
-        ExpectedPtr,
-        DesiredPtr,
-        Constant::getIntegerValue(IntTy,
-                                  APInt(IntTy->getScalarSizeInBits(),
-                                        (int)toCABI(Success), /*signed=*/true)),
-        Constant::getIntegerValue(IntTy,
-                                  APInt(IntTy->getScalarSizeInBits(),
-                                        (int)toCABI(Failure), /*signed=*/true)),
-    };
-    return emitLibCall(Builder, "__atomic_compare_exchange",
-                       IntegerType::getInt1Ty(C), Args);
-  }
+                                          AtomicOrdering Failure) ;
 
   Value *castToAtomicIntPointer(Value *addr) const {
     return addr; // opaque pointer
@@ -226,21 +124,7 @@ public:
   std::pair<Value *, Value *>
   EmitAtomicCompareExchangeOp(Value *ExpectedVal, Value *DesiredVal,
                               AtomicOrdering Success, AtomicOrdering Failure,
-                              bool IsVolatile = false, bool IsWeak = false) {
-    // Do the atomic store.
-    Value *Addr = getAtomicAddressAsAtomicIntPointer();
-    AtomicCmpXchgInst *Inst = Builder->CreateAtomicCmpXchg(
-        Addr, ExpectedVal, DesiredVal, getAtomicAlignment(), Success, Failure,
-        SyncScope::System);
-    // Other decoration.
-    Inst->setVolatile(IsVolatile);
-    Inst->setWeak(IsWeak);
-
-    // Okay, turn that back into the original value type.
-    Value *PreviousVal = Builder->CreateExtractValue(Inst, /*Idxs=*/0);
-    Value *SuccessFailureVal = Builder->CreateExtractValue(Inst, /*Idxs=*/1);
-    return std::make_pair(PreviousVal, SuccessFailureVal);
-  }
+                              bool IsVolatile = false, bool IsWeak = false) ;
 
   // The callbacks are done to make this an NFC change; It should be sufficient
   // to pass the pointer variant, and leave it to mem2reg to optimize them away.
@@ -251,24 +135,7 @@ public:
                             function_ref<Value *()> MaterializeDesiredPtr,
                             AtomicOrdering Success, AtomicOrdering Failure,
                             bool IsVolatile, bool IsWeak,
-                            bool ForceLibcall = false) {
-
-    // Check whether we should use a library call.
-    if (shouldUseLibcall() || ForceLibcall) {
-      Value *ExpectedPtr = MaterializeExpectedPtr();
-      Value *DesiredPtr = MaterializeDesiredPtr();
-      Value *Res = EmitAtomicCompareExchangeLibcall(ExpectedPtr, DesiredPtr,
-                                                    Success, Failure);
-
-      return AtomicResult::fromPtr(ExpectedPtr, Res);
-    }
-
-    Value *ExpectedVal = MaterializeExpectedVal();
-    Value *DesiredVal = MaterializeDesiredVal();
-    auto [PreviousVal, SuccessFailureVal] = EmitAtomicCompareExchangeOp(
-        ExpectedVal, DesiredVal, Success, Failure, IsVolatile, IsWeak);
-    return AtomicResult::fromVal(PreviousVal, SuccessFailureVal);
-  }
+                            bool ForceLibcall = false);
 };
 } // end namespace llvm
 

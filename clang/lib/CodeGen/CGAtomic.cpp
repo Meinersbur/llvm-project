@@ -39,7 +39,7 @@ static bool isPromotableArgType(CodeGenFunction &CGF, CanQualType Ty) {
   return FI.arguments()[0].info.getKind() == ABIArgInfo::Extend;
 }
 
-class AtomicInfo : public llvm::AtomicInfo<CGBuilderBaseTy> {
+class AtomicInfo : public llvm::AtomicInfo {
   CodeGenFunction &CGF;
   QualType AtomicTy;
   QualType ValueTy;
@@ -48,7 +48,7 @@ class AtomicInfo : public llvm::AtomicInfo<CGBuilderBaseTy> {
   std::unique_ptr<CGBitFieldInfo> BFI;
 
 public:
-  llvm::AtomicInfo<CGBuilderBaseTy> &getBase() { return *this; }
+  llvm::AtomicInfo &getBase() { return *this; }
 
   static AtomicInfo fromValue(CodeGenFunction &CGF, LValue &lvalue) {
     if (lvalue.isSimple())
@@ -209,8 +209,8 @@ public:
              std::unique_ptr<CGBitFieldInfo> BFI, uint64_t AtomicSizeInBits,
              uint64_t ValueSizeInBits, llvm::Align AtomicAlign,
              llvm::Align ValueAlign, bool UseLibcall)
-      : llvm::AtomicInfo<CGBuilderBaseTy>(
-            &CGF.Builder, CGF.IntTy, CGF.SizeTy,
+      : llvm::AtomicInfo(
+            CGF.Builder, CGF.IntTy, CGF.SizeTy,
             CGF.getContext().getCharWidth(), CGF.getRuntimeCC(),
             CGF.CGM.getCodeGenOpts().EnableNoundefAttrs,
             HasStrictReturn(CGF.CGM, CGF.getContext().BoolTy, nullptr),
@@ -2014,7 +2014,7 @@ void CodeGenFunction::EmitAtomicStore(RValue rvalue, LValue dest,
     // Do the atomic store.
     Address Addr = atomics.getAtomicAddress();
     if (llvm::Value *Value = atomics.getScalarRValValueOrNull(rvalue))
-      if (llvm::AtomicInfo<CGBuilderTy>::shouldCastToInt(Value->getType(),
+      if (llvm::AtomicInfo::shouldCastToInt(Value->getType(),
                                                          /*CmpXchg=*/false)) {
         Addr = atomics.castToAtomicIntPointer(Addr);
         ValToStore = Builder.CreateIntCast(ValToStore, Addr.getElementType(),
