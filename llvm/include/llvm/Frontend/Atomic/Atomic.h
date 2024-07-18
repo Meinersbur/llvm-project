@@ -10,7 +10,6 @@
 #define LLVM_FRONTEND_ATOMIC_ATOMIC_H
 
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/CodeGen/RuntimeLibcalls.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
