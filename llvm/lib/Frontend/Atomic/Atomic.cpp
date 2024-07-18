@@ -28,7 +28,6 @@ AtomicInfo::AtomicInfo(IRBuilderBase &Builder, Type *IntTy, Type *SizeTy,
                        bool IntIsPromotable, bool AssumeConvergent, Type *Ty,
                        uint64_t AtomicSizeInBits, uint64_t ValueSizeInBits,
                        Align AtomicAlign, Align ValueAlign,
-                       // bool ISVolatile, bool IsWeak,
                        bool UseLibcall)
     : Builder(Builder), IntTy(IntTy), SizeTy(SizeTy), BitsPerByte(BitsPerByte),
       cc(cc), EnableNoundefAttrs(EnableNoundefAttrs),
