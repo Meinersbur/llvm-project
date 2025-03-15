@@ -1159,7 +1159,7 @@ template <typename T> struct CalculateSmallVectorDefaultInlinedElements {
   // happens on a 32-bit host and then fails due to sizeof(T) *increasing* on a
   // 64-bit host, is expected to be very rare.
   static_assert(
-      sizeof(T) <= 256,
+      sizeof(T) <= 512,
       "You are trying to use a default number of inlined elements for "
       "`SmallVector<T>` but `sizeof(T)` is really big! Please use an "
       "explicit number of inlined elements with `SmallVector<T, N>` to make "

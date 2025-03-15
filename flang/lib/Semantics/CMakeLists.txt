@@ -33,7 +33,6 @@ add_flang_library(FortranSemantics PARTIAL_SOURCES_INTENDED
   omp_gen
 
   LINK_LIBS
-  FortranSupport
   FortranParser
   FortranEvaluate
 
@@ -73,7 +72,6 @@ add_flang_library(FortranSemanticsCheck PARTIAL_SOURCES_INTENDED
   omp_gen
 
   LINK_LIBS
-  FortranCommon
   FortranParser
   FortranEvaluate
 

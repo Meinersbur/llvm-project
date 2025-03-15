@@ -72,6 +72,8 @@ set(supported_sources
 # List of source not used for GPU offloading.
 set(host_sources
   ${FLANG_SOURCE_DIR}/module/iso_fortran_env_impl.f90
+  ${FLANG_SOURCE_DIR}/module/iso_fortran_env.f90
+  ${FLANG_SOURCE_DIR}/module/__fortran_builtins.f90
   command.cpp
   complex-powi.cpp
   complex-reduction.c
@@ -87,6 +89,10 @@ set(host_sources
   time-intrinsic.cpp
   unit-map.cpp
 )
+
+add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-mmlir> $<$<COMPILE_LANGUAGE:Fortran>:-ignore-missing-type-desc>)
+set(CMAKE_Fortran_PREPROCESS FALSE)
+#add_compile_options(-mllvm -ignore-missing-type-desc)
 
 file(GLOB_RECURSE public_headers
   "${FLANG_RT_SOURCE_DIR}/include/flang_rt/*.h"

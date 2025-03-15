@@ -241,8 +241,8 @@ function (add_flangrt_library name)
     target_include_directories(${tgtname} PUBLIC "${FLANG_RT_SOURCE_DIR}/include")
 
     # For ISO_Fortran_binding.h to be found by the runtime itself (Accessed as #include "flang/ISO_Fortran_binding.h")
-      # User applications can use #include <ISO_Fortran_binding.h>
-  target_include_directories(${tgtname} PUBLIC "${FLANG_SOURCE_DIR}/include")
+    # User applications can use #include <ISO_Fortran_binding.h>
+    target_include_directories(${tgtname} PUBLIC "${FLANG_SOURCE_DIR}/include")
 
     # For Flang-RT's configured config.h to be found
     target_include_directories(${tgtname} PRIVATE "${FLANG_RT_BINARY_DIR}")
@@ -250,15 +250,15 @@ function (add_flangrt_library name)
     # Disable libstdc++/libc++ assertions, even in an LLVM_ENABLE_ASSERTIONS
     # build, to avoid an unwanted dependency on libstdc++/libc++.so.
     if (FLANG_RT_SUPPORTS_UNDEFINE_FLAG)
-      target_compile_options(${tgtname} PUBLIC -U_GLIBCXX_ASSERTIONS)
-      target_compile_options(${tgtname} PUBLIC -U_LIBCPP_ENABLE_ASSERTIONS)
+      target_compile_options(${tgtname} PUBLIC $<$<COMPILE_LANGUAGE:C,CXX>:-U_GLIBCXX_ASSERTIONS>)
+      target_compile_options(${tgtname} PUBLIC $<$<COMPILE_LANGUAGE:C,CXX>:-U_LIBCPP_ENABLE_ASSERTIONS>)
     endif ()
 
     # When building the flang runtime if LTO is enabled the archive file
     # contains LLVM IR rather than object code. Currently flang is not
     # LTO aware so cannot link this file to compiled Fortran code.
     if (FLANG_RT_HAS_FNO_LTO_FLAG)
-      target_compile_options(${tgtname} PRIVATE -fno-lto)
+      #target_compile_options(${tgtname} PRIVATE -fno-lto)
     endif ()
 
     # Flang/Clang (including clang-cl) -compiled programs targeting the MSVC ABI
@@ -268,12 +268,12 @@ function (add_flangrt_library name)
     # dependency to Compiler-RT's builtin library where these are implemented.
     if (MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
       if (FLANG_RT_BUILTINS_LIBRARY)
-      target_compile_options(${tgtname} PRIVATE "$<$<COMPILE_LANGUAGE:CXX,C>:-Xclang>" "$<$<COMPILE_LANGUAGE:CXX,C>:--dependent-lib=${FLANG_RT_BUILTINS_LIBRARY}>")
+      #target_compile_options(${tgtname} PRIVATE "$<$<COMPILE_LANGUAGE:CXX,C>:-Xclang>" "$<$<COMPILE_LANGUAGE:CXX,C>:--dependent-lib=${FLANG_RT_BUILTINS_LIBRARY}>")
       endif ()
     endif ()
     if (MSVC AND CMAKE_Fortran_COMPILER_ID STREQUAL "LLVMFlang")
       if (FLANG_RT_BUILTINS_LIBRARY)
-      target_compile_options(${tgtname} PRIVATE "$<$<COMPILE_LANGUAGE:Fortran>:-Xflang>" "$<$<COMPILE_LANGUAGE:Fortran>:--dependent-lib=${FLANG_RT_BUILTINS_LIBRARY}>")
+      #target_compile_options(${tgtname} PRIVATE "$<$<COMPILE_LANGUAGE:Fortran>:-Xflang>" "$<$<COMPILE_LANGUAGE:Fortran>:--dependent-lib=${FLANG_RT_BUILTINS_LIBRARY}>")
       else ()
         message(WARNING "Did not find libclang_rt.builtins.lib.
           LLVM may emit builtins that are not implemented in msvcrt/ucrt and
