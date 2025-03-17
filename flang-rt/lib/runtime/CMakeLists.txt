@@ -70,13 +70,13 @@ set(supported_sources
 )
 
 # List of source not used for GPU offloading.
+set(CMAKE_Fortran_MODULE_DIRECTORY "${LLVM_LIBRARY_OUTPUT_INTDIR}/../include/flang")
 set(host_sources
   __cuda_builtins.f90
   __cuda_device.f90
   __fortran_builtins.f90
   __fortran_ieee_exceptions.f90
   __fortran_type_info.f90
-  __ppc_types.f90
   cudadevice.f90
   ieee_arithmetic.f90
   ieee_exceptions.f90
@@ -84,7 +84,6 @@ set(host_sources
   iso_c_binding.f90
   iso_fortran_env_impl.f90
   iso_fortran_env.f90
-  mma.f90
 
   command.cpp
   complex-powi.cpp
@@ -102,16 +101,25 @@ set(host_sources
   unit-map.cpp
 )
 
+set_source_files_properties(cudadevice.f90
+  PROPERTIES COMPILE_OPTIONS "-xcuda"
+)
+set_source_files_properties(mma.f90
+  PROPERTIES Fortran_PREPROCESS OFF
+)
+
 message("CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
 message("CMAKE_HOST_SYSTEM_PROCESSOR: ${CMAKE_HOST_SYSTEM_PROCESSOR}")
 if  (CMAKE_SYSTEM_PROCESSOR STREQUAL "powerpc")
   list(APPEND host_source
+    __ppc_types.f90
     __ppc_intrinsics.f90
+    mma.f90
   )
 endif ()
 
 add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-mmlir> $<$<COMPILE_LANGUAGE:Fortran>:-ignore-missing-type-desc>)
-set(CMAKE_Fortran_PREPROCESS FALSE)
+#set(CMAKE_Fortran_PREPROCESS FALSE)
 #add_compile_options(-mllvm -ignore-missing-type-desc)
 
 file(GLOB_RECURSE public_headers
