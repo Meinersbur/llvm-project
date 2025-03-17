@@ -59,7 +59,6 @@ set(FLANG_TEST_PARAMS
 
 set(FLANG_TEST_DEPENDS
   flang
-  module_files
   fir-opt
   tco
   bbc

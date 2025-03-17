@@ -524,7 +524,7 @@ if(build_runtimes)
       # built before "openmp" is built as a runtime project.  Besides "flang"
       # to build the compiler, we also need to add "module_files" to make sure
       # that all .mod files are also properly build.
-      list(APPEND extra_deps "flang" "module_files")
+      list(APPEND extra_deps "flang")
     endif()
     foreach(dep opt llvm-link llvm-extract clang clang-offload-packager)
       if(TARGET ${dep})

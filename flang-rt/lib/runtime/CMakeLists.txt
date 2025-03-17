@@ -71,9 +71,21 @@ set(supported_sources
 
 # List of source not used for GPU offloading.
 set(host_sources
-  ${FLANG_SOURCE_DIR}/module/iso_fortran_env_impl.f90
-  ${FLANG_SOURCE_DIR}/module/iso_fortran_env.f90
-  ${FLANG_SOURCE_DIR}/module/__fortran_builtins.f90
+  __cuda_builtins.f90
+  __cuda_device.f90
+  __fortran_builtins.f90
+  __fortran_ieee_exceptions.f90
+  __fortran_type_info.f90
+  __ppc_types.f90
+  cudadevice.f90
+  ieee_arithmetic.f90
+  ieee_exceptions.f90
+  ieee_features.f90
+  iso_c_binding.f90
+  iso_fortran_env_impl.f90
+  iso_fortran_env.f90
+  mma.f90
+
   command.cpp
   complex-powi.cpp
   complex-reduction.c
@@ -89,6 +101,14 @@ set(host_sources
   time-intrinsic.cpp
   unit-map.cpp
 )
+
+message("CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
+message("CMAKE_HOST_SYSTEM_PROCESSOR: ${CMAKE_HOST_SYSTEM_PROCESSOR}")
+if  (CMAKE_SYSTEM_PROCESSOR STREQUAL "powerpc")
+  list(APPEND host_source
+    __ppc_intrinsics.f90
+  )
+endif ()
 
 add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-mmlir> $<$<COMPILE_LANGUAGE:Fortran>:-ignore-missing-type-desc>)
 set(CMAKE_Fortran_PREPROCESS FALSE)

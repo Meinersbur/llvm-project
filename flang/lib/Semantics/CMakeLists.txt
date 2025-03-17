@@ -74,6 +74,7 @@ add_flang_library(FortranSemanticsCheck PARTIAL_SOURCES_INTENDED
   LINK_LIBS
   FortranParser
   FortranEvaluate
+  FortranSemantics
 
   LINK_COMPONENTS
   Support
