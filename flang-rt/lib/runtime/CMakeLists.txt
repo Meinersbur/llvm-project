@@ -104,7 +104,9 @@ set(host_sources
 set_source_files_properties(cudadevice.f90
   PROPERTIES COMPILE_OPTIONS "-xcuda"
 )
-set_source_files_properties(mma.f90
+set_source_files_properties(
+  mma.f90
+  cudadevice.f90
   PROPERTIES Fortran_PREPROCESS OFF
 )
 
