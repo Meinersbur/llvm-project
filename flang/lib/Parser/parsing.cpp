@@ -14,6 +14,9 @@
 #include "flang/Parser/provenance.h"
 #include "flang/Parser/source.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "flang"
 
 namespace Fortran::parser {
 
@@ -23,7 +26,8 @@ Parsing::~Parsing() {}
 const SourceFile *Parsing::Prescan(const std::string &path, Options options) {
   options_ = options;
   AllSources &allSources{allCooked_.allSources()};
-  allSources.ClearSearchPath(); llvm::errs() << "Prescan('" << path  << "', "  << options.isModuleFile << ")\n";
+  allSources.ClearSearchPath(); 
+  LLVM_DEBUG(llvm::dbgs() << "Prescan('" << path  << "', "  << options.isModuleFile << ")\n");
   if (options.isModuleFile) {
     for (const auto &path : options.searchDirectories) {
       allSources.AppendSearchPathDirectory(path);

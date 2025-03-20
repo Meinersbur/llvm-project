@@ -8,6 +8,8 @@
 
 ! CUDA Fortran procedures available in device subprogram
 
+! MK: rename to cudadevice.cuf ?
+
 module cudadevice
   use __cuda_builtins
   use __cuda_device

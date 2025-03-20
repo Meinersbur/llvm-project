@@ -48,9 +48,10 @@
 #include <optional>
 
 using namespace Fortran::frontend;
+
 namespace llvm {
- cl::opt<bool> FlangIntrinsicsMode("flang-intrinsics-mode",  cl::desc("Use when compiling intrinsic modules"));
- }
+  extern cl::opt<bool> FlangIntrinsicsMode;
+}
 
 //===----------------------------------------------------------------------===//
 // Initialization.
@@ -827,7 +828,7 @@ static std::string getIntrinsicDir(const char *argv) { // MK: To modify this
   driverPath.append("/../include/flang/");
   return std::string(driverPath);
 }
- 
+
 // Generate the path to look for OpenMP headers
 static std::string getOpenMPHeadersDir(const char *argv) {
   llvm::SmallString<128> includePath;
@@ -1555,8 +1556,6 @@ void CompilerInvocation::setDefaultFortranOpts() {
   fortranOptions.isIntrinsicMode = llvm::FlangIntrinsicsMode;
 }
 
-
-
 // TODO: When expanding this method, consider creating a dedicated API for
 // this. Also at some point we will need to differentiate between different
 // targets and add dedicated predefines for each.
@@ -1629,7 +1628,8 @@ void CompilerInvocation::setFortranOpts() {
       preprocessorOptions.searchDirectoriesFromDashI.end());
 
   // Add the ordered list of -intrinsic-modules-path
-  #if 0
+#if 1
+  // Legacy
   fortranOptions.searchDirectories.insert(
       fortranOptions.searchDirectories.end(),
       preprocessorOptions.searchDirectoriesFromIntrModPath.begin(),
@@ -1637,13 +1637,14 @@ void CompilerInvocation::setFortranOpts() {
 #endif 
 
   //  Add the default intrinsic module directory
-  fortranOptions.intrinsicModuleDirectories.emplace_back(getIntrinsicDir(getArgv0()));
-// llvm::append_range(     fortranOptions.intrinsicModuleDirectories,    preprocessorOptions.searchDirectoriesFromIntrModPath );
+#if 1
+     // MK Contradicts description of the option which says "if not found"
     fortranOptions.intrinsicModuleDirectories.insert(
       fortranOptions.intrinsicModuleDirectories.end(),
       preprocessorOptions.searchDirectoriesFromIntrModPath.begin(),
       preprocessorOptions.searchDirectoriesFromIntrModPath.end());
-
+#endif 
+  fortranOptions.intrinsicModuleDirectories.emplace_back(getIntrinsicDir(getArgv0()));
 
   // Add the directory supplied through -J/-module-dir to the list of search
   // directories

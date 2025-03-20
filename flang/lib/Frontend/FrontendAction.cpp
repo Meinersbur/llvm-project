@@ -190,12 +190,13 @@ bool FrontendAction::runSemanticChecks() {
   // Prepare semantics
   ci.setSemantics(std::make_unique<Fortran::semantics::Semantics>(semanticsCtx,
                                                                   *parseTree));
-  auto &semantics = ci.getSemantics();semantics.intrinsicsMode_ = ci.getInvocation().getFortranOpts().isIntrinsicMode;
+  auto &semantics = ci.getSemantics();
+  semantics.intrinsicsMode_ = ci.getInvocation().getFortranOpts().isIntrinsicMode;
   semantics.set_hermeticModuleFileOutput(
       ci.getInvocation().getHermeticModuleFileOutput());
 
   // Run semantic checks
-  semantics.Perform(); 
+  semantics.Perform();
 
   if (reportFatalSemanticErrors()) {
     return false;

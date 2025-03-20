@@ -9,9 +9,12 @@
 #include "flang/Parser/provenance.h"
 #include "flang/Common/idioms.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Debug.h"
 #include <algorithm>
 #include <set>
 #include <utility>
+
+#define DEBUG_TYPE "flang"
 
 namespace Fortran::parser {
 
@@ -187,13 +190,13 @@ const SourceFile *AllSources::Open(std::string path, llvm::raw_ostream &error,
     searchPath_.emplace_front(std::move(*prependPath));
   }
 
-    llvm::errs() << "Open('" << path << "', '" << prependPath << "')\n";
+ LLVM_DEBUG(   llvm::errs() << "Open('" << path << "', '" << prependPath << "')\n");
   for (auto &&sp : searchPath_) {
-        llvm::errs() << "  " << sp << "\n";
+        LLVM_DEBUG(    llvm::errs() << "  " << sp << "\n");
   }
-          llvm::errs() << "\n";
+        LLVM_DEBUG(      llvm::errs() << "\n");
   std::optional<std::string> found{LocateSourceFile(path, searchPath_)};
-      llvm::errs() << "Found = '" << found << "')\n";
+     LLVM_DEBUG(     llvm::errs() << "Found = '" << found << "')\n");
 
   if (prependPath) {
     searchPath_.pop_front();

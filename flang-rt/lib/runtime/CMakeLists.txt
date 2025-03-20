@@ -77,7 +77,7 @@ set(host_sources
   __fortran_builtins.f90
   __fortran_ieee_exceptions.f90
   __fortran_type_info.f90
-#  cudadevice.f90
+  cudadevice.f90
   ieee_arithmetic.f90
   ieee_exceptions.f90
   ieee_features.f90
@@ -117,7 +117,7 @@ set_source_files_properties(
   PROPERTIES Fortran_PREPROCESS OFF
 )
 
-#add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-mllvm=-flang-intrinsics-mode>)
+
 
 message("CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
 message("CMAKE_HOST_SYSTEM_PROCESSOR: ${CMAKE_HOST_SYSTEM_PROCESSOR}")
@@ -130,6 +130,8 @@ if (CMAKE_SYSTEM_PROCESSOR STREQUAL "powerpc")
 endif ()
 
 add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-mmlir> $<$<COMPILE_LANGUAGE:Fortran>:-ignore-missing-type-desc>)
+
+#add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-mllvm=-flang-intrinsics-mode>)
 #set(CMAKE_Fortran_PREPROCESS FALSE)
 #add_compile_options(-mllvm -ignore-missing-type-desc)
 
@@ -200,7 +202,9 @@ else()
         LINK_LIBRARIES ${Backtrace_LIBRARY}
         ADDITIONAL_HEADERS ${public_headers} ${private_headers}
       )
-    target_compile_options(${name} PRIVATE "-fintrinsic-modules-path=${CMAKE_CURRENT_BINARY_DIR}/module.${suffix}")
+# "$<$<COMPILE_LANGUAGE:Fortran>:-Xflang>"
+#TODO: Better as -fintrinsic-modules-path, need added option
+    target_compile_options(${name} PRIVATE  "$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-fintrinsic-modules-path>" "$<$<COMPILE_LANGUAGE:Fortran>:${CMAKE_CURRENT_BINARY_DIR}/module.${suffix}>")
 
     if (msvc_lib)
       set_target_properties(${name}

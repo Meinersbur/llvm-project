@@ -8,6 +8,10 @@
 !-----------------------------------------
 ! RUN: %flang_fc1 -fsyntax-only %s  2>&1 | FileCheck %s --allow-empty --check-prefix=WITHOUT
 ! RUN: not %flang_fc1 -fsyntax-only -fintrinsic-modules-path %S/Inputs/ %s  2>&1 | FileCheck %s --check-prefix=GIVEN
+! RUNx: %flang_fc1 -fsyntax-only -fintrinsic-modules-path %S/Inputs/ %s  2>&1 | FileCheck %s --check-prefix=GIVEN
+! RUNx: %flang_fc1 -fsyntax-only -fintrinsic-modules-path %S/Inputs/ %s  2>&1 > %S/out.log
+! RUNx: FileCheck %s --check-prefix=GIVEN --input-file=%S/out.log
+! RUNx: false
 
 ! WITHOUT-NOT: 'ieee_arithmetic.mod' was not found
 ! WITHOUT-NOT: 'iso_fortran_env.mod' was not found
