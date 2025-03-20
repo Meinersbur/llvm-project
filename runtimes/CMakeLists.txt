@@ -144,7 +144,7 @@ if (CXX_SUPPORTS_UNWINDLIB_EQ_NONE_FLAG)
   # below.
   check_c_compiler_flag("--start-no-unused-arguments" C_SUPPORTS_START_NO_UNUSED_ARGUMENTS)
   if (C_SUPPORTS_START_NO_UNUSED_ARGUMENTS)
-    set(CMAKE_REQUIRED_FLAGS "${ORIG_CMAKE_REQUIRED_FLAGS} --start-no-unused-arguments --unwindlib=none --end-no-unused-arguments")
+    set(CMAKE_REQUIRED_FLAGS "${ORIG_CMAKE_REQUIRED_FLAGS} --start-no-unused-arguments> --unwindlib=none --end-no-unused-arguments")
   endif()
 endif()
 

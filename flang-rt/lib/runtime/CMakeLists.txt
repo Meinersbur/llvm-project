@@ -13,6 +13,26 @@ set(HAVE_BACKTRACE ${Backtrace_FOUND})
 set(BACKTRACE_HEADER ${Backtrace_HEADER})
 
 
+include(CheckFortranSourceCompiles)
+include(CMakePushCheckState)
+
+cmake_push_check_state(RESET)
+set(CMAKE_REQUIRED_FLAGS "-ffree-form")
+check_fortran_source_compiles([[
+    program quadmath
+      real(16) :: var1
+      print *, 'Hello'
+    end
+  ]]
+  FORTRAN_SUPPORTS_REAL16
+)
+cmake_pop_check_state()
+
+message("FORTRAN_SUPPORTS_REAL16: ${FORTRAN_SUPPORTS_REAL16}")
+if  (FORTRAN_SUPPORTS_REAL16)
+  add_compile_definitions(FLANG_SUPPORT_R16=1)
+endif ()
+
 # List of files that are buildable for all devices.
 set(supported_sources
   ${FLANG_SOURCE_DIR}/lib/Decimal/binary-to-decimal.cpp
