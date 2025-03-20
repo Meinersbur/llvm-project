@@ -607,13 +607,18 @@ parser::Program &SemanticsContext::SaveParseTree(parser::Program &&tree) {
   return modFileParseTrees_.emplace_back(std::move(tree));
 }
 
-bool Semantics::Perform() {
+bool Semantics::Perform() {  
+  const auto *frontModule{std::get_if<common::Indirection<parser::Module>>(&program_.v.front().u)};
+  auto &&source = std::get<parser::Statement<parser::ModuleStmt>>(frontModule->value().t)   .statement.v.source;
+
+
+
   // Implicitly USE the __Fortran_builtins module so that special types
   // (e.g., __builtin_team_type) are available to semantics, esp. for
   // intrinsic checking.
-  if (!program_.v.empty()) {
-    const auto *frontModule{std::get_if<common::Indirection<parser::Module>>(
-        &program_.v.front().u)};
+    if (intrinsicsMode_) {
+      int a = 0;
+    } else   if (!program_.v.empty()) {
     if (frontModule &&
         (std::get<parser::Statement<parser::ModuleStmt>>(frontModule->value().t)
                     .statement.v.source == "__fortran_builtins" ||

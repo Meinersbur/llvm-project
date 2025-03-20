@@ -23,11 +23,11 @@ struct Options {
 
   using Predefinition = std::pair<std::string, std::optional<std::string>>;
 
-  bool isFixedForm{false};
+  bool isFixedForm{false}; bool isIntrinsicMode{false};
   int fixedFormColumns{72};
   common::LanguageFeatureControl features;
   std::vector<std::string> searchDirectories;
-  std::vector<std::string> intrinsicModuleDirectories;
+  std::vector<std::string> intrinsicModuleDirectories; 
   std::vector<Predefinition> predefinitions;
   bool instrumentedParse{false};
   bool isModuleFile{false};

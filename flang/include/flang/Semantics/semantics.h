@@ -363,7 +363,7 @@ public:
   void EmitMessages(llvm::raw_ostream &);
   void DumpSymbols(llvm::raw_ostream &);
   void DumpSymbolsSources(llvm::raw_ostream &) const;
-
+  bool intrinsicsMode_ = false;
 private:
   SemanticsContext &context_;
   parser::Program &program_;

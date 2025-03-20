@@ -13,6 +13,7 @@
 #include "resolve-directives.h"
 #include "resolve-names-utils.h"
 #include "rewrite-parse-tree.h"
+#include "llvm/Support/CommandLine.h"
 #include "flang/Common/indirection.h"
 #include "flang/Common/restorer.h"
 #include "flang/Common/visit.h"
@@ -43,6 +44,10 @@
 #include <map>
 #include <set>
 #include <stack>
+
+namespace llvm {
+ extern cl::opt<bool> FlangIntrinsicsMode;
+ }
 
 namespace Fortran::semantics {
 
@@ -3901,7 +3906,7 @@ void ModuleVisitor::BeginModule(const parser::Name &name, bool isSubmodule) {
 // If an error occurs, report it and return nullptr.
 Scope *ModuleVisitor::FindModule(const parser::Name &name,
     std::optional<bool> isIntrinsic, Scope *ancestor) {
-  ModFileReader reader{context()};
+  ModFileReader reader{context()}; 
   Scope *scope{
       reader.Read(name.source, isIntrinsic, ancestor, /*silent=*/false)};
   if (scope) {

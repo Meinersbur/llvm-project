@@ -3971,6 +3971,16 @@ def fsyntax_only : Flag<["-"], "fsyntax-only">,
   Visibility<[ClangOption, CLOption, DXCOption, CC1Option, FC1Option, FlangOption]>,
   Group<Action_Group>,
   HelpText<"Run the preprocessor, parser and semantic analysis stages">;
+
+
+def fno_builtin_modules : Flag<["-"], "fno-builtin-modules">,
+  Visibility<[FC1Option]>,
+  HelpText<"Do not implicitly use builtin modules (for internal use only)">;
+def fbuiltin_modules_path : Joined<["--"], "fbuiltin-modules-path=">, 
+  Visibility<[FlangOption, FC1Option]>,
+  HelpText<"Specify where Flang finds its builtin modules">;
+
+
 def ftabstop_EQ : Joined<["-"], "ftabstop=">, Group<f_Group>;
 def ftemplate_depth_EQ : Joined<["-"], "ftemplate-depth=">, Group<f_Group>,
   Visibility<[ClangOption, CC1Option]>,

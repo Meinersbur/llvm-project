@@ -186,7 +186,15 @@ const SourceFile *AllSources::Open(std::string path, llvm::raw_ostream &error,
     // INCLUDE statements.
     searchPath_.emplace_front(std::move(*prependPath));
   }
+
+    llvm::errs() << "Open('" << path << "', '" << prependPath << "')\n";
+  for (auto &&sp : searchPath_) {
+        llvm::errs() << "  " << sp << "\n";
+  }
+          llvm::errs() << "\n";
   std::optional<std::string> found{LocateSourceFile(path, searchPath_)};
+      llvm::errs() << "Found = '" << found << "')\n";
+
   if (prependPath) {
     searchPath_.pop_front();
   }

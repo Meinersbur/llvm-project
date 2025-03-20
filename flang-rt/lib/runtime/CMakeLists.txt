@@ -77,7 +77,7 @@ set(host_sources
   __fortran_builtins.f90
   __fortran_ieee_exceptions.f90
   __fortran_type_info.f90
-  cudadevice.f90
+#  cudadevice.f90
   ieee_arithmetic.f90
   ieee_exceptions.f90
   ieee_features.f90
@@ -101,6 +101,13 @@ set(host_sources
   unit-map.cpp
 )
 
+
+# Stop CMake from ignoring dependencies between builtin-modules. CMake added this just for (classic) Flang.
+# Two spellings for the same thing: https://cmake.org/cmake/help/latest/prop_tgt/Fortran_BUILDING_INSTRINSIC_MODULES.html
+set(Fortran_BUILDING_INTRINSIC_MODULES TRUE)
+set(Fortran_BUILDING_INSTRINSIC_MODULES TRUE)
+
+
 set_source_files_properties(cudadevice.f90
   PROPERTIES COMPILE_OPTIONS "-xcuda"
 )
@@ -110,9 +117,11 @@ set_source_files_properties(
   PROPERTIES Fortran_PREPROCESS OFF
 )
 
+#add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-mllvm=-flang-intrinsics-mode>)
+
 message("CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
 message("CMAKE_HOST_SYSTEM_PROCESSOR: ${CMAKE_HOST_SYSTEM_PROCESSOR}")
-if  (CMAKE_SYSTEM_PROCESSOR STREQUAL "powerpc")
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "powerpc")
   list(APPEND host_source
     __ppc_types.f90
     __ppc_intrinsics.f90
@@ -184,12 +193,14 @@ else()
 
   function (add_win_flangrt_runtime libtype suffix msvc_lib)
     set(name "flang_rt.runtime.${suffix}")
+    #include_directories("${CMAKE_CURRENT_BINARY_DIR}/module.${suffix}")
     add_flangrt_library(${name} ${libtype}
         ${sources}
         ${ARGN}
         LINK_LIBRARIES ${Backtrace_LIBRARY}
         ADDITIONAL_HEADERS ${public_headers} ${private_headers}
       )
+    target_compile_options(${name} PRIVATE "-fintrinsic-modules-path=${CMAKE_CURRENT_BINARY_DIR}/module.${suffix}")
 
     if (msvc_lib)
       set_target_properties(${name}

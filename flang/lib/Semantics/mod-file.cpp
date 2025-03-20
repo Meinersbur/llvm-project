@@ -20,11 +20,16 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/CommandLine.h"
 #include <algorithm>
 #include <fstream>
 #include <set>
 #include <string_view>
 #include <vector>
+
+namespace llvm {
+ extern llvm::cl::opt<bool> FlangIntrinsicsMode;
+ }
 
 namespace Fortran::semantics {
 
@@ -1345,6 +1350,10 @@ Scope *ModFileReader::Read(SourceName name, std::optional<bool> isIntrinsic,
     }
     ancestorName = ancestor->GetName().value().ToString();
   }
+
+  if (llvm::FlangIntrinsicsMode)
+    isIntrinsic = false;
+
   auto requiredHash{context_.moduleDependences().GetRequiredHash(
       name.ToString(), isIntrinsic.value_or(false))};
   if (!isIntrinsic.value_or(false) && !ancestor) {

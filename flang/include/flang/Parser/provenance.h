@@ -188,7 +188,7 @@ public:
   ProvenanceRange IntersectionWithSourceFiles(ProvenanceRange) const;
   llvm::raw_ostream &Dump(llvm::raw_ostream &) const;
 
-private:
+public:
   struct Inclusion {
     const SourceFile &source;
     bool isModule{false};

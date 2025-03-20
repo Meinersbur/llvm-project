@@ -39,6 +39,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/TargetParser/Host.h"
 #include "llvm/TargetParser/Triple.h"
 #include <algorithm>
@@ -47,6 +48,9 @@
 #include <optional>
 
 using namespace Fortran::frontend;
+namespace llvm {
+ cl::opt<bool> FlangIntrinsicsMode("flang-intrinsics-mode",  cl::desc("Use when compiling intrinsic modules"));
+ }
 
 //===----------------------------------------------------------------------===//
 // Initialization.
@@ -815,7 +819,7 @@ static bool parseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
 }
 
 // Generate the path to look for intrinsic modules
-static std::string getIntrinsicDir(const char *argv) {
+static std::string getIntrinsicDir(const char *argv) { // MK: To modify this
   // TODO: Find a system independent API
   llvm::SmallString<128> driverPath;
   driverPath.assign(llvm::sys::fs::getMainExecutable(argv, nullptr));
@@ -823,7 +827,7 @@ static std::string getIntrinsicDir(const char *argv) {
   driverPath.append("/../include/flang/");
   return std::string(driverPath);
 }
-
+ 
 // Generate the path to look for OpenMP headers
 static std::string getOpenMPHeadersDir(const char *argv) {
   llvm::SmallString<128> includePath;
@@ -1547,8 +1551,11 @@ void CompilerInvocation::setDefaultFortranOpts() {
   fortranOptions.searchDirectories.emplace_back(
       getOpenMPHeadersDir(getArgv0()));
 
-  fortranOptions.isFixedForm = false;
+  fortranOptions.isFixedForm = false;  
+  fortranOptions.isIntrinsicMode = llvm::FlangIntrinsicsMode;
 }
+
+
 
 // TODO: When expanding this method, consider creating a dedicated API for
 // this. Also at some point we will need to differentiate between different
@@ -1622,14 +1629,21 @@ void CompilerInvocation::setFortranOpts() {
       preprocessorOptions.searchDirectoriesFromDashI.end());
 
   // Add the ordered list of -intrinsic-modules-path
+  #if 0
   fortranOptions.searchDirectories.insert(
       fortranOptions.searchDirectories.end(),
       preprocessorOptions.searchDirectoriesFromIntrModPath.begin(),
       preprocessorOptions.searchDirectoriesFromIntrModPath.end());
+#endif 
 
   //  Add the default intrinsic module directory
-  fortranOptions.intrinsicModuleDirectories.emplace_back(
-      getIntrinsicDir(getArgv0()));
+  fortranOptions.intrinsicModuleDirectories.emplace_back(getIntrinsicDir(getArgv0()));
+// llvm::append_range(     fortranOptions.intrinsicModuleDirectories,    preprocessorOptions.searchDirectoriesFromIntrModPath );
+    fortranOptions.intrinsicModuleDirectories.insert(
+      fortranOptions.intrinsicModuleDirectories.end(),
+      preprocessorOptions.searchDirectoriesFromIntrModPath.begin(),
+      preprocessorOptions.searchDirectoriesFromIntrModPath.end());
+
 
   // Add the directory supplied through -J/-module-dir to the list of search
   // directories

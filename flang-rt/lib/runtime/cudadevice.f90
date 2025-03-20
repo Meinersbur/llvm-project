@@ -9,6 +9,7 @@
 ! CUDA Fortran procedures available in device subprogram
 
 module cudadevice
+  use __cuda_builtins
   use __cuda_device
   use, intrinsic :: __fortran_builtins, only: dim3 => __builtin_dim3
   use, intrinsic :: __fortran_builtins, only: c_devptr => __builtin_c_devptr
