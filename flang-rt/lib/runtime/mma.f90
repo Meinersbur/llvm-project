@@ -55,16 +55,9 @@ module mma
     !dir$ ignore_tkr(r) arg2; \
   end function;
 
-  FUNC_VPI0VI(1)
-  FUNC_VPI0VI(2)
-  FUNC_VPI0VI(4)
-  FUNC_VPI0VI(8)
-  FUNC_VPI0VU(1)
-  FUNC_VPI0VU(2)
-  FUNC_VPI0VU(4)
-  FUNC_VPI0VU(8)
-  FUNC_VPI0VR(4)
-  FUNC_VPI0VR(8)
+  FUNC_VPI0VI(1) FUNC_VPI0VI(2) FUNC_VPI0VI(4) FUNC_VPI0VI(8)
+  FUNC_VPI0VU(1) FUNC_VPI0VU(2) FUNC_VPI0VU(4) FUNC_VPI0VU(8)
+  FUNC_VPI0VR(4) FUNC_VPI0VR(8)
   FUNC_VPI0VP
 
 #undef FUNC_VPI0VP
@@ -75,12 +68,11 @@ module mma
 !! ========== 3 arguments subroutine interface ===============================!!
 !! __vector_pair subroutine s(vp, integer, vector(i))
 #define SUB_VPI0VI(VKIND) \
-  pure subroutine sub_vpi0vi##VKIND(arg1, argg2, arg3); \
+  pure subroutine sub_vpi0vi##VKIND(arg1, arg2, arg3); \
     __vector_pair, intent(in) :: arg1; \
-    integer(8), intent(in) :: argg2; \
+    integer(8), intent(in) :: arg2; \
     !dir$ ignore_tkr(k) arg2; \
-    vector(integer(VKIND)), \
-      intent(out) :: arg3; \
+    vector(integer(VKIND)), intent(out) :: arg3; \
     !dir$ ignore_tkr(r) arg3; \
   end subroutine;
 
@@ -152,28 +144,14 @@ module mma
     vector(real(VKIND)), intent(in) :: arg1, arg2; \
   end subroutine ;
 
-  ELEM_SUB_VPVIVI(1)
-  ELEM_SUB_VPVIVI(2)
-  ELEM_SUB_VPVIVI(4)
-  ELEM_SUB_VPVIVI(8)
-  ELEM_SUB_VPVUVU(1)
-  ELEM_SUB_VPVUVU(2)
-  ELEM_SUB_VPVUVU(4)
-  ELEM_SUB_VPVUVU(8)
-  ELEM_SUB_VPVRVR(4)
-  ELEM_SUB_VPVRVR(8)
-
-  SUB_VPI0VI(1)
-
-!!  SUB_VPI0VI(2)
-!!  SUB_VPI0VI(4)
-!!  SUB_VPI0VI(8)
-!!  SUB_VPI0VU(1)
-!!  SUB_VPI0VU(2)
-!!  SUB_VPI0VU(4)
-!!  SUB_VPI0VU(8)
-!!  SUB_VPI0VR(4)
-!!  SUB_VPI0VR(8)
+  ELEM_SUB_VPVIVI(1) ELEM_SUB_VPVIVI(2)
+  ELEM_SUB_VPVIVI(4) ELEM_SUB_VPVIVI(8)
+  ELEM_SUB_VPVUVU(1) ELEM_SUB_VPVUVU(2)
+  ELEM_SUB_VPVUVU(4) ELEM_SUB_VPVUVU(8)
+  ELEM_SUB_VPVRVR(4) ELEM_SUB_VPVRVR(8)
+  SUB_VPI0VI(1) SUB_VPI0VI(2) SUB_VPI0VI(4) SUB_VPI0VI(8)
+  SUB_VPI0VU(1) SUB_VPI0VU(2) SUB_VPI0VU(4) SUB_VPI0VU(8)
+  SUB_VPI0VR(4) SUB_VPI0VR(8)
 
 #undef ELEM_SUB_VPVIVI
 #undef ELEM_SUB_VPVUVU
@@ -203,12 +181,10 @@ module mma
     vector(real(VKIND)), intent(in) :: a, b; \
   end subroutine ;
 
-  ELEM_SUB_VQVIVI(inout,1)
-  ELEM_SUB_VQVIVI(inout,2)
+  ELEM_SUB_VQVIVI(inout,1) ELEM_SUB_VQVIVI(inout,2)
   ELEM_SUB_VQVUVU(inout,1)
   ELEM_SUB_VQVRVR(inout,4)
-  ELEM_SUB_VQVIVI(out,1)
-  ELEM_SUB_VQVIVI(out,2)
+  ELEM_SUB_VQVIVI(out,1) ELEM_SUB_VQVIVI(out,2)
   ELEM_SUB_VQVUVU(out,1)
   ELEM_SUB_VQVRVR(out,4)
 
@@ -262,16 +238,11 @@ module mma
     vector(real(VKIND)), intent(in) :: arg1, arg2, arg3, arg4; \
   end subroutine ;
 
-  ELEM_SUB_VQVIVIVIVI(1)
-  ELEM_SUB_VQVIVIVIVI(2)
-  ELEM_SUB_VQVIVIVIVI(4)
-  ELEM_SUB_VQVIVIVIVI(8)
-  ELEM_SUB_VQVUVUVUVU(1)
-  ELEM_SUB_VQVUVUVUVU(2)
-  ELEM_SUB_VQVUVUVUVU(4)
-  ELEM_SUB_VQVUVUVUVU(8)
-  ELEM_SUB_VQVRVRVRVR(4)
-  ELEM_SUB_VQVRVRVRVR(8)
+  ELEM_SUB_VQVIVIVIVI(1) ELEM_SUB_VQVIVIVIVI(2)
+  ELEM_SUB_VQVIVIVIVI(4) ELEM_SUB_VQVIVIVIVI(8)
+  ELEM_SUB_VQVUVUVUVU(1) ELEM_SUB_VQVUVUVUVU(2)
+  ELEM_SUB_VQVUVUVUVU(4) ELEM_SUB_VQVUVUVUVU(8)
+  ELEM_SUB_VQVRVRVRVR(4) ELEM_SUB_VQVRVRVRVR(8)
 
 #undef ELEM_SUB_VQVRVRVRVR
 #undef ELEM_SUB_VQVUVUVUVU
@@ -279,21 +250,21 @@ module mma
 
 !! subroutine s(__vector_quad, vector(u), vector(u), integer, integer)
 #define ELEM_SUB_VQVUVUII(INTENT, VKIND) \
-  elemental subroutine sub_vq##INTENT##vu##VKIND##vu##VKIND##ii(acc, a, b, xmaskkkk, ymaskk); \
+  elemental subroutine sub_vq##INTENT##vu##VKIND##vu##VKIND##ii(acc, a, b, xmask, ymask); \
     __vector_quad, intent(INTENT) :: acc; \
     vector(unsigned(VKIND)), intent(in) :: a, b; \
-    integer(8), intent(in) :: xmaskkkk, ymaskk; \
-    !dir$ ignore_tkr(k) xmaskkkk; \
-    !dir$ ignore_tkr(k) ymaskk; \
+    integer(8), intent(in) :: xmask, ymask; \
+    !dir$ ignore_tkr(k) xmask; \
+    !dir$ ignore_tkr(k) ymask; \
   end subroutine ;
 
 !! subroutine s(__vector_quad, vector(r), vector(r), integer, integer)
 #define ELEM_SUB_VQVRVRII(INTENT, VKIND) \
-  elemental subroutine sub_vq##INTENT##vr##VKIND##vr##VKIND##ii(acc, a, b, xmaskkkk, ymask); \
+  elemental subroutine sub_vq##INTENT##vr##VKIND##vr##VKIND##ii(acc, a, b, xmask, ymask); \
     __vector_quad, intent(INTENT) :: acc; \
     vector(real(VKIND)), intent(in) :: a, b; \
-    integer(8), intent(in) :: xmaskkkk, ymask; \
-    !dir$ ignore_tkr(k) xmaskkkk; \
+    integer(8), intent(in) :: xmask, ymask; \
+    !dir$ ignore_tkr(k) xmask; \
     !dir$ ignore_tkr(k) ymask; \
   end subroutine ;
 

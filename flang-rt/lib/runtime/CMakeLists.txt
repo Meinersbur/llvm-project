@@ -92,12 +92,9 @@ set(supported_sources
 # List of source not used for GPU offloading.
 set(CMAKE_Fortran_MODULE_DIRECTORY "${LLVM_LIBRARY_OUTPUT_INTDIR}/../include/flang")
 set(host_sources
-  __cuda_builtins.f90
-  __cuda_device.f90
   __fortran_builtins.f90
   __fortran_ieee_exceptions.f90
   __fortran_type_info.f90
-  cudadevice.f90
   ieee_arithmetic.f90
   ieee_exceptions.f90
   ieee_features.f90
@@ -122,25 +119,6 @@ set(host_sources
 )
 
 
-# Stop CMake from ignoring dependencies between builtin-modules. CMake added this feature for (classic) Flang.
-# Two spellings for the same thing: https://cmake.org/cmake/help/latest/prop_tgt/Fortran_BUILDING_INSTRINSIC_MODULES.html
-set(Fortran_BUILDING_INTRINSIC_MODULES TRUE)
-set(Fortran_BUILDING_INSTRINSIC_MODULES TRUE)
-
-
-set_source_files_properties(
-  __cuda_device.f90
-  cudadevice.f90
-  PROPERTIES COMPILE_OPTIONS "-xcuda;-fsyntax-only"
-)
-set_source_files_properties(
-  __ppc_types.f90
-  __ppc_intrinsics.f90
-  mma.f90
-  PROPERTIES Fortran_PREPROCESS OFF
-)
-
-
 
 message("CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
 message("CMAKE_HOST_SYSTEM_PROCESSOR: ${CMAKE_HOST_SYSTEM_PROCESSOR}")
@@ -151,6 +129,36 @@ if (CMAKE_SYSTEM_PROCESSOR STREQUAL "powerpc")
     mma.f90
   )
 endif ()
+
+if (FLANG_RT_EXPERIMENTAL_OFFLOAD_SUPPORT STREQUAL "CUDA")
+  list(APPEND supported_sources
+    __cuda_builtins.f90
+    __cuda_device.f90
+    cudadevice.f90
+    mma.f90
+  )
+
+# FIXME: Has CMake support for CUDA-Fortran?
+# Open question: __cuda_builtins.f90 does not need -xcuda?
+set_source_files_properties(
+  __cuda_device.f90
+  cudadevice.f90
+  PROPERTIES COMPILE_OPTIONS "-xcuda"
+)
+endif ()
+
+
+
+# Flang is not always able to consume its own preprocessor output
+set_source_files_properties(
+  mma.f90
+  cudadevice.f90
+  PROPERTIES Fortran_PREPROCESS OFF
+)
+
+
+
+
 
 add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-mmlir> $<$<COMPILE_LANGUAGE:Fortran>:-ignore-missing-type-desc>)
 
@@ -197,12 +205,22 @@ endif ()
 set(sources ${supported_sources} ${host_sources} ${f128_sources})
 
 
+# Stop CMake from ignoring dependencies between builtin-modules. CMake added this feature for (classic) Flang.
+# Two spellings for the same thing: https://cmake.org/cmake/help/latest/prop_tgt/Fortran_BUILDING_INSTRINSIC_MODULES.html
+set(Fortran_BUILDING_INTRINSIC_MODULES TRUE)
+set(Fortran_BUILDING_INSTRINSIC_MODULES TRUE)
+
+
 if (NOT WIN32)
   add_flangrt_library(flang_rt.runtime STATIC SHARED
     ${sources}
     LINK_LIBRARIES ${Backtrace_LIBRARY}
     INSTALL_WITH_TOOLCHAIN
     ADDITIONAL_HEADERS ${public_headers} ${private_headers}
+    TARGET_PROPERTIES
+      # Two spellings for the same thing: https://cmake.org/cmake/help/latest/prop_tgt/Fortran_BUILDING_INSTRINSIC_MODULES.html
+      Fortran_BUILDING_INTRINSIC_MODULES TRUE
+      Fortran_BUILDING_INSTRINSIC_MODULES TRUE
   )
 
   enable_cuda_compilation(flang_rt.runtime "${supported_sources}")
@@ -224,6 +242,9 @@ else()
         ${ARGN}
         LINK_LIBRARIES ${Backtrace_LIBRARY}
         ADDITIONAL_HEADERS ${public_headers} ${private_headers}
+        TARGET_PROPERTIES
+          Fortran_BUILDING_INTRINSIC_MODULES TRUE
+          Fortran_BUILDING_INSTRINSIC_MODULES TRUE
       )
 # "$<$<COMPILE_LANGUAGE:Fortran>:-Xflang>"
 #TODO: Better as -fintrinsic-modules-path, need added option

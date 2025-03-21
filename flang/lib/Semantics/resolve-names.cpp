@@ -3909,9 +3909,9 @@ void ModuleVisitor::BeginModule(const parser::Name &name, bool isSubmodule) {
 // If an error occurs, report it and return nullptr.
 Scope *ModuleVisitor::FindModule(const parser::Name &name,
     std::optional<bool> isIntrinsic, Scope *ancestor) {
- //LLVM_DEBUG( 
-   llvm::errs() << "FindModule(" << name.ToString() << ", " << isIntrinsic << ")\n";
-// );
+ LLVM_DEBUG( 
+   llvm::errs() << "FindModule(" << name.ToString() << ", " << isIntrinsic << ")\n"
+ );
   ModFileReader reader{context()};
   Scope *scope{
       reader.Read(name.source, isIntrinsic, ancestor, /*silent=*/false)};

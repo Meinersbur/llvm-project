@@ -3353,9 +3353,27 @@ struct StmtFunctionStmt {
 // !DIR$ UNROLL_AND_JAM [N]
 // !DIR$ <anything else>
 struct CompilerDirective {
-  UNION_CLASS_BOILERPLATE(CompilerDirective);
+  template <typename A, typename = common::NoLvalue<A>>
+  CompilerDirective(A &&x) : u(std::move(x)) {
+  int a = 0;
+  }
+  using UnionTrait = std::true_type;
+  CompilerDirective(CompilerDirective &&) = default;
+  CompilerDirective &operator=(CompilerDirective &&) = default;
+  CompilerDirective(const CompilerDirective &) = delete;
+  CompilerDirective &operator=(const CompilerDirective &) = delete;
+  CompilerDirective() = delete;
   struct IgnoreTKR {
-    TUPLE_CLASS_BOILERPLATE(IgnoreTKR);
+    template <typename... Ts, typename = common::NoLvalue<Ts...>>
+    IgnoreTKR(Ts &&...args) : t(std::move(args)...) {
+    int b = 0;
+    }
+    using TupleTrait = std::true_type;
+    IgnoreTKR(IgnoreTKR &&) = default;
+    IgnoreTKR &operator=(IgnoreTKR &&) = default;
+    IgnoreTKR(const IgnoreTKR &) = delete;
+    IgnoreTKR &operator=(const IgnoreTKR &) = delete;
+    IgnoreTKR() = delete;
     std::tuple<std::optional<std::list<const char *>>, Name> t;
   };
   struct LoopCount {
