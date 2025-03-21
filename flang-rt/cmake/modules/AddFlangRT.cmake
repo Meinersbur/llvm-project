@@ -320,6 +320,7 @@ function (add_flangrt_library name)
     endif ()
 
     if (ARG_TARGET_PROPERTIES)
+message("Setting target properties of ${tgtname}: ${ARG_TARGET_PROPERTIES}" )
       set_target_properties(${tgtname} PROPERTIES ${ARG_TARGET_PROPERTIES})
     endif ()
 

@@ -120,6 +120,10 @@ set(host_sources
 
 
 
+#set_property(SOURCE "__fortran_type_info.f90" APPEND PROPERTY OBJECT_DEPENDS  "/home/meinersbur/build/llvm-project-flangrt/release_bootstrap/llvm_flang_runtimes/./lib/../include/flang/__fortran_builtins.mod")
+set_property(SOURCE "__fortran_type_info.f90" APPEND PROPERTY OBJECT_DEPENDS  "flang-rt/lib/runtime/CMakeFiles/flang_rt.runtime.static.dir/__fortran_builtins.f90.o")
+#set_property(SOURCE "__fortran_type_info.f90" APPEND PROPERTY OBJECT_DEPENDS  "/home/meinersbur/build/llvm-project-flangrt/release_bootstrap/llvm_flang_runtimes/./lib/../include/flang/__fortran_builtins.mod")
+
 message("CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
 message("CMAKE_HOST_SYSTEM_PROCESSOR: ${CMAKE_HOST_SYSTEM_PROCESSOR}")
 if (CMAKE_SYSTEM_PROCESSOR STREQUAL "powerpc")
@@ -139,11 +143,12 @@ if (FLANG_RT_EXPERIMENTAL_OFFLOAD_SUPPORT STREQUAL "CUDA")
   )
 
 # FIXME: Has CMake support for CUDA-Fortran?
-# Open question: __cuda_builtins.f90 does not need -xcuda?
+# FIXME: __cuda_builtins.f90 does not need -xcuda?
 set_source_files_properties(
-  __cuda_device.f90
-  cudadevice.f90
-  PROPERTIES COMPILE_OPTIONS "-xcuda"
+    __cuda_device.f90
+    cudadevice.f90
+  PROPERTIES
+    COMPILE_OPTIONS "-xcuda"
 )
 endif ()
 
@@ -165,6 +170,9 @@ add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-mmlir> $<$<COMPILE_LANGUAGE:F
 #add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-mllvm=-flang-intrinsics-mode>)
 #set(CMAKE_Fortran_PREPROCESS FALSE)
 #add_compile_options(-mllvm -ignore-missing-type-desc)
+
+set(CMAKE_Fortran_BUILDING_INTRINSIC_MODULES TRUE)
+set(CMAKE_Fortran_BUILDING_INSTRINSIC_MODULES TRUE)
 
 file(GLOB_RECURSE public_headers
   "${FLANG_RT_SOURCE_DIR}/include/flang_rt/*.h"
@@ -219,6 +227,7 @@ if (NOT WIN32)
     ADDITIONAL_HEADERS ${public_headers} ${private_headers}
     TARGET_PROPERTIES
       # Two spellings for the same thing: https://cmake.org/cmake/help/latest/prop_tgt/Fortran_BUILDING_INSTRINSIC_MODULES.html
+      # Supported only since CMake 3.22
       Fortran_BUILDING_INTRINSIC_MODULES TRUE
       Fortran_BUILDING_INSTRINSIC_MODULES TRUE
   )
@@ -248,7 +257,7 @@ else()
       )
 # "$<$<COMPILE_LANGUAGE:Fortran>:-Xflang>"
 #TODO: Better as -fintrinsic-modules-path, need added option
-    target_compile_options(${name} PRIVATE  "$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-fintrinsic-modules-path>" "$<$<COMPILE_LANGUAGE:Fortran>:${CMAKE_CURRENT_BINARY_DIR}/module.${suffix}>")
+    target_compile_options(${name} PRIVATE "$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-fintrinsic-modules-path>" "$<$<COMPILE_LANGUAGE:Fortran>:${CMAKE_CURRENT_BINARY_DIR}/module.${suffix}>")
 
     if (msvc_lib)
       set_target_properties(${name}
