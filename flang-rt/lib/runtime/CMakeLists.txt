@@ -122,18 +122,21 @@ set(host_sources
 )
 
 
-# Stop CMake from ignoring dependencies between builtin-modules. CMake added this just for (classic) Flang.
+# Stop CMake from ignoring dependencies between builtin-modules. CMake added this feature for (classic) Flang.
 # Two spellings for the same thing: https://cmake.org/cmake/help/latest/prop_tgt/Fortran_BUILDING_INSTRINSIC_MODULES.html
 set(Fortran_BUILDING_INTRINSIC_MODULES TRUE)
 set(Fortran_BUILDING_INSTRINSIC_MODULES TRUE)
 
 
-set_source_files_properties(cudadevice.f90
-  PROPERTIES COMPILE_OPTIONS "-xcuda"
+set_source_files_properties(
+  __cuda_device.f90
+  cudadevice.f90
+  PROPERTIES COMPILE_OPTIONS "-xcuda;-fsyntax-only"
 )
 set_source_files_properties(
+  __ppc_types.f90
+  __ppc_intrinsics.f90
   mma.f90
-  cudadevice.f90
   PROPERTIES Fortran_PREPROCESS OFF
 )
 

@@ -40,10 +40,13 @@
 #include "flang/Support/Fortran.h"
 #include "flang/Support/default-kinds.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Debug.h"
 #include <list>
 #include <map>
 #include <set>
 #include <stack>
+
+#define DEBUG_TYPE "flang"
 
 namespace llvm {
  extern cl::opt<bool> FlangIntrinsicsMode;
@@ -3900,12 +3903,15 @@ void ModuleVisitor::BeginModule(const parser::Name &name, bool isSubmodule) {
   prevAccessStmt_ = std::nullopt;
 }
 
-// Find a module or submodule by name and return its scope.
+// Find a module or submodule by name and return its scope. 
 // If ancestor is present, look for a submodule of that ancestor module.
 // May have to read a .mod file to find it.
 // If an error occurs, report it and return nullptr.
 Scope *ModuleVisitor::FindModule(const parser::Name &name,
     std::optional<bool> isIntrinsic, Scope *ancestor) {
+ //LLVM_DEBUG( 
+   llvm::errs() << "FindModule(" << name.ToString() << ", " << isIntrinsic << ")\n";
+// );
   ModFileReader reader{context()};
   Scope *scope{
       reader.Read(name.source, isIntrinsic, ancestor, /*silent=*/false)};
