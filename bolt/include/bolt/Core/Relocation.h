@@ -35,7 +35,16 @@ enum { R_X86_64_converted_reloc_bit = 0x80 };
 namespace bolt {
 
 /// Relocation class.
-struct Relocation {
+class Relocation {
+public:
+  Relocation(uint64_t Offset, MCSymbol *Symbol, uint32_t Type, uint64_t Addend,
+             uint64_t Value)
+      : Offset(Offset), Symbol(Symbol), Type(Type), Optional(false),
+        Addend(Addend), Value(Value) {}
+
+  Relocation()
+      : Offset(0), Symbol(0), Type(0), Optional(0), Addend(0), Value(0) {}
+
   static Triple::ArchType Arch; /// set by BinaryContext ctor.
 
   /// The offset of this relocation in the object it is contained in.
@@ -47,6 +56,11 @@ struct Relocation {
   /// Relocation type.
   uint32_t Type;
 
+private:
+  /// Relocations added by optimizations can be optional.
+  bool Optional = false;
+
+public:
   /// The offset from the \p Symbol base used to compute the final
   /// value of this relocation.
   uint64_t Addend;
@@ -58,16 +72,15 @@ struct Relocation {
   /// Return size in bytes of the given relocation \p Type.
   static size_t getSizeForType(uint32_t Type);
 
+  /// Some relocations added by optimizations are optional, meaning they can be
+  /// omitted under certain circumstances.
+  void setOptional() { Optional = true; }
+
   /// Return size of this relocation.
   size_t getSize() const { return getSizeForType(Type); }
 
   /// Skip relocations that we don't want to handle in BOLT
   static bool skipRelocationType(uint32_t Type);
-
-  /// Handle special cases when relocation should not be processed by BOLT or
-  /// change relocation \p Type to proper one before continuing if \p Contents
-  /// and \P Type mismatch occurred.
-  static bool skipRelocationProcess(uint32_t &Type, uint64_t Contents);
 
   /// Adjust value depending on relocation type (make it PC relative or not).
   static uint64_t encodeValue(uint32_t Type, uint64_t Value, uint64_t PC);
