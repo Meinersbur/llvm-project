@@ -102,6 +102,10 @@ ToolChain::ToolChain(const Driver &D, const llvm::Triple &T,
     getFilePaths().push_back(*Path);
   for (const auto &Path : getArchSpecificLibPaths())
     addIfExists(getFilePaths(), Path);
+
+  if (D.IsFlangMode()) {
+    getIntrinsicModulePaths().append(getIntrinsicModulePaths());
+  }
 }
 
 llvm::Expected<std::unique_ptr<llvm::MemoryBuffer>>
@@ -927,6 +931,24 @@ std::optional<std::string> ToolChain::getStdlibIncludePath() const {
   llvm::sys::path::append(P, "..", "include");
   return getTargetSubDirPath(P);
 }
+
+ ToolChain:: path_list ToolChain:: getDefaultIntrinsicModulePaths() const{
+    SmallString<128> P(D.ResourceDir);
+  llvm::sys::path::append(P, "finclude");
+
+  // TOOD: If there are multiple valid names for the target triple, prefer to add all of them instead probing which are existing.
+   ToolChain:: path_list Result;
+   if (std::optional<std::string> PerTargetPath = getTargetSubDirPath(P))
+   Result.push_back(*PerTargetPath);
+
+   // flang used this in the past
+     SmallString<128> CompatIntrModPath(D.Dir);
+  llvm::sys::path::append(CompatIntrModPath, "..", "include", "flang");
+     Result.push_back(std::string(CompatIntrModPath));
+
+  return Result ;
+  }
+
 
 ToolChain::path_list ToolChain::getArchSpecificLibPaths() const {
   path_list Paths;

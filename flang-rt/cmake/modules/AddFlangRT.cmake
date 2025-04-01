@@ -311,6 +311,7 @@ function (add_flangrt_library name)
         PROPERTIES
           ARCHIVE_OUTPUT_DIRECTORY "${FLANG_RT_OUTPUT_RESOURCE_LIB_DIR}"
           LIBRARY_OUTPUT_DIRECTORY "${FLANG_RT_OUTPUT_RESOURCE_LIB_DIR}"
+          Fortran_MODULE_DIRECTORY "${FLANG_RT_OUTPUT_RESOURCE_MOD_DIR}"
         )
 
       install(TARGETS ${tgtname}

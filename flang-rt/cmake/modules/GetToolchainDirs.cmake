@@ -48,6 +48,16 @@ function (get_toolchain_library_subdir outvar)
 endfunction ()
 
 
+function (get_toolchain_module_subdir outvar)
+  set(outval "finclude")
+
+  get_toolchain_arch_dirname(arch_dirname)
+  set(outval "${outval}/${arch_dirname}")
+
+  set(${outvar} "${outval}" PARENT_SCOPE)
+endfunction ()
+
+
 # Corresponds to Clang's ToolChain::getOSLibName(). Adapted from Compiler-RT.
 function (get_toolchain_os_dirname outvar)
   if (ANDROID)

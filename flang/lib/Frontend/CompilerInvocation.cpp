@@ -819,6 +819,8 @@ static bool parseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
   return diags.getNumErrors() == numErrorsBefore;
 }
 
+// MK: Keep for compatibility?
+#if 0
 // Generate the path to look for intrinsic modules
 static std::string getIntrinsicDir(const char *argv) { // MK: To modify this
   // TODO: Find a system independent API
@@ -828,6 +830,7 @@ static std::string getIntrinsicDir(const char *argv) { // MK: To modify this
   driverPath.append("/../include/flang/");
   return std::string(driverPath);
 }
+#endif
 
 // Generate the path to look for OpenMP headers
 static std::string getOpenMPHeadersDir(const char *argv) {
@@ -858,6 +861,10 @@ static void parsePreprocessorArgs(Fortran::frontend::PreprocessorOptions &opts,
   // Add the ordered list of -I's.
   for (const auto *currentArg : args.filtered(clang::driver::options::OPT_I))
     opts.searchDirectoriesFromDashI.emplace_back(currentArg->getValue());
+
+  // Add the ordered list of -J's.
+  for (const auto *currentArg : args.filtered(clang::driver::options::OPT_J))
+    opts.searchDirectoriesFromDashJ.emplace_back(currentArg->getValue());
 
   // Prepend the ordered list of -intrinsic-modules-path
   // to the default location to search.
@@ -1405,6 +1412,13 @@ bool CompilerInvocation::createFromArgs(
     success = false;
   }
 
+  // Default resource dir
+  invoc.resourceDir = clang::driver::Driver::GetResourcesPath(argv0);
+
+  if (const llvm::opt::Arg *a =
+          args.getLastArg(clang::driver::options::OPT_resource_dir))
+    invoc.resourceDir = a->getValue();
+
   // -flang-experimental-hlfir
   if (args.hasArg(clang::driver::options::OPT_flang_experimental_hlfir) ||
       args.hasArg(clang::driver::options::OPT_emit_hlfir)) {
@@ -1637,13 +1651,17 @@ void CompilerInvocation::setFortranOpts() {
 
   //  Add the default intrinsic module directory
 #if 1
-     // MK Contradicts description of the option which says "if not found"
-    fortranOptions.intrinsicModuleDirectories.insert(
+  // gfortran prepends this path to the usual intrinsics dir
+  fortranOptions.intrinsicModuleDirectories.insert(
       fortranOptions.intrinsicModuleDirectories.end(),
       preprocessorOptions.searchDirectoriesFromIntrModPath.begin(),
       preprocessorOptions.searchDirectoriesFromIntrModPath.end());
-#endif 
-  fortranOptions.intrinsicModuleDirectories.emplace_back(getIntrinsicDir(getArgv0()));
+#endif
+
+  //   llvm::SmallString<128> intrinsicsDir { resourceDir };
+  //   llvm::sys::path::append(intrinsicsDir, "finclude", triple);
+  //    fortranOptions.intrinsicModuleDirectories.emplace_back(intrinsicsDir);
+  // fortranOptions.intrinsicModuleDirectories.emplace_back(getIntrinsicDir(getArgv0()));
 
   // Add the directory supplied through -J/-module-dir to the list of search
   // directories

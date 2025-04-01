@@ -87,6 +87,7 @@ set(LLVM_TOOLS_DIR "${LLVM_BINARY_DIR}/bin")
 # The build path is absolute, but the install dir is relative, CMake's install
 # command has to apply CMAKE_INSTALL_PREFIX itself.
 get_toolchain_library_subdir(toolchain_lib_subdir)
+get_toolchain_module_subdir(toolchain_mod_subdir)
 if (LLVM_TREE_AVAILABLE)
   # In a bootstrap build emit the libraries into a default search path in the
   # build directory of the just-built compiler. This allows using the
@@ -99,6 +100,7 @@ if (LLVM_TREE_AVAILABLE)
   get_clang_resource_dir(FLANG_RT_INSTALL_RESOURCE_PATH_DEFAULT)
 
   extend_path(FLANG_RT_OUTPUT_RESOURCE_LIB_DIR "${FLANG_RT_OUTPUT_RESOURCE_DIR}" "${toolchain_lib_subdir}")
+  extend_path(FLANG_RT_OUTPUT_RESOURCE_MOD_DIR "${FLANG_RT_OUTPUT_RESOURCE_DIR}" "${toolchain_mod_subdir}")
 else ()
   # In a standalone runtimes build, do not write into LLVM_BINARY_DIR. It may be
   # read-only and/or shared by multiple runtimes with different build
@@ -111,10 +113,12 @@ else ()
   set(FLANG_RT_INSTALL_RESOURCE_PATH_DEFAULT "lib${LLVM_LIBDIR_SUFFIX}/clang/${LLVM_VERSION_MAJOR}")
 
   extend_path(FLANG_RT_OUTPUT_RESOURCE_LIB_DIR "${FLANG_RT_OUTPUT_RESOURCE_DIR}" "lib${LLVM_LIBDIR_SUFFIX}")
+  extend_path(FLANG_RT_OUTPUT_RESOURCE_MOD_DIR "${FLANG_RT_OUTPUT_RESOURCE_DIR}" "finclude")
 endif ()
 set(FLANG_RT_INSTALL_RESOURCE_PATH "${FLANG_RT_INSTALL_RESOURCE_PATH_DEFAULT}"
     CACHE PATH "Path to install runtime libraries to (default: clang resource dir)")
 extend_path(FLANG_RT_INSTALL_RESOURCE_LIB_PATH "${FLANG_RT_INSTALL_RESOURCE_PATH}" "${toolchain_lib_subdir}")
+extend_path(FLANG_RT_INSTALL_RESOURCE_MOD_PATH "${FLANG_RT_INSTALL_RESOURCE_PATH}" "${toolchain_mod_subdir}")
 cmake_path(NORMAL_PATH FLANG_RT_OUTPUT_RESOURCE_DIR)
 cmake_path(NORMAL_PATH FLANG_RT_INSTALL_RESOURCE_PATH)
 # FIXME: For the libflang_rt.so, the toolchain resource lib dir is not a good
@@ -128,6 +132,13 @@ cmake_path(NORMAL_PATH FLANG_RT_INSTALL_RESOURCE_PATH)
 #        the only reliable location.
 cmake_path(NORMAL_PATH FLANG_RT_OUTPUT_RESOURCE_LIB_DIR)
 cmake_path(NORMAL_PATH FLANG_RT_INSTALL_RESOURCE_LIB_PATH)
+cmake_path(NORMAL_PATH FLANG_RT_OUTPUT_RESOURCE_MOD_DIR)
+cmake_path(NORMAL_PATH FLANG_RT_INSTALL_RESOURCE_MOD_PATH)
+
+message("toolchain_mod_subdir: ${toolchain_mod_subdir}")
+message("FLANG_RT_OUTPUT_RESOURCE_MOD_DIR: ${FLANG_RT_OUTPUT_RESOURCE_MOD_DIR}")
+message("FLANG_RT_INSTALL_RESOURCE_MOD_PATH: ${FLANG_RT_INSTALL_RESOURCE_MOD_PATH}")
+
 
 
 #################
@@ -306,7 +317,7 @@ if (CMAKE_C_BYTE_ORDER STREQUAL "BIG_ENDIAN")
 elseif (CMAKE_C_BYTE_ORDER STREQUAL "LITTLE_ENDIAN")
   add_compile_definitions(FLANG_LITTLE_ENDIAN=1)
 else ()
-  #message(SEND_ERROR "Cannot determine endian '${CMAKE_C_BYTE_ORDER}' '${CMAKE_CXX_BYTE_ORDER}'")
+  message(SEND_ERROR "Cannot determine endian '${CMAKE_C_BYTE_ORDER}' '${CMAKE_CXX_BYTE_ORDER}'")
 endif ()
 
 

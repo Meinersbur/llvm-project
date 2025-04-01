@@ -92,6 +92,8 @@ class CompilerInvocation : public CompilerInvocationBase {
   // intrinsic of iso_fortran_env.
   std::string allCompilerInvocOpts;
 
+  std::string resourceDir;
+
   /// Semantic options
   // TODO: Merge with or translate to frontendOpts. We shouldn't need two sets
   // of options.

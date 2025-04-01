@@ -3645,39 +3645,44 @@ void OmpStructureChecker::CheckSharedBindingInOuterContext(
   //  TODO: Verify the assumption here that the immediately enclosing region is
   //  the parallel region to which the worksharing construct having reduction
   //  binds to.
-  if (auto *enclosingContext{GetEnclosingDirContext()}) {
-    for (auto it : enclosingContext->clauseInfo) {
-      llvmOmpClause type = it.first;
-      const auto *clause = it.second;
-      if (llvm::omp::privateReductionSet.test(type)) {
-        if (const auto *objList{GetOmpObjectList(*clause)}) {
-          for (const auto &ompObject : objList->v) {
-            if (const auto *name{parser::Unwrap<parser::Name>(ompObject)}) {
-              if (const auto *symbol{name->symbol}) {
-                for (const auto &redOmpObject : redObjectList.v) {
-                  if (const auto *rname{
-                          parser::Unwrap<parser::Name>(redOmpObject)}) {
-                    if (const auto *rsymbol{rname->symbol}) {
-                      if (rsymbol->name() == symbol->name()) {
-                        context_.Say(GetContext().clauseSource,
-                            "%s variable '%s' is %s in outer context must"
-                            " be shared in the parallel regions to which any"
-                            " of the worksharing regions arising from the "
-                            "worksharing construct bind."_err_en_US,
-                            parser::ToUpperCaseLetters(
-                                getClauseName(llvm::omp::Clause::OMPC_reduction)
-                                    .str()),
-                            symbol->name(),
-                            parser::ToUpperCaseLetters(
-                                getClauseName(type).str()));
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+  auto enclosingContext{GetEnclosingDirContext()};
+  if (!enclosingContext)
+    return;
+
+  for (auto [type, clause] : enclosingContext->clauseInfo) {
+    if (!llvm::omp::privateReductionSet.test(type))
+      continue;
+
+    const auto *objList{GetOmpObjectList(*clause)};
+    for (const auto &ompObject : objList->v) {
+      const auto *name{parser::Unwrap<parser::Name>(ompObject)};
+      if (!name)
+        continue;
+
+      const auto *symbol{name->symbol};
+      if (!symbol)
+        continue;
+
+      for (const auto &redOmpObject : redObjectList.v) {
+        const auto *rname{parser::Unwrap<parser::Name>(redOmpObject)};
+        if (!rname)
+          continue;
+
+        const auto *rsymbol{rname->symbol};
+        if (!rsymbol)
+          continue;
+
+        if (rsymbol->name() != symbol->name())
+          continue;
+
+        context_.Say(GetContext().clauseSource,
+            "%s variable '%s' is %s in outer context must be shared in the "
+            "parallel regions to which any of the worksharing regions arising "
+            "from the worksharing construct bind."_err_en_US,
+            parser::ToUpperCaseLetters(
+                getClauseName(llvm::omp::Clause::OMPC_reduction).str()),
+            symbol->name(),
+            parser::ToUpperCaseLetters(getClauseName(type).str()));
       }
     }
   }

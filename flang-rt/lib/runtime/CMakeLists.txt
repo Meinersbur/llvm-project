@@ -92,7 +92,6 @@ set(supported_sources
 # List of source not used for GPU offloading.
 set(CMAKE_Fortran_MODULE_DIRECTORY "${LLVM_LIBRARY_OUTPUT_INTDIR}/../include/flang")
 set(host_sources
-  __fortran_builtins.f90
   __fortran_ieee_exceptions.f90
   __fortran_type_info.f90
   ieee_arithmetic.f90
@@ -118,10 +117,14 @@ set(host_sources
   unit-map.cpp
 )
 
+# Module sources that are required by other modules
+set(intrinsics_sources
+  __fortran_builtins.f90
+)
 
 
 #set_property(SOURCE "__fortran_type_info.f90" APPEND PROPERTY OBJECT_DEPENDS  "/home/meinersbur/build/llvm-project-flangrt/release_bootstrap/llvm_flang_runtimes/./lib/../include/flang/__fortran_builtins.mod")
-set_property(SOURCE "__fortran_type_info.f90" APPEND PROPERTY OBJECT_DEPENDS  "flang-rt/lib/runtime/CMakeFiles/flang_rt.runtime.static.dir/__fortran_builtins.f90.o")
+#set_property(SOURCE "__fortran_type_info.f90" APPEND PROPERTY OBJECT_DEPENDS  "flang-rt/lib/runtime/CMakeFiles/flang_rt.runtime.static.dir/__fortran_builtins.f90.o")
 #set_property(SOURCE "__fortran_type_info.f90" APPEND PROPERTY OBJECT_DEPENDS  "/home/meinersbur/build/llvm-project-flangrt/release_bootstrap/llvm_flang_runtimes/./lib/../include/flang/__fortran_builtins.mod")
 
 message("CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
@@ -155,17 +158,18 @@ endif ()
 
 
 # Flang is not always able to consume its own preprocessor output
-set_source_files_properties(
-  mma.f90
-  cudadevice.f90
-  PROPERTIES Fortran_PREPROCESS OFF
-)
+#set_source_files_properties(
+#  mma.f90
+#  cudadevice.f90
+#  PROPERTIES Fortran_PREPROCESS OFF
+#)
 
 
 
 
 
-add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-mmlir> $<$<COMPILE_LANGUAGE:Fortran>:-ignore-missing-type-desc>)
+add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:SHELL:-mmlir> $<$<COMPILE_LANGUAGE:Fortran>:-ignore-missing-type-desc>)
+add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:SHELL:-Xflang> $<$<COMPILE_LANGUAGE:Fortran>:-fno-reformat>)
 
 #add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-mllvm=-flang-intrinsics-mode>)
 #set(CMAKE_Fortran_PREPROCESS FALSE)
@@ -219,12 +223,24 @@ set(Fortran_BUILDING_INTRINSIC_MODULES TRUE)
 set(Fortran_BUILDING_INSTRINSIC_MODULES TRUE)
 
 
+
+
+#add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:SHELL:-module-dir> $<$<COMPILE_LANGUAGE:Fortran>:"${FLANG_RT_OUTPUT_RESOURCE_MOD_DIR}">)
+add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:SHELL:"-fintrinsic-modules-path"> $<$<COMPILE_LANGUAGE:Fortran>:"${FLANG_RT_OUTPUT_RESOURCE_MOD_DIR}">)
+
 if (NOT WIN32)
+  # Not a real library
+  add_flangrt_library(flang_rt.intrinsics OBJECT
+    ${intrinsics_sources}
+  )
+
   add_flangrt_library(flang_rt.runtime STATIC SHARED
     ${sources}
+  #  $<TARGET_OBJECTS:flang_rt.intrinsics>
     LINK_LIBRARIES ${Backtrace_LIBRARY}
     INSTALL_WITH_TOOLCHAIN
     ADDITIONAL_HEADERS ${public_headers} ${private_headers}
+    LINK_LIBRARIES flang_rt.intrinsics
     TARGET_PROPERTIES
       # Two spellings for the same thing: https://cmake.org/cmake/help/latest/prop_tgt/Fortran_BUILDING_INSTRINSIC_MODULES.html
       # Supported only since CMake 3.22

@@ -157,6 +157,9 @@ private:
   /// The list of toolchain specific path prefixes to search for programs.
   path_list ProgramPaths;
 
+    path_list ModulePaths;
+        path_list IntrinsicModulePaths;
+
   mutable std::unique_ptr<Tool> Clang;
   mutable std::unique_ptr<Tool> Flang;
   mutable std::unique_ptr<Tool> Assemble;
@@ -296,6 +299,12 @@ public:
 
   path_list &getProgramPaths() { return ProgramPaths; }
   const path_list &getProgramPaths() const { return ProgramPaths; }
+
+      path_list &getModulePaths() { return ModulePaths; }
+  const path_list &getModulePaths() const { return ModulePaths; }
+
+    path_list &getIntrinsicModulePaths() { return IntrinsicModulePaths; }
+  const path_list &getIntrinsicModulePaths() const { return IntrinsicModulePaths; }
 
   const MultilibSet &getMultilibs() const { return Multilibs; }
 
@@ -527,6 +536,10 @@ public:
 
   // Returns target specific standard library include path if it exists.
   std::optional<std::string> getStdlibIncludePath() const;
+
+
+  path_list getDefaultIntrinsicModulePaths() const;
+
 
   // Returns <ResourceDir>/lib/<OSName>/<arch> or <ResourceDir>/lib/<triple>.
   // This is used by runtimes (such as OpenMP) to find arch-specific libraries.
