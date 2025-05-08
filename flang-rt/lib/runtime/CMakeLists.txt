@@ -274,9 +274,11 @@ set(Fortran_BUILDING_INSTRINSIC_MODULES TRUE)
 
 
 
-
 #add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:SHELL:-module-dir> $<$<COMPILE_LANGUAGE:Fortran>:"${FLANG_RT_OUTPUT_RESOURCE_MOD_DIR}">)
 add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:SHELL:"-fintrinsic-modules-path"> $<$<COMPILE_LANGUAGE:Fortran>:"${FLANG_RT_OUTPUT_RESOURCE_MOD_DIR}">)
+
+
+
 
 if (NOT WIN32)
   # Not a real library
@@ -310,14 +312,20 @@ else()
   set_target_properties(flang_rt.runtime PROPERTIES FOLDER "Flang-RT/Meta")
 
   function (add_win_flangrt_runtime libtype suffix msvc_lib)
+    set(name "flang_rt.runtime.${suffix}")
+    message("${name}.intrinsics")
     add_flangrt_library(${name}.intrinsics OBJECT
       ${intrinsics_sources}
     )
 
-    set(name "flang_rt.runtime.${suffix}")
+     # set_target_properties(${name}.intrinsics
+     #  PROPERTIES
+     #     Fortran_MODULE_DIRECTORY "${FLANG_RT_OUTPUT_RESOURCE_MOD_DIR}"
+     #   )
+
     #include_directories("${CMAKE_CURRENT_BINARY_DIR}/module.${suffix}")
     add_flangrt_library(${name} ${libtype}
-        ${sources}
+        ${sources} $<TARGET_OBJECTS:${name}.intrinsics>
         ${ARGN}
         LINK_LIBRARIES ${name}.intrinsics ${Backtrace_LIBRARY}
         ADDITIONAL_HEADERS ${public_headers} ${private_headers}
@@ -325,9 +333,11 @@ else()
           Fortran_BUILDING_INTRINSIC_MODULES TRUE
           Fortran_BUILDING_INSTRINSIC_MODULES TRUE
       )
+
 # "$<$<COMPILE_LANGUAGE:Fortran>:-Xflang>"
 #TODO: Better as -fintrinsic-modules-path, need added option
     target_compile_options(${name} PRIVATE "$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-fintrinsic-modules-path>" "$<$<COMPILE_LANGUAGE:Fortran>:${CMAKE_CURRENT_BINARY_DIR}/module.${suffix}>")
+    target_compile_options(${name}.intrinsics PRIVATE "$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-fintrinsic-modules-path>" "$<$<COMPILE_LANGUAGE:Fortran>:${CMAKE_CURRENT_BINARY_DIR}/module.${suffix}>")
 
     if (msvc_lib)
       set_target_properties(${name}
@@ -338,10 +348,19 @@ else()
 
     # Setting an unique Fortran_MODULE_DIRECTORY is required for each variant to
     # write a different .mod file.
-    set_target_properties(${name}
-        PROPERTIES
-          Fortran_MODULE_DIRECTORY "module.${suffix}"
-      )
+    # Except for one delected main one
+    if (_has_main_intrinsics)
+   set_property(TARGET ${name} ${name}.intrinsics
+    PROPERTY   Fortran_MODULE_DIRECTORY "module.${suffix}"
+   )
+   else ()
+     set(_has_main_intrinsics "YES" PARENT_SCOPE)
+   endif ()
+   # set_target_properties(${name}
+   #     PROPERTIES
+   #       Fortran_MODULE_DIRECTORY "module.${suffix}"
+   #   )
+
 
     enable_cuda_compilation(${name} "${supported_sources}")
     enable_omp_offload_compilation(${name} "${supported_sources}")
@@ -366,8 +385,8 @@ else()
   #    C++ symbols and still requires global data symbols to be annotated
   #    manually.
   add_win_flangrt_runtime(STATIC static      MultiThreaded         INSTALL_WITH_TOOLCHAIN)
-  add_win_flangrt_runtime(STATIC static_dbg  MultiThreadedDebug    INSTALL_WITH_TOOLCHAIN)
   add_win_flangrt_runtime(STATIC dynamic     MultiThreadedDLL      INSTALL_WITH_TOOLCHAIN)
+  add_win_flangrt_runtime(STATIC static_dbg  MultiThreadedDebug    INSTALL_WITH_TOOLCHAIN)
   add_win_flangrt_runtime(STATIC dynamic_dbg MultiThreadedDebugDLL INSTALL_WITH_TOOLCHAIN)
 
   # Unittests link against LLVMSupport which is using CMake's default runtime
