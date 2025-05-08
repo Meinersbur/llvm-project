@@ -315,6 +315,15 @@ function (add_flangrt_library name)
     endif ()
   endforeach ()
 
+  foreach (tgtname IN LISTS srctargets)
+      set_target_properties(${tgtname}
+        PROPERTIES
+          Fortran_MODULE_DIRECTORY "${FLANG_RT_OUTPUT_RESOURCE_MOD_DIR}"
+        )
+  endforeach ()
+
+
+
   foreach (tgtname IN LISTS libtargets)
     # If this is part of the toolchain, put it into the compiler's resource
     # directory. Otherwise it is part of testing and is not installed at all.
@@ -324,12 +333,13 @@ function (add_flangrt_library name)
         PROPERTIES
           ARCHIVE_OUTPUT_DIRECTORY "${FLANG_RT_OUTPUT_RESOURCE_LIB_DIR}"
           LIBRARY_OUTPUT_DIRECTORY "${FLANG_RT_OUTPUT_RESOURCE_LIB_DIR}"
-          Fortran_MODULE_DIRECTORY "${FLANG_RT_OUTPUT_RESOURCE_MOD_DIR}"
+          #Fortran_MODULE_DIRECTORY "${FLANG_RT_OUTPUT_RESOURCE_MOD_DIR}"
         )
 
       install(TARGETS ${tgtname}
           ARCHIVE DESTINATION "${FLANG_RT_INSTALL_RESOURCE_LIB_PATH}"
           LIBRARY DESTINATION "${FLANG_RT_INSTALL_RESOURCE_LIB_PATH}"
+          # Fortran ???
         )
     endif ()
 

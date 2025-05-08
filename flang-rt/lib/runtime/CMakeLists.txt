@@ -338,6 +338,7 @@ else()
 #TODO: Better as -fintrinsic-modules-path, need added option
     target_compile_options(${name} PRIVATE "$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-fintrinsic-modules-path>" "$<$<COMPILE_LANGUAGE:Fortran>:${CMAKE_CURRENT_BINARY_DIR}/module.${suffix}>")
     target_compile_options(${name}.intrinsics PRIVATE "$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-fintrinsic-modules-path>" "$<$<COMPILE_LANGUAGE:Fortran>:${CMAKE_CURRENT_BINARY_DIR}/module.${suffix}>")
+    target_compile_options(${name} PRIVATE "$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-fintrinsic-modules-path>" "$<$<COMPILE_LANGUAGE:Fortran>:${FLANG_RT_OUTPUT_RESOURCE_MOD_DIR}>")
 
     if (msvc_lib)
       set_target_properties(${name}
@@ -348,18 +349,15 @@ else()
 
     # Setting an unique Fortran_MODULE_DIRECTORY is required for each variant to
     # write a different .mod file.
-    # Except for one delected main one
+    # Except for one selected one (the first)
     if (_has_main_intrinsics)
-   set_property(TARGET ${name} ${name}.intrinsics
-    PROPERTY   Fortran_MODULE_DIRECTORY "module.${suffix}"
-   )
+        set_property(TARGET ${name} ${name}.intrinsics
+          PROPERTY   Fortran_MODULE_DIRECTORY "module.${suffix}"
+        )
    else ()
-     set(_has_main_intrinsics "YES" PARENT_SCOPE)
+        set(_has_main_intrinsics "YES" PARENT_SCOPE)
    endif ()
-   # set_target_properties(${name}
-   #     PROPERTIES
-   #       Fortran_MODULE_DIRECTORY "module.${suffix}"
-   #   )
+
 
 
     enable_cuda_compilation(${name} "${supported_sources}")
