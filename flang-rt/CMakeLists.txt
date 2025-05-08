@@ -304,13 +304,6 @@ set(BACKTRACE_HEADER ${Backtrace_HEADER})
 
 
 
-if (CMAKE_C_BYTE_ORDER STREQUAL "BIG_ENDIAN")
-  add_compile_definitions(FLANG_BIG_ENDIAN=1)
-elseif (CMAKE_C_BYTE_ORDER STREQUAL "LITTLE_ENDIAN")
-  add_compile_definitions(FLANG_LITTLE_ENDIAN=1)
-else ()
-  message(SEND_ERROR "Cannot determine endian '${CMAKE_C_BYTE_ORDER}' '${CMAKE_CXX_BYTE_ORDER}'")
-endif ()
 
 
 #####################

@@ -142,7 +142,6 @@ if (FLANG_RT_EXPERIMENTAL_OFFLOAD_SUPPORT STREQUAL "CUDA")
     __cuda_builtins.f90
     __cuda_device.f90
     cudadevice.f90
-    mma.f90
   )
 
 # FIXME: Has CMake support for CUDA-Fortran?
@@ -311,12 +310,16 @@ else()
   set_target_properties(flang_rt.runtime PROPERTIES FOLDER "Flang-RT/Meta")
 
   function (add_win_flangrt_runtime libtype suffix msvc_lib)
+    add_flangrt_library(${name}.intrinsics OBJECT
+      ${intrinsics_sources}
+    )
+
     set(name "flang_rt.runtime.${suffix}")
     #include_directories("${CMAKE_CURRENT_BINARY_DIR}/module.${suffix}")
     add_flangrt_library(${name} ${libtype}
         ${sources}
         ${ARGN}
-        LINK_LIBRARIES ${Backtrace_LIBRARY}
+        LINK_LIBRARIES ${name}.intrinsics ${Backtrace_LIBRARY}
         ADDITIONAL_HEADERS ${public_headers} ${private_headers}
         TARGET_PROPERTIES
           Fortran_BUILDING_INTRINSIC_MODULES TRUE
