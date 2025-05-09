@@ -1673,9 +1673,9 @@ Prescanner::IsCompilerDirectiveSentinel(const char *p) const {
   char sentinel[8];
   for (std::size_t j{0}; j + 1 < sizeof sentinel && *p != '\n'; ++p, ++j) {
     if (int n{IsSpaceOrTab(p)};
-        n || !(IsLetter(*p) || *p == '$' || *p == '@')) {
+        n || !(IsLetter(*p) || *p == '$' || *p == '@' || *p == '!')) {
       if (j > 0) {
-        if (j == 1 && sentinel[0] == '$' && n == 0 && *p != '&') {
+        if (j == 1 && sentinel[0] == '$' && n == 0 && *p != '&') { 
           // OpenMP conditional compilation line sentinels have to
           // be immediately followed by a space or &, not a digit
           // or anything else.
@@ -1707,6 +1707,18 @@ constexpr bool IsDirective(const char *match, const char *dir) {
 
 Prescanner::LineClassification Prescanner::ClassifyLine(
     const char *start) const {
+  if (llvm::StringRef(start).take_front(120).contains('!')) {
+    int c = 9;
+  }
+  if (llvm::StringRef(start).starts_with("real")) {
+    int c = 9;
+  }
+  if (llvm::StringRef(start).starts_with("elemental logical function ieee_is_finite_a")) {
+    int c = 9;
+  }
+    if (llvm::StringRef(start).starts_with("interface ieee_is_finite")) {
+    int c = 9;
+  }
   if (inFixedForm_) {
     if (std::optional<LineClassification> lc{
             IsFixedFormCompilerDirectiveLine(start)}) {

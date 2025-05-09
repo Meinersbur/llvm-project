@@ -157,11 +157,12 @@ endif ()
 
 
 # Flang is not always able to consume its own preprocessor output
-#set_source_files_properties(
-#  mma.f90
-#  cudadevice.f90
-#  PROPERTIES Fortran_PREPROCESS OFF
-#)
+set_source_files_properties(
+  #mma.f90
+  #cudadevice.f90
+  #ieee_arithmetic.f90 # Actually uses the preprocessor; dependency information therefore may be wrong
+  PROPERTIES Fortran_PREPROCESS OFF
+)
 
 # Sources that can be compiled directly for the GPU.
 set(gpu_sources
@@ -215,6 +216,8 @@ set(gpu_sources
 
 
 add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:SHELL:-mmlir> $<$<COMPILE_LANGUAGE:Fortran>:-ignore-missing-type-desc>)
+
+# Flang bug: Reformatting of cooked token buffer causes identifier to be split between lines
 add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:SHELL:-Xflang> $<$<COMPILE_LANGUAGE:Fortran>:-fno-reformat>)
 
 #add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-mllvm=-flang-intrinsics-mode>)
@@ -299,6 +302,8 @@ if (NOT WIN32)
       Fortran_BUILDING_INTRINSIC_MODULES TRUE
       Fortran_BUILDING_INSTRINSIC_MODULES TRUE
   )
+# TODO: shared (or global)
+    target_compile_options(flang_rt.runtime.static PRIVATE "$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-fintrinsic-modules-path>" "$<$<COMPILE_LANGUAGE:Fortran>:${FLANG_RT_OUTPUT_RESOURCE_MOD_DIR}>")
 
   enable_cuda_compilation(flang_rt.runtime "${supported_sources}")
   enable_omp_offload_compilation(flang_rt.runtime "${supported_sources}")
