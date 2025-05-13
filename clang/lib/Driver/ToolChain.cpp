@@ -104,7 +104,7 @@ ToolChain::ToolChain(const Driver &D, const llvm::Triple &T,
     addIfExists(getFilePaths(), Path);
 
   if (D.IsFlangMode()) {
-    getIntrinsicModulePaths().append(getIntrinsicModulePaths());
+    getIntrinsicModulePaths().append(getDefaultIntrinsicModulePaths());
   }
 }
 
@@ -1012,17 +1012,17 @@ std::optional<std::string> ToolChain::getStdlibIncludePath() const {
     SmallString<128> P(D.ResourceDir);
   llvm::sys::path::append(P, "finclude");
 
-  // TOOD: If there are multiple valid names for the target triple, prefer to add all of them instead probing which are existing.
+  // TODO: If there are multiple valid names for the target triple, prefer to add all of them instead probing which are existing.
    ToolChain:: path_list Result;
    if (std::optional<std::string> PerTargetPath = getTargetSubDirPath(P))
    Result.push_back(*PerTargetPath);
 
-   // flang used this in the past
+   // flang used this in the past, keep for compatibility
      SmallString<128> CompatIntrModPath(D.Dir);
   llvm::sys::path::append(CompatIntrModPath, "..", "include", "flang");
      Result.push_back(std::string(CompatIntrModPath));
 
-  return Result ;
+  return Result;
   }
 
 

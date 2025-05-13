@@ -558,7 +558,7 @@ int main(int argc, char **argv) {
 
     //  Driver::GetResourcesPath(StringRef BinaryPath)
   // FIXME: Do not modify intrinsicIncludeDirs directly, should be treated as immutable just like argv.
-  // TODO: Normlize triple directory as clang does; best refactor with implementation used by the flang driver
+  // TODO: Normlize triple directory as clang does; best refactor with ToolChain::getDefaultIntrinsicModulePaths() used by the flang driver.
     std::string mainExe = llvm::sys::fs::getMainExecutable(argv[0], nullptr);
   llvm::StringRef prefixDir =   llvm::sys::path::parent_path( llvm::sys::path::parent_path(mainExe ));
   llvm::SmallString<128> resourceDir (prefixDir);
