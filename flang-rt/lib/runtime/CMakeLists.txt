@@ -30,8 +30,10 @@ check_fortran_source_compiles([[
 cmake_pop_check_state()
 
 message("FORTRAN_SUPPORTS_REAL16: ${FORTRAN_SUPPORTS_REAL16}")
-if  (FORTRAN_SUPPORTS_REAL16)
+if (FORTRAN_SUPPORTS_REAL16)
   add_compile_definitions(FLANG_SUPPORT_R16=1)
+  #add_compile_options(-DFLANG_SUPPORT_R16=2)
+  add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-cpp>)
 endif ()
 
 # List of files that are buildable for all devices.
@@ -140,7 +142,9 @@ if (CMAKE_SYSTEM_PROCESSOR STREQUAL "powerpc")
   )
 endif ()
 
-if (FLANG_RT_EXPERIMENTAL_OFFLOAD_SUPPORT STREQUAL "CUDA")
+
+
+#if (FLANG_RT_EXPERIMENTAL_OFFLOAD_SUPPORT STREQUAL "CUDA")
   list(APPEND supported_sources
     __cuda_builtins.f90
     __cuda_device.f90
@@ -153,9 +157,9 @@ set_source_files_properties(
     __cuda_device.f90
     cudadevice.f90
   PROPERTIES
-    COMPILE_OPTIONS "-xcuda"
+    COMPILE_OPTIONS "-xcuda" # TODO: append
 )
-endif ()
+#endif ()
 
 
 
@@ -164,9 +168,10 @@ endif ()
 set_source_files_properties(
   #mma.f90
   #cudadevice.f90
-  ieee_arithmetic.f90 # See https://github.com/llvm/llvm-project/issues/139297
+ # ieee_arithmetic.f90 # See https://github.com/llvm/llvm-project/issues/139297
   PROPERTIES
     Fortran_PREPROCESS OFF
+  #  COMPILE_OPTIONS "-cpp" # TODO: append
 )
 
 # Sources that can be compiled directly for the GPU.

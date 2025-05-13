@@ -18,6 +18,8 @@ import common as cm
 from pathlib import Path
 from difflib import unified_diff
 
+print(sys.argv)
+
 cm.check_args_long(sys.argv)
 srcdir = Path(sys.argv[1])
 sources = list(glob.iglob(str(srcdir)))
@@ -41,6 +43,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 
         prev_files = set(os.listdir(tmpdir))
         cmd = [flang_fc1, *flang_fc_args, flang_fc1_options, str(src)]
+        print(' '.join(cmd))
         proc = subprocess.check_output(
             cmd, stderr=subprocess.PIPE, universal_newlines=True, cwd=tmpdir
         )

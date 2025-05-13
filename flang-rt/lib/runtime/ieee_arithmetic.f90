@@ -172,6 +172,12 @@ module ieee_arithmetic
   G(1) G(2) G(4) G(8)
 
 #if FLANG_SUPPORT_R16
+#else
+  #error Should be supported
+sdfsdfas faw
+#endif
+
+#if FLANG_SUPPORT_R16
 #if __x86_64__
 #define SPECIFICS_R(G) \
   G(2) G(3) G(4) G(8) G(10) G(16)
@@ -336,9 +342,26 @@ module ieee_arithmetic
   public ::  ieee_get_underflow_mode
 #undef IEEE_GET_UNDERFLOW_MODE_L
 
-#define IEEE_IS_FINITE_R(XKIND) elemental logical function ieee_is_finite_a##XKIND(x);  real(XKIND), intent(in) :: x;  !dir$ ignore_tkr(d) x;   end function ieee_is_finite_a##XKIND;
+! #define IEEE_IS_FINITE_R(XKIND) elemental logical function ieee_is_finite_a##XKIND(x);  real(XKIND), intent(in) :: x;  !dir$ ignore_tkr(d) x;   end function ieee_is_finite_a##XKIND;
   interface ieee_is_finite
-    SPECIFICS_R(IEEE_IS_FINITE_R)
+elemental logical function ieee_is_finite_a2(x); real(2), intent(in) :: x;
+!dir$ ignore_tkr(d) x;
+end function ieee_is_finite_a2;
+elemental logical function ieee_is_finite_a3(x); real(3), intent(in) :: x;
+!dir$ ignore_tkr(d) x;
+end function ieee_is_finite_a3;
+ elemental logical function ieee_is_finite_a4(x); real(4), intent(in) :: x;
+!dir$ ignore_tkr(d) x;
+end function ieee_is_finite_a4;
+elemental logical function ieee_is_finite_a8(x); real(8), intent(in) :: x;
+!dir$ ignore_tkr(d) x;
+end function ieee_is_finite_a8;
+elemental logical function ieee_is_finite_a10(x); real(10), intent(in) :: x;
+!dir$ ignore_tkr(d) x;
+end function ieee_is_finite_a10;
+elemental logical function ieee_is_finite_a16(x); real(16), intent(in) :: x;
+!dir$ ignore_tkr(d) x;
+end function ieee_is_finite_a16;
   end interface ieee_is_finite
   public :: ieee_is_finite
 #undef IEEE_IS_FINITE_R
