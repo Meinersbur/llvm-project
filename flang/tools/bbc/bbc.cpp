@@ -547,16 +547,34 @@ int main(int argc, char **argv) {
   ProgramName programPrefix;
   programPrefix = argv[0] + ": "s;
 
+  
   if (includeDirs.size() == 0) {
     includeDirs.push_back(".");
-    // Default Fortran modules should be installed in include/flang (a sibling
-    // to the bin) directory.
+    // Default Fortran modules should be installed in finclude/<target-triple> of the resource directory
+
+      std::string triple = targetTripleOverride;
+  if (triple.empty())
+    triple = llvm::sys::getDefaultTargetTriple();
+
+    //  Driver::GetResourcesPath(StringRef BinaryPath)
+  // FIXME: Do not modify intrinsicIncludeDirs directly, should be treated as immutable just like argv.
+  // TODO: Normlize triple directory as clang does; best refactor with implementation used by the flang driver
+    std::string mainExe = llvm::sys::fs::getMainExecutable(argv[0], nullptr);
+  llvm::StringRef prefixDir =   llvm::sys::path::parent_path( llvm::sys::path::parent_path(mainExe ));
+  llvm::SmallString<128> resourceDir (prefixDir);
+  llvm::sys::path::append(resourceDir, /*CLANG_INSTALL_LIBDIR_BASENAME*/ "lib", "clang", FLANG_VERSION_MAJOR_STRING);
+    llvm::sys::path::append(resourceDir,  "finclude", triple);
+    llvm::errs() << resourceDir << "\n";
+  intrinsicIncludeDirs.push_back(resourceDir.str().str());
+  
+  #if 0
     intrinsicIncludeDirs.push_back(
         llvm::sys::path::parent_path(
             llvm::sys::path::parent_path(
                 llvm::sys::fs::getMainExecutable(argv[0], nullptr)))
             .str() +
         "/include/flang");
+    #endif 
   }
 
   Fortran::parser::Options options;
@@ -615,6 +633,9 @@ int main(int argc, char **argv) {
   Fortran::parser::AllCookedSources allCookedSources(allSources);
   Fortran::semantics::SemanticsContext semanticsContext{
       defaultKinds, options.features, langOpts, allCookedSources};
+//std::vector < std::string> intrinsicsSearchPaths;
+// intrinsicsSearchPaths.emplace_back("s");
+//llvm::append_range(intrinsicsSearchPaths, intrinsicIncludeDirs);
   semanticsContext.set_moduleDirectory(moduleDir)
       .set_moduleFileSuffix(moduleSuffix)
       .set_searchDirectories(includeDirs)
