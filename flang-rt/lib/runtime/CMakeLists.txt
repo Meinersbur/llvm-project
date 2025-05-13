@@ -8,6 +8,8 @@
 
 include(AddFlangRTOffload)
 # function checks
+
+set(Backtrace_LIBRARY "")
 find_package(Backtrace)
 set(HAVE_BACKTRACE ${Backtrace_FOUND})
 set(BACKTRACE_HEADER ${Backtrace_HEADER})
@@ -118,6 +120,7 @@ set(host_sources
 )
 
 # Module sources that are required by other modules
+# Workaround for CMAKE_Fortran_BUILDING_INTRINSIC_MODULES not working with Ninja
 set(intrinsics_sources
   __fortran_builtins.f90
 )
@@ -156,12 +159,14 @@ endif ()
 
 
 
-# Flang is not always able to consume its own preprocessor output
+# Flang is not always able to consume its own preprocessor output.
+# CMake's module dependency parser assumes input without preprocessor directives, not preprocessing them therefore risks missing dependencies.
 set_source_files_properties(
   #mma.f90
   #cudadevice.f90
-  #ieee_arithmetic.f90 # Actually uses the preprocessor; dependency information therefore may be wrong
-  PROPERTIES Fortran_PREPROCESS OFF
+  ieee_arithmetic.f90 # See https://github.com/llvm/llvm-project/issues/139297
+  PROPERTIES
+    Fortran_PREPROCESS OFF
 )
 
 # Sources that can be compiled directly for the GPU.

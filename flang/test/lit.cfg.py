@@ -139,7 +139,7 @@ tools = [
     ToolSubst(
         "%flang_fc1",
         command=FindTool("flang"),
-        extra_args=["-fc1"],
+        extra_args=["-fc1", "-fintrinsic-modules-path", config.flang_intrinsic_modules_dir],
         unresolved="fatal",
     ),
 ]

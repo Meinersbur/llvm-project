@@ -268,8 +268,8 @@ set(FLANG_TOOLS_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}" CACHE PATH
     "Path for binary subdirectory (defaults to '${CMAKE_INSTALL_BINDIR}')")
 mark_as_advanced(FLANG_TOOLS_INSTALL_DIR)
 
-set(FLANG_INTRINSIC_MODULES_DIR ${CMAKE_BINARY_DIR}/include/flang)
-set(FLANG_INCLUDE_DIR ${FLANG_BINARY_DIR}/include)
+set(FLANG_INTRINSIC_MODULES_DIR "${CMAKE_BINARY_DIR}/lib/clang/21/finclude/x86_64-unknown-linux-gnu")
+set(FLANG_INCLUDE_DIR "${FLANG_BINARY_DIR}/include")
 
 # TODO: Remove when libclangDriver is lifted out of Clang
 if(FLANG_STANDALONE_BUILD)

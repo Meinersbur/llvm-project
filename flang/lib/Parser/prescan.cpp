@@ -1673,7 +1673,9 @@ Prescanner::IsCompilerDirectiveSentinel(const char *p) const {
   char sentinel[8];
   for (std::size_t j{0}; j + 1 < sizeof sentinel && *p != '\n'; ++p, ++j) {
     if (int n{IsSpaceOrTab(p)};
-        n || !(IsLetter(*p) || *p == '$' || *p == '@' || *p == '!')) {
+        n || !(IsLetter(*p) || *p == '$' || *p == '@' 
+          //|| *p == '!'
+          )) {
       if (j > 0) {
         if (j == 1 && sentinel[0] == '$' && n == 0 && *p != '&') { 
           // OpenMP conditional compilation line sentinels have to
