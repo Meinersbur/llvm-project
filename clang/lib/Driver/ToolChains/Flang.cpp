@@ -922,7 +922,7 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back("-resource-dir");
   CmdArgs.push_back(D.ResourceDir.c_str());
 
-  // Must be added after any user-provided -fintrinsic-modules-path
+  // Default intrinsic module dirs must be added after any user-provided -fintrinsic-modules-path
   for (auto && IntrModPath : TC.getIntrinsicModulePaths()) {
     CmdArgs.push_back("-fintrinsic-modules-path");
     CmdArgs.push_back(IntrModPath.c_str());
