@@ -64,6 +64,8 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 
 using namespace llvm;
 
@@ -231,13 +233,100 @@ void DependenceAnalysisWrapperPass::print(raw_ostream &OS,
                         getAnalysis<ScalarEvolutionWrapperPass>().getSE(), false);
 }
 
+
+static bool hasDep(Function &F, DependenceInfo *DA, LoopInfo *LI) {
+  if (LI->empty()) return false;
+  auto Loops = LI->getLoopsInPreorder();
+  if (Loops.size() < 1) return false;
+
+ // DenseSet<Loop*> LoopSet;
+ // LoopSet.insert_range(Loops);
+
+  int NumInsts = 0;
+    for (inst_iterator SrcI = inst_begin(F), SrcE = inst_end(F); SrcI != SrcE; ++SrcI) {
+      NumInsts+=1;
+      }
+
+    // Protect from quadratic blowup
+    if (NumInsts > 1000) return false;
+
+  for (inst_iterator SrcI = inst_begin(F), SrcE = inst_end(F); SrcI != SrcE; ++SrcI) {
+    if (!SrcI->mayReadOrWriteMemory())  continue ;
+       if (!LI->getLoopFor(SrcI->getParent())) continue;
+
+      for (inst_iterator DstI = SrcI, DstE = inst_end(F); DstI != DstE; ++DstI) {
+      //  if (!DstI->mayReadOrWriteMemory()) 
+      //    continue ;
+        if (!LI->getLoopFor(DstI->getParent())) continue;
+
+          if (auto D = DA->depends(&*SrcI, &*DstI, /*UnderRuntimeAssumptions=*/true)) {
+            if (!D->isConfused()) 
+              return true;
+          }
+        
+      
+    }
+  }
+  return false;
+}
+
+
+
 PreservedAnalyses
-DependenceAnalysisPrinterPass::run(Function &F, FunctionAnalysisManager &FAM) {
-  OS << "Printing analysis 'Dependence Analysis' for function '" << F.getName()
-     << "':\n";
-  dumpExampleDependence(OS, &FAM.getResult<DependenceAnalysis>(F),
+DependenceAnalysisPrinterPass::run(Function &F, FunctionAnalysisManager &FAM) { 
+  auto DA =  &FAM.getResult<DependenceAnalysis>(F);
+    auto LI =  &FAM.getResult<LoopAnalysis>(F);
+
+  if (!hasDep(F,DA, LI))
+    return PreservedAnalyses::all();
+
+
+  std::error_code EC;
+  auto M = F.getParent()->getName();
+  auto MPath = sys::path::parent_path(M);
+    auto MFile = sys::path::filename(M);
+
+
+ // llvm::errs() << M << "\n";
+  // std::string FName =  (Twine( llvm::sys::path ::filename(  M)) + "_" +  Twine(F.getName())+ ".log" ).str();
+  std::string FName =  (Twine(MFile) + "_" +  Twine(F.getName())).str();
+  StringRef YName = FName;
+ YName = YName.take_front(100);
+
+//  StringRef Rname(FName);
+ MPath.consume_front("/");
+ MPath.consume_front("home/meinersbur/src/llvm-test-suite/");
+
+ sys::fs::create_directories(MPath);
+// SmallVector<255> sv;
+ //raw_svector_ostream  tos(sv);
+   std::string XName { YName};
+  for(auto &c : XName) {
+      if (c == '\\') 
+        c = '-';
+     if (c == '/')
+        c = '-';
+  }
+ // llvm::errs() << Rname << "\n";
+
+
+  //SmallString<255> FPath{llvm::sys::path ::parent_path(  M)};
+ //  llvm::sys::path ::append(FPath, FName);
+
+ // llvm::errs() << FName << "\n";
+  auto logfile = (Twine(MPath) +  XName +  ".log" ).str(); 
+  llvm::errs() << logfile << "\n";
+  llvm::raw_fd_ostream OS(logfile , EC , llvm::  sys::fs:: CD_CreateAlways);
+
+
+
+  OS << "Printing analysis 'Dependence Analysis' for function '" << F.getName()  << "' in module '" <<F.getParent()->getName() << "':\n";
+  dumpExampleDependence(OS,DA,
                         FAM.getResult<ScalarEvolutionAnalysis>(F),
                         NormalizeResults);
+
+  OS.close();
+
   return PreservedAnalyses::all();
 }
 

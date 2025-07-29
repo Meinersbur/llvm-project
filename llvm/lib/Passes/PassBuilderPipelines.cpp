@@ -22,6 +22,7 @@
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/InlineAdvisor.h"
 #include "llvm/Analysis/ProfileSummaryInfo.h"
+#include "llvm/Analysis/DependenceAnalysis.h"
 #include "llvm/Analysis/ScopedNoAliasAA.h"
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/IR/PassManager.h"
@@ -1533,6 +1534,13 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
 
   invokeVectorizerStartEPCallbacks(OptimizePM, Level);
 
+
+  OptimizePM.addPass(DependenceAnalysisPrinterPass(llvm::errs()));
+
+
+
+
+
   LoopPassManager LPM;
   // First rotate loops that may have been un-rotated by prior passes.
   // Disable header duplication at -Oz.
@@ -1544,6 +1552,7 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
   //        this may need to be revisited once we run GVN before loop deletion
   //        in the simplification pipeline.
   LPM.addPass(LoopDeletionPass());
+
 
   if (PTO.LoopInterchange)
     LPM.addPass(LoopInterchangePass());

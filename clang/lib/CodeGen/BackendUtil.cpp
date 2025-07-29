@@ -1192,6 +1192,9 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
     return;
   }
 
+ 
+     //llvm::sys::fs::set_current_path(llvm::sys::path::parent_path( CI.getSourceManager().getFileEntryRefForID( CI.getSourceManager().getMainFileID())->getName()));
+
   // Now that we have all of the passes ready, run them.
   {
     PrettyStackTraceString CrashInfo("Optimizer");
