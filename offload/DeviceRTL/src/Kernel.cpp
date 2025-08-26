@@ -82,7 +82,7 @@ extern "C" {
 int32_t __kmpc_target_init(KernelEnvironmentTy &KernelEnvironment,
                            KernelLaunchEnvironmentTy &KernelLaunchEnvironment) {
   ConfigurationEnvironmentTy &Configuration = KernelEnvironment.Configuration;
-  bool IsSPMD = Configuration.ExecMode & OMP_TGT_EXEC_MODE_SPMD;
+  bool IsSPMD = true;
   bool UseGenericStateMachine = Configuration.UseGenericStateMachine;
   if (IsSPMD) {
     inititializeRuntime(/*IsSPMD=*/true, KernelEnvironment,
