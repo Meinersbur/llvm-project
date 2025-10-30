@@ -178,7 +178,8 @@ private:
         auto &nestedBeginDirective = ompLoopCons->BeginDir();
         auto &nestedBeginName = nestedBeginDirective.DirName();
         if ((nestedBeginName.v == llvm::omp::Directive::OMPD_unroll ||
-                nestedBeginName.v == llvm::omp::Directive::OMPD_tile) &&
+                nestedBeginName.v == llvm::omp::Directive::OMPD_tile ||
+                nestedBeginName.v == llvm::omp::Directive::OMPD_interchange) &&
             !(nestedBeginName.v == llvm::omp::Directive::OMPD_unroll &&
                 beginName.v == llvm::omp::Directive::OMPD_tile)) {
           // iterate through the remaining block items to find the end directive
