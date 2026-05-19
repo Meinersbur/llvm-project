@@ -1196,14 +1196,13 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
   auto &&HostTCs =
       C.getOffloadToolChains<clang::driver::OffloadAction ::OFK_Host>();
   for (auto [OKind, HostTC] : llvm::make_range(HostTCs.first, HostTCs.second)) {
-    if (HostTC == &TC)
-      continue;
-
+    if (HostTC != &TC)
     if (std::optional<std::string> IntrModPath =
             HostTC->getDefaultIntrinsicModuleDir()) {
       CmdArgs.push_back("-fintrinsic-modules-path");
       CmdArgs.push_back(Args.MakeArgString(*IntrModPath));
     }
+  }
   }
 
   // Offloading related options
