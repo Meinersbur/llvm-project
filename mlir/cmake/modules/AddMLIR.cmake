@@ -2,6 +2,7 @@ include(TableGen)
 include(GNUInstallDirs)
 include(LLVMDistributionSupport)
 
+
 function(mlir_tablegen ofn)
   tablegen(MLIR ${ARGV})
   set(TABLEGEN_OUTPUT ${TABLEGEN_OUTPUT} ${CMAKE_CURRENT_BINARY_DIR}/${ofn}
@@ -623,8 +624,12 @@ endfunction(add_mlir_aggregate)
 # This is usually done as part of add_mlir_library but is broken out for cases
 # where non-standard library builds can be installed.
 function(add_mlir_library_install name)
+  message("add_mlir_library_install(${name})")
+  message("MLIR_INSTALL_TOOLCHAIN_ONLY: ${MLIR_INSTALL_TOOLCHAIN_ONLY}")
+  message("LLVM_INSTALL_TOOLCHAIN_ONLY: ${LLVM_INSTALL_TOOLCHAIN_ONLY}")
   get_target_property(_install_with_toolchain ${name} MLIR_INSTALL_WITH_TOOLCHAIN)
-  if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY OR _install_with_toolchain)
+  if ((NOT LLVM_INSTALL_TOOLCHAIN_ONLY AND NOT MLIR_INSTALL_TOOLCHAIN_ONLY) OR _install_with_toolchain)
+    message("installing ${name}")
     get_target_export_arg(${name} MLIR export_to_mlirtargets UMBRELLA mlir-libraries)
     install(TARGETS ${name}
       COMPONENT ${name}

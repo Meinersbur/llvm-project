@@ -58,6 +58,7 @@ endif()
 
 set(MLIR_TOOLS_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}" CACHE PATH
     "Path for binary subdirectory (defaults to '${CMAKE_INSTALL_BINDIR}')")
+option(MLIR_INSTALL_TOOLCHAIN_ONLY "Do not install MLIR libraries unless they belong to the toolchain" OFF)
 mark_as_advanced(MLIR_TOOLS_INSTALL_DIR)
 
 set(MLIR_MAIN_SRC_DIR     ${CMAKE_CURRENT_SOURCE_DIR}  )

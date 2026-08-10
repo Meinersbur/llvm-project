@@ -48,7 +48,7 @@ function(add_flang_library name)
       ADDITIONAL_HEADERS
       ${srcs}
       ${ARG_ADDITIONAL_HEADERS}) # It may contain unparsed unknown args.
-      
+
   endif()
 
   if(ARG_SHARED AND ARG_STATIC)
@@ -75,7 +75,7 @@ function(add_flang_library name)
 
   if (TARGET ${name})
 
-    if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY OR ${name} STREQUAL "libflang"
+    if ((NOT LLVM_INSTALL_TOOLCHAIN_ONLY AND NOT MLIR_INSTALL_TOOLCHAIN_ONLY) OR ${name} STREQUAL "libflang"
         OR ARG_INSTALL_WITH_TOOLCHAIN)
       get_target_export_arg(${name} Flang export_to_flangtargets UMBRELLA flang-libraries)
       install(TARGETS ${name}
