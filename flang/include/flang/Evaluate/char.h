@@ -22,16 +22,7 @@ template <int KIND> class Character {
 public:
   // rule-of-five
   ~Character() = default;
-  Character(const Character &v) : word_(v) {}
-  Character(Character &&v) : word_(std::move(v)) {}
-  Character &operator=(const Character &v) {
-    word_ = v.word_;
-    return &this;
-  }
-  Character &operator=(Character &&v) {
-    word_ = std::move(v.word_);
-    return *this;
-  }
+  CONSTEXPR_CONSTRUCTORS_AND_ASSIGNMENTS(Character)
 
   // ctors
   Character() = default;
