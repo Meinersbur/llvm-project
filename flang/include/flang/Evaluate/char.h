@@ -22,7 +22,7 @@ template <int KIND> class Character {
 public:
   // rule-of-five
   ~Character() = default;
-  CONSTEXPR_CONSTRUCTORS_AND_ASSIGNMENTS(Character)
+  DEFAULT_CONSTRUCTORS_AND_ASSIGNMENTS(Character)
 
   // ctors
   Character() = default;
