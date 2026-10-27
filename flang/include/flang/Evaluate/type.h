@@ -9,12 +9,11 @@
 #ifndef FORTRAN_EVALUATE_TYPE_H_
 #define FORTRAN_EVALUATE_TYPE_H_
 
-// These definitions map Fortran's intrinsic types, characterized by byte
-// sizes encoded in KIND type parameter values, to their value representation
-// types in the evaluation library, which are parameterized in terms of
-// total bit width and real precision.  Instances of the Type class template
-// are suitable for use as template parameters to instantiate other class
-// templates, like expressions, over the supported types and kinds.
+// These definitions map Fortran intrinsic type categories to their value
+// representations in the evaluation library. Type<CATEGORY> is suitable as
+// a template argument for expressions and other evaluation classes; KIND is
+// a runtime value stored in those classes and their scalar values. The scalar
+// representations select their bit width or real precision from that value.
 
 #include "character-value.h"
 #include "common.h"
